@@ -2,7 +2,7 @@
 
 ## Scope and assumptions
 
-The service is limited to urban/suburban bounding boxes of up to 1 km by 1 km. It is vehicle-road routing initially; pedestrian and turn restrictions are extension work unless their OSM representation can be handled without compromising the focused first release. Coordinates arrive in WGS 84 (EPSG:4326). PostGIS `geography` operations supply meter-based distance and area calculations, while `geometry` values in EPSG:4326 retain interoperable map shapes.
+The service is limited to urban/suburban bounding boxes of up to 1 km by 1 km. It is vehicle-road routing initially, with lane counts and intersection turn permissions represented in the first routing model. Coordinates arrive in WGS 84 (EPSG:4326). PostGIS `geography` operations supply meter-based distance and area calculations, while `geometry` values in EPSG:4326 retain interoperable map shapes.
 
 An import is identified by its provider and normalized bounding box. Source IDs are retained on imported entities and made unique per provider, so rerunning an import upserts rather than duplicates data.
 
@@ -21,9 +21,11 @@ The OSM adapter owns Overpass/API requests and tag interpretation. It produces a
 | Entity | Responsibility |
 | --- | --- |
 | `ImportArea` | Source, bounding box, status, counts, and import timestamp. |
-| `Road` | Named/classified source road and its source geometry. |
+| `Street` | Named/classified logical street, source identity, and shared street metadata. |
+| `Road` | A mapped street way or carriageway with source geometry and lane profile. |
 | `NavigableNode` | A routable coordinate; intersections are represented explicitly. |
-| `RoadSegment` | Directed traversable connection, length, direction, and route metadata. |
+| `RoadSegment` | Directed traversable connection, length, direction, lane profile, and access metadata. |
+| `TurnMovement` | An allowed or prohibited transition from an incoming segment to an outgoing segment at a node, classified as left, right, straight, or U-turn. |
 | `Building` | Classified polygon footprint and source identity. |
 | `PointOfInterest` | Categorized named/unnamed point or representative location. |
 | `AreaFeature` | An extension point for parks now and natural features later. |
@@ -36,20 +38,22 @@ PostgreSQL with PostGIS is the only persistence requirement. A future runtime sh
 | Table | Key fields |
 | --- | --- |
 | `import_areas` | UUID, provider, bbox polygon, status, imported_at |
-| `roads` | UUID, import ID, provider/source ID, name, classification, line geometry, metadata |
+| `streets` | UUID, import ID, provider/source ID, name, classification, metadata |
+| `roads` | UUID, street ID, import ID, provider/source ID, line geometry, lane profile, metadata |
 | `navigable_nodes` | UUID, import ID, provider/source ID, point geometry |
-| `road_segments` | UUID, road ID, from-node ID, to-node ID, line geometry, distance meters, allowed direction, metadata |
+| `road_segments` | UUID, road ID, from-node ID, to-node ID, line geometry, distance meters, allowed direction, lane profile, access metadata |
+| `turn_movements` | UUID, intersection node ID, incoming segment ID, outgoing segment ID, movement kind, allowed flag, restriction kind, source metadata |
 | `buildings` | UUID, import ID, provider/source ID, category, polygon geometry, metadata |
 | `points_of_interest` | UUID, import ID, provider/source ID, category, name, point geometry, metadata |
 | `area_features` | UUID, import ID, provider/source ID, kind, polygon geometry, metadata |
 
-Use GiST indexes on spatial columns, foreign keys for graph relationships, and unique constraints on `(provider, source_id, import_area_id)` where a source ID is only unique within an import. `road_segments` are the canonical graph edges, so their explicit direction prevents routing from inferring semantics from a raw line.
+Use GiST indexes on spatial columns, foreign keys for graph relationships, and unique constraints on `(provider, source_id, import_area_id)` where a source ID is only unique within an import. Lane counts are stored as structured values on each directed segment: total lanes where known, plus forward and backward counts when available. A missing lane value is unknown, not zero. `road_segments` are the canonical graph edges, so their explicit direction prevents routing from inferring semantics from a raw line. `turn_movements` are constrained so their incoming segment ends at the intersection node and their outgoing segment starts there.
 
 ## OSM translation
 
-The adapter fetches only roads, building footprints, POIs, and relevant areas. It maps OSM values into constrained application categories: e.g. `highway=*` becomes a `RoadClassification`, building tags become a `BuildingCategory`, and amenity/shop/leisure tags become `PoiCategory` or `AreaFeatureKind`. Unknown tags are either omitted or captured as narrowly scoped source metadata, rather than leaked as application behavior.
+The adapter fetches only streets/roads, building footprints, POIs, relevant areas, and the OSM tags needed for lane and turn semantics. It maps OSM values into constrained application categories: e.g. `highway=*` becomes a `RoadClassification`, `lanes`/`lanes:forward`/`lanes:backward` become a lane profile, and turn-restriction relations become `TurnMovement` records. Building tags become a `BuildingCategory`, while amenity/shop/leisure tags become `PoiCategory` or `AreaFeatureKind`. Unknown tags are either omitted or captured as narrowly scoped source metadata, rather than leaked as application behavior.
 
-Road ways are split at navigable endpoints and intersections. Each resulting piece becomes one or two `RoadSegment` records according to directionality. This guarantees a graph based on domain IDs, not a transient provider representation.
+Road ways are grouped under a normalized `Street`, then split at navigable endpoints and intersections. Each resulting piece becomes one or two `RoadSegment` records according to directionality and receives the best-known lane profile. At each intersection, the ingestion layer derives legal candidate movements and applies explicit source restrictions; absent restriction data is represented as unknown/default policy rather than as a fabricated prohibition. This guarantees a graph based on domain IDs, not a transient provider representation.
 
 ## Routing
 
@@ -59,7 +63,7 @@ Road ways are split at navigable endpoints and intersections. Each resulting pie
 findRoute(graph, originNodeId, destinationNodeId) -> RoutePath | Unreachable
 ```
 
-The first implementation should be Dijkstra, using distance meters as its cost. A strategy registry can later add BFS, A*, or bidirectional search without changing the API, graph, or ingestion pipeline. The API accepts a strategy name and returns an application `Route`, including geometry reconstructed from the selected segments.
+The graph exposes both directed segments and legal transitions between an incoming and outgoing segment. Each transition is classified as left, right, straight, or U-turn and can be allowed or prohibited. Because turn legality depends on the segment a vehicle arrived on, a strategy tracks `(current node, incoming segment)` as its search state; the initial origin state has no incoming segment. The first implementation should be Dijkstra, using distance meters as its cost and rejecting prohibited transitions. A strategy registry can later add BFS, A*, or bidirectional search without changing the API, graph, or ingestion pipeline. The API accepts a strategy name and returns an application `Route`, including geometry reconstructed from the selected segments.
 
 ## API and visualization
 
@@ -75,13 +79,13 @@ A thin Leaflet/OpenLayers client can render GeoJSON emitted by the API. It remai
 ## Incremental delivery
 
 1. Establish the chosen runtime, Docker Compose PostGIS service, environment sample, migrations, and bounding-box validation tests.
-2. Implement domain contracts and PostGIS repositories, including spatial query tests against a disposable database.
-3. Build a fixture-driven OSM adapter and idempotent ingestion service; then enable a live provider behind the adapter.
-4. Construct directed segment graphs and implement/test Dijkstra plus unreachable cases.
-5. Add the API and map viewer; exercise one real imported area end to end.
+2. Implement domain contracts and PostGIS repositories, including streets, lane profiles, turn movements, and spatial query tests against a disposable database.
+3. Build a fixture-driven OSM adapter and idempotent ingestion service; translate lane tags and turn-restriction relations into domain records.
+4. Construct directed segment graphs and legal intersection transitions; implement/test Dijkstra with lane-aware and turn-aware traversal.
+5. Add the API and map viewer; exercise one real imported area end to end, including a route that must respect a turn restriction.
 
 Each stage remains runnable, covered by focused automated tests, and verified against an empty database before moving forward.
 
 ## Tradeoffs
 
-The initial model favors a clear, controllable domain over OSM completeness. Storing both `geometry` (display/intersection operations) and calculating through `geography` (meter-accurate measurements) avoids a premature local projection while satisfying this bounded geographic scope. Routing explicitly ignores advanced turn restrictions and mode-specific access until represented reliably; this keeps the first graph demonstrable and strategy-oriented rather than overfit to source data.
+The initial model favors a clear, controllable domain over OSM completeness. Storing both `geometry` (display/intersection operations) and calculating through `geography` (meter-accurate measurements) avoids a premature local projection while satisfying this bounded geographic scope. Lane data is advisory when the source does not specify lane-level connectivity; it must not imply turn permissions by itself. Turn restrictions are modeled as segment-to-segment transitions so they can be enforced without coupling routing to OSM relations. Detailed lane-level weaving, turn bays, traffic signals, and mode-specific access remain future extensions.
