@@ -4,17 +4,23 @@ Conventions for anyone — human or agent — working in this repository.
 
 ## Project shape
 
+This is a monorepo: `server/` (Python backend) and, eventually, `client/` (web map viewer) live
+as siblings at the repo root. `docker-compose.yml` at the root orchestrates shared services (the
+database today; possibly more once `client/` exists) rather than belonging to either side.
+
 - `docs/architecture.md` — the domain model and system boundaries. Read this before adding
   anything that touches persistence, ingestion, the graph, or routing.
+- `docs/schema.md` — the persistence schema design (ER diagrams, enums, constraints). Keep it in
+  sync with the actual Alembic migrations; it's design intent, not generated from the DB.
 - `MILESTONES.md` — the progressive delivery plan. Work is scoped to one milestone at a time;
   don't pull in a later milestone's concerns early just because the scaffolding exists.
-- `app/domain/` — framework-agnostic domain value objects and entities. No FastAPI, SQLAlchemy,
-  or OSM types leak in here.
-- `app/config/` — environment-based settings and database engine setup.
-- `app/api/` — HTTP layer (FastAPI). Thin; delegates to domain/repositories.
-- `alembic/` — migrations. `alembic/env.py` reads `DATABASE_URL` from the environment; the
-  connection string is never hardcoded in `alembic.ini`.
-- `tests/` — mirrors the `app/` layout.
+- `server/app/domain/` — framework-agnostic domain value objects and entities. No FastAPI,
+  SQLAlchemy, or OSM types leak in here.
+- `server/app/config/` — environment-based settings and database engine setup.
+- `server/app/api/` — HTTP layer (FastAPI). Thin; delegates to domain/repositories.
+- `server/alembic/` — migrations. `server/alembic/env.py` reads `DATABASE_URL` from the
+  environment; the connection string is never hardcoded in `alembic.ini`.
+- `server/tests/` — mirrors the `server/app/` layout.
 
 ## Runtime
 
@@ -32,6 +38,7 @@ documented in `MILESTONES.md`.
 - Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/)
   (`feat:`, `fix:`, `docs:`, `chore:`, etc.).
 - Run tests before committing: `pytest -q` (see `HOW_TO_RUN.md` for environment setup).
-- Domain code (`app/domain/`) must stay importable and testable without a database connection.
+- Domain code (`server/app/domain/`) must stay importable and testable without a database
+  connection.
 - New database access goes through SQLAlchemy/GeoAlchemy2, with schema changes made through an
   Alembic migration — never hand-edit the schema.

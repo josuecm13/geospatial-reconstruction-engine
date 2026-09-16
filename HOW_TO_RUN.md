@@ -20,6 +20,8 @@ colima start
 
 ## 2. Start PostgreSQL/PostGIS
 
+From the repo root (`docker-compose.yml` orchestrates shared services, not just the backend):
+
 ```bash
 docker compose up -d
 ```
@@ -29,7 +31,10 @@ clashing with any other local Postgres instance).
 
 ## 3. Create a virtual environment and install dependencies
 
+The Python backend lives in `server/`. All commands from here on run from inside it:
+
 ```bash
+cd server
 python3.12 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
@@ -42,8 +47,8 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-The default `.env.example` values already match the `docker-compose.yml` service, so no edits
-are needed for local development.
+The default `.env.example` values already match the `docker-compose.yml` service (run from the
+repo root), so no edits are needed for local development.
 
 ```bash
 export $(grep -v '^#' .env | xargs)
@@ -75,6 +80,8 @@ curl localhost:8000/health
 ```
 
 ## Stopping everything
+
+From the repo root:
 
 ```bash
 docker compose down       # stop the database, keep its data
