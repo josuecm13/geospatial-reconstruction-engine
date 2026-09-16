@@ -59,13 +59,14 @@ Notes:
 
 ## Milestone 2 — Domain model and persistence schema
 
-Status: **planned**
+Status: **complete**
 
 Deliverables:
 
-- Domain entities for import areas, roads, navigable nodes, road segments, buildings, POIs, and area features.
-- Street entities with lane profiles (total, forward, and backward counts where known).
-- Explicit intersection turn movements linking an incoming segment to an outgoing segment, classified as left/right/straight/U-turn and carrying allowed/prohibited state and restriction kind.
+- Domain entities for import areas, streets, roads, navigable nodes, road segments, buildings, POIs, and area features.
+- A single per-segment `lane_count` on `RoadSegment` (not a `Street`-level forward/backward pair — a segment's own `from_node -> to_node` already is its direction; see `docs/schema.md`).
+- Derived `Block` polygons (`ST_Polygonize` over the road graph) with an ordered `block_boundary_segments` join table, and buildings linked to their containing block by spatial containment — blocks and buildings are this project's primary focus, not the road graph itself.
+- Explicit intersection turn movements linking an incoming segment to an outgoing segment, classified as left/right/straight/U-turn and carrying allowed/prohibited state and restriction kind, generated densely (one row per geometrically plausible pair at a node).
 - Database tables, constraints, spatial indexes, and source identity keys.
 - Repository interfaces that do not expose OSM-specific types.
 - Tests for persistence, geometry validity, building area, and idempotent upserts.
@@ -74,8 +75,24 @@ Acceptance checks:
 
 - The schema can be recreated entirely through migrations.
 - A fixture dataset can be written and read through domain repositories.
-- Lane counts remain unknown when absent, and turn movements enforce valid segment-to-intersection relationships.
+- Lane counts remain unknown when absent, and turn movements enforce valid segment-to-intersection relationships (via a database trigger).
 - Repeating the same write does not create duplicate source entities.
+- A closed loop of road segments derives exactly one block, and a building inside it is linked to it.
+
+Notes:
+
+1. Change: `openspec/changes/domain-model-and-persistence-schema/`.
+2. Verification: `docker compose up -d`, `alembic upgrade head` against a fresh volume, `alembic
+   downgrade base` then `alembic upgrade head` again (clean round trip), `pytest -q` from `server/`
+   (31 passed).
+3. Decisions: recorded in `docs/schema.md` (schema) and the change's `design.md` (repository
+   pattern, DB trigger for turn-movement integrity, `ST_Polygonize`-based block derivation, native
+   Postgres enums). One correction made during implementation: `import_areas` identity is
+   `UNIQUE (provider, min_longitude, min_latitude, max_longitude, max_latitude)`, not a `UNIQUE` on
+   the `bbox` geometry column itself — PostGIS `geometry` has no btree equality operator class.
+4. Deferred: OSM ingestion, graph traversal/routing, and API endpoints — Milestones 3, 5–7. When
+   and how block derivation gets invoked in production (explicit step vs. automatic post-import)
+   is also deferred, since neither an ingestion pipeline nor an API exists yet to wire it into.
 
 ## Milestone 3 — OSM adapter and fixture-driven ingestion
 
