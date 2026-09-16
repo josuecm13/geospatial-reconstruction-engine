@@ -1,0 +1,17 @@
+# Local configuration
+.env
+.env.*
+!.env.example
+
+# Runtime and test artifacts
+node_modules/
+dist/
+coverage/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+
+# Editors and operating systems
+.DS_Store
+.idea/
+.vscode/
