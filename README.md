@@ -15,7 +15,7 @@ OpenStreetMap is only an external source. The database schema, domain entities, 
 
 ## Design
 
-The initial architecture and staged delivery plan are recorded in [docs/architecture.md](docs/architecture.md).
+The initial architecture is recorded in [docs/architecture.md](docs/architecture.md), and the progressive implementation plan is tracked in [MILESTONES.md](MILESTONES.md).
 
 ## Status
 
