@@ -2,7 +2,7 @@
 
 ## Scope and assumptions
 
-The service is limited to urban/suburban bounding boxes of up to 1 km by 1 km. It is vehicle-road routing initially; pedestrian and turn restrictions are extension work unless their OSM representation can be handled without compromising the small first release. Coordinates arrive in WGS 84 (EPSG:4326). PostGIS `geography` operations supply meter-based distance and area calculations, while `geometry` values in EPSG:4326 retain interoperable map shapes.
+The service is limited to urban/suburban bounding boxes of up to 1 km by 1 km. It is vehicle-road routing initially; pedestrian and turn restrictions are extension work unless their OSM representation can be handled without compromising the focused first release. Coordinates arrive in WGS 84 (EPSG:4326). PostGIS `geography` operations supply meter-based distance and area calculations, while `geometry` values in EPSG:4326 retain interoperable map shapes.
 
 An import is identified by its provider and normalized bounding box. Source IDs are retained on imported entities and made unique per provider, so rerunning an import upserts rather than duplicates data.
 
@@ -26,7 +26,7 @@ The OSM adapter owns Overpass/API requests and tag interpretation. It produces a
 | `RoadSegment` | Directed traversable connection, length, direction, and route metadata. |
 | `Building` | Classified polygon footprint and source identity. |
 | `PointOfInterest` | Categorized named/unnamed point or representative location. |
-| `AreaFeature` | A small extension point for parks now and natural features later. |
+| `AreaFeature` | An extension point for parks now and natural features later. |
 | `Route` | Origin/destination, ordered nodes and segments, total distance, and cost. |
 
 ## Database model
@@ -78,10 +78,10 @@ A thin Leaflet/OpenLayers client can render GeoJSON emitted by the API. It remai
 2. Implement domain contracts and PostGIS repositories, including spatial query tests against a disposable database.
 3. Build a fixture-driven OSM adapter and idempotent ingestion service; then enable a live provider behind the adapter.
 4. Construct directed segment graphs and implement/test Dijkstra plus unreachable cases.
-5. Add the small API and map viewer; exercise one real imported area end to end.
+5. Add the API and map viewer; exercise one real imported area end to end.
 
 Each stage remains runnable, covered by focused automated tests, and verified against an empty database before moving forward.
 
 ## Tradeoffs
 
-The initial model favors a clear, controllable domain over OSM completeness. Storing both `geometry` (display/intersection operations) and calculating through `geography` (meter-accurate measurements) avoids a premature local projection while satisfying this small geographic scope. Routing explicitly ignores advanced turn restrictions and mode-specific access until represented reliably; this keeps the first graph demonstrable and strategy-oriented rather than overfit to source data.
+The initial model favors a clear, controllable domain over OSM completeness. Storing both `geometry` (display/intersection operations) and calculating through `geography` (meter-accurate measurements) avoids a premature local projection while satisfying this bounded geographic scope. Routing explicitly ignores advanced turn restrictions and mode-specific access until represented reliably; this keeps the first graph demonstrable and strategy-oriented rather than overfit to source data.
