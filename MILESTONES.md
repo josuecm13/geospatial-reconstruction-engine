@@ -28,7 +28,7 @@ Acceptance checks:
 
 ## Milestone 1 — Runtime, database, and geographic validation
 
-Status: **planned**
+Status: **complete**
 
 Deliverables:
 
@@ -44,6 +44,18 @@ Acceptance checks:
 - A clean checkout can start PostgreSQL/PostGIS with one documented command.
 - Migrations create the database from an empty volume.
 - Invalid and oversized bounds return useful application errors.
+
+Notes:
+
+1. Change: `openspec/changes/bootstrap-python-runtime-and-db/`.
+2. Verification: `docker compose up -d`, `alembic upgrade head` against a fresh volume, `pytest -q`
+   (7 passed), `curl localhost:8000/health` against the running app.
+3. Decisions: Python 3.12 with plain `venv`/`requirements.txt` (no Poetry/pyenv); FastAPI +
+   SQLAlchemy 2.0 + GeoAlchemy2 + Alembic; local Postgres/PostGIS mapped to host port 5433 (not
+   5432, which was already in use locally); bounding-box area computed via haversine-based edge
+   lengths rather than a flat-earth approximation.
+4. Deferred: domain persistence models/repositories, OSM ingestion, graph, routing, and real API
+   endpoints — Milestones 2–7.
 
 ## Milestone 2 — Domain model and persistence schema
 

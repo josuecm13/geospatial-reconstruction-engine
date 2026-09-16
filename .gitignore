@@ -10,6 +10,7 @@ coverage/
 .pytest_cache/
 __pycache__/
 *.py[cod]
+.venv/
 
 # Editors and operating systems
 .DS_Store
