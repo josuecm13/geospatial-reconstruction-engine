@@ -24,9 +24,16 @@ database today; possibly more once `client/` exists) rather than belonging to ei
 
 ## Runtime
 
-Python 3.12, plain `venv` + `requirements.txt` (no Poetry/pyenv). Run `./scripts/dev-up.sh` to
-bring up the container runtime, PostGIS, venv, `.env`, and migrations in one step; see
-`HOW_TO_RUN.md` for the full setup and what to do in your shell afterward.
+Python 3.12, plain `venv` + `requirements.txt` (no Poetry/pyenv).
+
+- `./scripts/dev-up.sh` — brings up the container runtime, PostGIS, venv, `.env`, and migrations
+  in one idempotent step. Safe to re-run any time.
+- `./scripts/dev-down.sh` — tears the docker compose stack back down (`--volumes` to also delete
+  PostGIS data, `--colima` to also stop Colima, which affects other projects using it too).
+
+PostGIS and the app server run on non-default ports (`55432`, and `APP_PORT` from `.env`, default
+`58000`) to avoid colliding with another local project — don't hardcode `5432`/`5433`/`8000`
+elsewhere. See `HOW_TO_RUN.md` for the full setup and what to do in your shell afterward.
 
 ## Status
 
