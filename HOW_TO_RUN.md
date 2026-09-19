@@ -10,63 +10,34 @@ validation tests. There are no real API endpoints or domain data yet.
 - Docker + Docker Compose (or Colima as the Docker runtime on macOS: `brew install colima docker
   docker-compose`)
 
-## 1. Start the database container runtime
-
-If you're using Docker Desktop, start it. If you're using **Colima**, start it instead:
+## 1. Bring up the container runtime, database, venv, env vars, and migrations
 
 ```bash
-colima start
+./scripts/dev-up.sh
 ```
 
-## 2. Start PostgreSQL/PostGIS
+This starts Colima (if Docker isn't already running), starts a `postgis/postgis` container on
+`localhost:5433` (not the default 5432, to avoid clashing with any other local Postgres instance)
+and waits for it to report healthy, creates `server/.venv` and installs dependencies if needed,
+copies `server/.env.example` to `server/.env` if missing, and runs `alembic upgrade head`. It's
+safe to re-run any time; each step is skipped or fast when already done.
 
-From the repo root (`docker-compose.yml` orchestrates shared services, not just the backend):
-
-```bash
-docker compose up -d
-```
-
-This starts a `postgis/postgis` container on `localhost:5433` (not the default 5432, to avoid
-clashing with any other local Postgres instance).
-
-## 3. Create a virtual environment and install dependencies
-
-The Python backend lives in `server/`. All commands from here on run from inside it:
+The script runs in its own subshell, so it can't leave your virtualenv activated or env vars
+exported in *your* shell. Do that once per new shell:
 
 ```bash
 cd server
-python3.12 -m venv .venv
 source .venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
+set -a && source .env && set +a
 ```
 
-## 4. Configure environment variables
-
-```bash
-cp .env.example .env
-```
-
-The default `.env.example` values already match the `docker-compose.yml` service (run from the
-repo root), so no edits are needed for local development.
-
-```bash
-export $(grep -v '^#' .env | xargs)
-```
-
-## 5. Run database migrations
-
-```bash
-alembic upgrade head
-```
-
-## 6. Run the tests
+## 2. Run the tests
 
 ```bash
 pytest -q
 ```
 
-## 7. Start the app
+## 3. Start the app
 
 ```bash
 uvicorn app.main:app --reload

@@ -24,7 +24,9 @@ database today; possibly more once `client/` exists) rather than belonging to ei
 
 ## Runtime
 
-Python 3.12, plain `venv` + `requirements.txt` (no Poetry/pyenv). See `HOW_TO_RUN.md` for setup.
+Python 3.12, plain `venv` + `requirements.txt` (no Poetry/pyenv). Run `./scripts/dev-up.sh` to
+bring up the container runtime, PostGIS, venv, `.env`, and migrations in one step; see
+`HOW_TO_RUN.md` for the full setup and what to do in your shell afterward.
 
 ## Status
 
