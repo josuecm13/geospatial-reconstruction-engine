@@ -17,10 +17,11 @@ validation tests. There are no real API endpoints or domain data yet.
 ```
 
 This starts Colima (if Docker isn't already running), starts a `postgis/postgis` container on
-`localhost:5433` (not the default 5432, to avoid clashing with any other local Postgres instance)
-and waits for it to report healthy, creates `server/.venv` and installs dependencies if needed,
-copies `server/.env.example` to `server/.env` if missing, and runs `alembic upgrade head`. It's
-safe to re-run any time; each step is skipped or fast when already done.
+`localhost:55432` (deliberately far from 5432/5433, to avoid clashing with any other local
+Postgres instance) and waits for it to report healthy, creates `server/.venv` and installs
+dependencies if needed, copies `server/.env.example` to `server/.env` if missing, and runs
+`alembic upgrade head`. It's safe to re-run any time; each step is skipped or fast when already
+done.
 
 The script runs in its own subshell, so it can't leave your virtualenv activated or env vars
 exported in *your* shell. Do that once per new shell:
@@ -40,21 +41,21 @@ pytest -q
 ## 3. Start the app
 
 ```bash
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload --port "$APP_PORT"
 ```
 
-Then check:
+`APP_PORT` (from `.env`, default `58000`) is likewise chosen away from common dev-server ports
+(3000/5000/8000/8080/8888) so it won't collide with another project. Then check:
 
 ```bash
-curl localhost:8000/health
+curl localhost:$APP_PORT/health
 # {"status":"ok"}
 ```
 
 ## Stopping everything
 
-From the repo root:
-
 ```bash
-docker compose down       # stop the database, keep its data
-docker compose down -v    # stop the database and delete its data volume
+./scripts/dev-down.sh              # stop the database container, keep its data
+./scripts/dev-down.sh --volumes    # also delete the database's data volume
+./scripts/dev-down.sh --colima     # also stop Colima itself (affects other projects using it too)
 ```
