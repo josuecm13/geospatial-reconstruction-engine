@@ -1,0 +1,26 @@
+{
+  "elements": [
+    {"type": "node", "id": 1, "lat": 9.9340, "lon": -84.0805},
+    {"type": "node", "id": 2, "lat": 9.9340, "lon": -84.0800},
+    {"type": "node", "id": 3, "lat": 9.9340, "lon": -84.0795},
+    {"type": "node", "id": 4, "lat": 9.9345, "lon": -84.0800},
+    {"type": "node", "id": 10, "lat": 9.9337, "lon": -84.0804},
+    {"type": "node", "id": 11, "lat": 9.9338, "lon": -84.0804},
+    {"type": "node", "id": 12, "lat": 9.9338, "lon": -84.0802},
+    {"type": "node", "id": 13, "lat": 9.9336, "lon": -84.0802},
+    {"type": "node", "id": 14, "lat": 9.9336, "lon": -84.0804},
+    {"type": "node", "id": 20, "lat": 9.9343, "lon": -84.0798},
+    {"type": "node", "id": 21, "lat": 9.9344, "lon": -84.0798},
+    {"type": "node", "id": 22, "lat": 9.9344, "lon": -84.0796},
+    {"type": "node", "id": 23, "lat": 9.9342, "lon": -84.0796},
+    {"type": "node", "id": 24, "lat": 9.9342, "lon": -84.0798},
+    {"type": "way", "id": 100, "nodes": [1, 2], "tags": {"highway": "residential", "name": "West Street", "lanes:forward": "2", "lanes:backward": "1"}},
+    {"type": "way", "id": 101, "nodes": [2, 3], "tags": {"highway": "residential", "name": "East Street"}},
+    {"type": "way", "id": 102, "nodes": [2, 4], "tags": {"highway": "residential", "oneway": "yes", "lanes": "1"}},
+    {"type": "way", "id": 200, "nodes": [11, 12, 13, 14, 11], "tags": {"building": "house"}},
+    {"type": "way", "id": 300, "nodes": [20, 21, 22, 23, 24, 20], "tags": {"leisure": "park"}},
+    {"type": "node", "id": 500, "lat": 9.9341, "lon": -84.0799, "tags": {"amenity": "school", "name": "Example School"}},
+    {"type": "node", "id": 999, "lat": 9.9341, "lon": -84.0797, "tags": {"tourism": "artwork"}},
+    {"type": "relation", "id": 400, "members": [{"type": "way", "ref": 100, "role": "from"}, {"type": "node", "ref": 2, "role": "via"}, {"type": "way", "ref": 102, "role": "to"}], "tags": {"type": "restriction", "restriction": "no_left_turn"}}
+  ]
+}

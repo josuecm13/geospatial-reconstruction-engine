@@ -96,7 +96,7 @@ Notes:
 
 ## Milestone 3 — OSM adapter and fixture-driven ingestion
 
-Status: **planned**
+Status: **complete**
 
 Deliverables:
 
@@ -112,6 +112,24 @@ Acceptance checks:
 - A representative fixture imports into the custom schema.
 - A fixture with a one-way street, lane counts, and a prohibited turn preserves those semantics after import.
 - Repeating an import is safe and reports created/updated/skipped counts.
+
+Notes:
+
+1. Change: `openspec/changes/add-fixture-driven-osm-ingestion/`.
+2. Verification: `docker compose up -d`, `alembic upgrade head` against the existing volume,
+   `pytest -q` from `server/` against live PostGIS (40 passed), `openspec validate
+   add-fixture-driven-osm-ingestion --strict` (valid).
+3. Decisions: recorded in the change's `design.md` (provider-neutral import records, topology-then-lanes
+   segment derivation, dense turn candidates with restriction resolution, transactional import with a
+   separate short transaction to record a failed area). One correction made during implementation: the
+   `server/tests/conftest.py` `db_session` fixture wrapped each test in a single outer transaction
+   without SAVEPOINT isolation, so `OSMIngestionService`'s internal `commit()` (to make the import area
+   survive a later rollback of failed child writes) and subsequent `rollback()` unintentionally undid the
+   whole test transaction instead of just the failed writes, only surfacing under a live-PostGIS run.
+   Fixed by binding the fixture's session with `join_transaction_mode="create_savepoint"` so nested
+   application-level commits/rollbacks act on a SAVEPOINT.
+4. Deferred: live Overpass/OSM network access, block derivation trigger timing, graph traversal/routing,
+   and API endpoints — Milestones 4-7.
 
 ## Milestone 4 — Spatial query capabilities
 

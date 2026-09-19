@@ -66,6 +66,22 @@ class ImportAreaRepository:
         self.session.flush()
         return self._to_domain(model)
 
+    def mark_importing(self, import_area_id: uuid.UUID) -> ImportArea:
+        model = self.session.get(ImportAreaModel, import_area_id)
+        if model is None:
+            raise ValueError(f"import area {import_area_id} not found")
+        model.status = ImportStatus.IMPORTING
+        self.session.flush()
+        return self._to_domain(model)
+
+    def mark_failed(self, import_area_id: uuid.UUID) -> ImportArea:
+        model = self.session.get(ImportAreaModel, import_area_id)
+        if model is None:
+            raise ValueError(f"import area {import_area_id} not found")
+        model.status = ImportStatus.FAILED
+        self.session.flush()
+        return self._to_domain(model)
+
     @staticmethod
     def _to_domain(model: ImportAreaModel) -> ImportArea:
         bbox = BoundingBox(
