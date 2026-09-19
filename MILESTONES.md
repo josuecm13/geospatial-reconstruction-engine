@@ -137,35 +137,52 @@ Status: **planned**
 
 Deliverables:
 
-- Nearby-object queries by coordinate and radius.
-- Bounding-box intersection/containment queries.
-- Building footprint area calculation through PostGIS.
-- Nearest navigable road and node lookup.
+- Nearby-object queries by coordinate and radius, across the entities Milestone 2 already
+  persists with point/polygon geometry: `NavigableNode`, `PointOfInterest`, `Building`,
+  `AreaFeature`.
+- Bounding-box intersection/containment queries against those same geometry columns plus
+  `ImportArea.bbox`.
+- Building footprint area calculation via PostGIS `ST_Area` — `Building.boundary` already stores
+  the polygon; only the query is new.
+- Nearest navigable road and node lookup, built on the `NavigableNode`/`RoadSegment` persistence
+  from Milestone 2.
 
 Acceptance checks:
 
 - Integration tests prove meter-based distance and area behavior.
-- Queries return normalized domain models rather than raw database or OSM records.
+- Queries return normalized domain models (not SQLAlchemy models or raw rows).
 - Empty areas and invalid query parameters produce useful errors.
 
 ## Milestone 5 — Road graph construction
 
 Status: **planned**
 
+Note: directed edges and the legal-transition index — the two things this milestone was originally
+scoped to build — already exist. `RoadSegment` (Milestone 2) is a directed edge with
+`from_node_id`/`to_node_id` and a `lane_count`; `TurnMovement` (Milestone 2) plus
+`TurnMovementRepository.generate_candidates`/`legal_outgoing_segments` (Milestone 3) already form a
+dense, persisted legal-transition index per intersection, populated by every import. This
+milestone is now about wrapping that already-persisted data in a traversal-ready, provider-neutral
+interface for a routing engine — not re-deriving edges or transitions from scratch.
+
 Deliverables:
 
-- Provider-neutral graph interfaces and graph repository.
-- Conversion of road segments into directed graph edges.
-- Explicit intersection and navigable-node handling.
-- Legal transition index from incoming segments to outgoing segments at each intersection.
-- Tests for connectivity, one-way roads, and disconnected components.
+- A provider-neutral `RoadGraph` interface and a graph repository that loads it from the persisted
+  `road_segments` and `turn_movements` tables (via the existing repositories).
+- Segment traversal distance: `RoadSegment` does not yet store a length, so this milestone adds it
+  (derived from segment geometry, e.g. `ST_Length`).
+- Neighbor/edge queries usable by a routing engine without importing SQLAlchemy or OSM types,
+  restricted to movements `TurnMovementRepository` marks `allowed`.
+- Tests for connectivity, one-way roads, and disconnected components, exercised through the graph
+  abstraction rather than direct repository calls.
 
 Acceptance checks:
 
 - The graph can be built from the persisted domain model without OSM dependencies.
-- Every edge has valid endpoints and a non-negative traversal distance.
+- Every edge has valid endpoints and exposes a non-negative traversal distance.
 - Connectivity tests demonstrate preserved intersections and directionality.
-- Transition tests demonstrate that prohibited turns are not exposed as legal graph moves.
+- Transition tests demonstrate that segments with `TurnMovement.allowed = False` are not exposed as
+  legal graph moves through the abstraction.
 
 ## Milestone 6 — Routing strategy and route preparation
 
@@ -173,10 +190,14 @@ Status: **planned**
 
 Deliverables:
 
-- `RoutingStrategy` contract and `RoutingEngine` orchestration.
-- Nearest-node preparation for origin and destination coordinates.
-- First strategy: distance-based Dijkstra.
-- Turn-aware search state based on the incoming segment at each intersection.
+- `RoutingStrategy` contract and `RoutingEngine` orchestration, consuming Milestone 5's `RoadGraph`
+  interface only — never SQLAlchemy models or OSM types directly.
+- Nearest-node preparation for origin and destination coordinates (Milestone 4's nearest-node
+  lookup).
+- First strategy: distance-based Dijkstra, using Milestone 5's per-edge traversal distance.
+- Turn-aware search state based on the incoming segment at each intersection — the legality data
+  itself (`TurnMovement.allowed`) already exists from Milestones 2–3; this milestone is the search
+  algorithm that respects it during traversal, not the data.
 - Route result model with ordered nodes/segments, geometry, and total distance.
 - Tests for successful routes, unreachable destinations, and strategy substitution.
 
@@ -193,9 +214,13 @@ Status: **planned**
 
 Deliverables:
 
-- Import-area endpoint.
-- Map-data and spatial-query endpoints.
-- Route endpoint with selectable strategy.
+- Import-area endpoint, wrapping the existing `OSMIngestionService`. This is also where the open
+  question from Milestones 2–3 finally gets decided: nothing currently invokes
+  `BlockDerivationService` or `BuildingRepository.link_to_containing_block` after an import
+  completes (both exist and are tested but unwired) — decide here whether the import endpoint
+  triggers them automatically or a separate explicit step does.
+- Map-data and spatial-query endpoints, wrapping Milestone 4's queries.
+- Route endpoint with selectable strategy, wrapping Milestone 6's `RoutingEngine`.
 - Application-level request/response models and error handling.
 - API integration tests.
 
@@ -209,8 +234,31 @@ Acceptance checks:
 
 Status: **planned**
 
+"A bounded real-world import" requires the live Overpass retrieval that Milestone 3 explicitly
+deferred — fixtures alone can't demonstrate it. Confirmed against the Overpass API docs:
+
+- Public endpoint `https://overpass-api.de/api/interpreter`; query as
+  `[out:json][timeout:N]; nwr(south,west,north,east); out geom;`. The bbox order (south, west,
+  north, east) already matches this project's `BoundingBox.min_corner`/`max_corner` lat/lon fields
+  directly — no reordering needed to build the query.
+- `out:json`'s element shape (`{"type","id","lat","lon"}` for nodes, `{"type","id","nodes","tags"}`
+  for ways, `{"type","id","members","tags"}` for relations) is exactly what
+  `tests/fixtures/osm_neighborhood.json` was already modeled on — a live adapter should reuse
+  `OSMFixtureAdapter`'s parsing rather than duplicate it, fetching real JSON instead of reading a
+  file.
+- Fair-use limits apply: the public instance expects sequential (not parallel) queries per IP and
+  returns HTTP 429 if a query waits >15s in its execution queue — a live fetch needs a timeout and
+  backoff, unlike the fixture path.
+- Real data will include turn restrictions where `via` is a way, not a node (multi-segment
+  intersections) — `OSMIngestionService` only resolves a single via-*node* today, so a real import
+  is more likely than the fixture to hit the "restriction cannot resolve" error path. That's
+  correct, existing behavior (Milestone 3's spec requires failing unresolvable restrictions), not a
+  bug to fix reactively — just don't be surprised by it when picking a real bounding box to demo.
+
 Deliverables:
 
+- A live Overpass adapter for a bounded (≤ 1 km × 1 km) area, reusing the existing OSM parsing
+  above the fetch boundary.
 - Lightweight web map client.
 - Rendering of roads, buildings, POIs, and route geometry.
 - Documented walkthrough using a bounded real-world import.
