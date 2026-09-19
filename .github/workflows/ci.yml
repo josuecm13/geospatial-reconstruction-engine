@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: geodb
+          POSTGRES_PASSWORD: geodb
+          POSTGRES_DB: geodb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U geodb -d geodb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      DATABASE_URL: postgresql+psycopg://geodb:geodb@localhost:5432/geodb
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: server/requirements.txt
+
+      - name: Install dependencies
+        working-directory: server
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run migrations
+        working-directory: server
+        # A fresh service container can report healthy mid-initdb, right before
+        # it restarts for the real server, so the first connection attempt can
+        # land in that restart window and get refused. Retry past it instead of
+        # failing the whole job (see scripts/dev-up.sh for the same rationale).
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if alembic upgrade head; then
+              exit 0
+            fi
+            echo "migration attempt $attempt failed, retrying in 2s"
+            sleep 2
+          done
+          echo "migrations failed after 5 attempts" >&2
+          exit 1
+
+      - name: Run tests
+        working-directory: server
+        run: pytest -q
+
+      - name: Validate OpenSpec
+        run: npx --yes @fission-ai/openspec@1.7.0 validate --all --strict

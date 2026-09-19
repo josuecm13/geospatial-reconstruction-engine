@@ -47,6 +47,9 @@ documented in `MILESTONES.md`.
 - Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/)
   (`feat:`, `fix:`, `docs:`, `chore:`, etc.).
 - Run tests before committing: `pytest -q` (see `HOW_TO_RUN.md` for environment setup).
+  `.github/workflows/ci.yml` runs the same tests plus `openspec validate --all --strict` against a
+  fresh PostGIS on every push/PR to `main` — it's a safety net, not a substitute for running tests
+  locally first.
 - Domain code (`server/app/domain/`) must stay importable and testable without a database
   connection.
 - New database access goes through SQLAlchemy/GeoAlchemy2, with schema changes made through an

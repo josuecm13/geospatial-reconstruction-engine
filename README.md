@@ -1,5 +1,7 @@
 # Geospatial Reconstruction Engine
 
+[![CI](https://github.com/josuecm13/geospatial-reconstruction-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/josuecm13/geospatial-reconstruction-engine/actions/workflows/ci.yml)
+
 A self-contained learning and portfolio project that imports a map area no larger than 1 km × 1 km from OpenStreetMap, converts it into an application-owned PostGIS model, builds a road graph, and routes between two coordinates.
 
 OpenStreetMap is only an external source. The database schema, domain entities, graph, and routing behavior are owned by this project.
