@@ -133,7 +133,7 @@ Notes:
 
 ## Milestone 4 — Spatial query capabilities
 
-Status: **planned**
+Status: **complete**
 
 Deliverables:
 
@@ -153,9 +153,20 @@ Acceptance checks:
 - Queries return normalized domain models (not SQLAlchemy models or raw rows).
 - Empty areas and invalid query parameters produce useful errors.
 
+Notes:
+
+1. Change: `openspec/changes/add-spatial-queries-road-graph-and-routing/` (covers Milestones 4-6).
+2. Verification: `pytest -q` from `server/` against live PostGIS (79 passed), `openspec validate
+   add-spatial-queries-road-graph-and-routing --strict` (valid).
+3. Decisions: recorded in the change's `design.md` — meter-based predicates via `::geography` casts
+   (SRID 4326 measures in degrees otherwise), accepting sequential scans under the 1 km² cap rather
+   than adding indexes; "no match" (empty radius result, absent nearest candidate) is a normal
+   return value, while "bad request" (unknown import area, non-positive radius) raises.
+4. Deferred: HTTP exposure (Milestone 7).
+
 ## Milestone 5 — Road graph construction
 
-Status: **planned**
+Status: **complete**
 
 Note: directed edges, per-edge traversal distance, and the legal-transition index — the things this
 milestone was originally scoped to build — already exist. `RoadSegment` (Milestone 2) is a directed
@@ -184,9 +195,20 @@ Acceptance checks:
 - Transition tests demonstrate that segments with `TurnMovement.allowed = False` are not exposed as
   legal graph moves through the abstraction.
 
+Notes:
+
+1. Change: `openspec/changes/add-spatial-queries-road-graph-and-routing/`.
+2. Verification: `pytest -q` from `server/` against live PostGIS (79 passed), including
+   `tests/domain/test_purity.py` asserting the graph and routing domain modules import neither
+   SQLAlchemy nor `app.persistence`.
+3. Decisions: `RoadGraph`/`GraphEdge` live in `app/domain/graph.py` (pure); the loader lives in
+   `app/persistence/graph_loader.py` and does exactly two bulk queries — one for segments, one for
+   turn movements — never a lookup per node or edge.
+4. Deferred: HTTP exposure (Milestone 7).
+
 ## Milestone 6 — Routing strategy and route preparation
 
-Status: **planned**
+Status: **complete**
 
 Deliverables:
 
@@ -208,6 +230,25 @@ Acceptance checks:
 - A known fixture produces a deterministic route.
 - A route avoids a prohibited turn while retaining an allowed alternative.
 - An alternate test strategy can be injected without changing `RoutingEngine`.
+
+Notes:
+
+1. Change: `openspec/changes/add-spatial-queries-road-graph-and-routing/`.
+2. Verification: `pytest -q` from `server/` against live PostGIS (79 passed), including a
+   routing-specific fixture (`tests/fixtures/osm_routing.json`) imported through
+   `OSMIngestionService`, covering a shorter-route choice, a restriction forcing a detour, an
+   all-prohibited destination, a disconnected destination, and strategy substitution.
+3. Decisions: search state is keyed on the traversed segment (not the node), since turn legality
+   depends on the approach; ties break on edge id, not push order or iteration order, so repeated
+   identical requests are deterministic.
+4. Correction made during implementation: `OSMIngestionService._persist_turns` re-derived fresh,
+   default-allowed turn candidates (`generate_candidates`) for every restriction relation at a node,
+   so a second restriction at the same intersection silently reset an earlier one back to allowed —
+   only surfaced by a test needing two restrictions at one node (an all-prohibited intersection).
+   Fixed by reading the currently persisted state (new `TurnMovementRepository.list_for_intersection`)
+   instead of regenerating defaults; this is a Milestone 3 (`osm-fixture-ingestion`) correctness fix,
+   not new Milestone 6 behavior.
+5. Deferred: HTTP exposure (Milestone 7); alternative cost models (Milestone 6's non-goals).
 
 ## Milestone 7 — Application API
 

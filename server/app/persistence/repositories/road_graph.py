@@ -160,6 +160,14 @@ class RoadSegmentRepository:
         self.session.flush()
         return self._to_domain(model)
 
+    def list_for_import_area(self, import_area_id) -> list[RoadSegment]:
+        models = self.session.execute(
+            select(RoadSegmentModel)
+            .join(RoadModel, RoadSegmentModel.road_id == RoadModel.id)
+            .where(RoadModel.import_area_id == import_area_id)
+        ).scalars().all()
+        return [self._to_domain(model) for model in models]
+
     @staticmethod
     def _to_domain(model: RoadSegmentModel) -> RoadSegment:
         return RoadSegment(

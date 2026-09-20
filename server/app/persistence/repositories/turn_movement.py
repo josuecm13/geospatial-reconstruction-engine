@@ -82,6 +82,36 @@ class TurnMovementRepository:
         self.session.flush()
         return [self._to_domain(model) for model in persisted_models]
 
+    def list_for_intersection(self, intersection_node_id: uuid.UUID) -> list[TurnMovement]:
+        """Fetch the currently *persisted* candidates at a node, reflecting any
+        restriction already applied — unlike `generate_candidates`, which always
+        derives fresh, default-allowed candidates from segment geometry.
+
+        Needed when a single intersection carries more than one restriction
+        relation: applying the second restriction must build on what the first
+        one already persisted, not reset it back to defaults.
+        """
+        models = self.session.execute(
+            select(TurnMovementModel).where(TurnMovementModel.intersection_node_id == intersection_node_id)
+        ).scalars().all()
+        return [self._to_domain(model) for model in models]
+
+    def list_allowed_for_segments(self, incoming_segment_ids: set[uuid.UUID]) -> list[TurnMovement]:
+        """Bulk-fetch every allowed movement whose incoming segment is in the given set.
+
+        Used to load a whole import area's legal-transition index in one query,
+        rather than one lookup per segment.
+        """
+        if not incoming_segment_ids:
+            return []
+        models = self.session.execute(
+            select(TurnMovementModel).where(
+                TurnMovementModel.incoming_segment_id.in_(incoming_segment_ids),
+                TurnMovementModel.allowed.is_(True),
+            )
+        ).scalars().all()
+        return [self._to_domain(model) for model in models]
+
     def legal_outgoing_segments(self, incoming_segment_id) -> list[TurnMovement]:
         models = self.session.execute(
             select(TurnMovementModel).where(

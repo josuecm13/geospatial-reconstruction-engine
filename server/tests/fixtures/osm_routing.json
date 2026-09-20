@@ -1,0 +1,14 @@
+{
+  "elements": [
+    {"type": "node", "id": 1, "lat": 10.0000, "lon": -84.0000},
+    {"type": "node", "id": 2, "lat": 10.0000, "lon": -84.0010},
+    {"type": "node", "id": 3, "lat": 10.0000, "lon": -84.0020},
+    {"type": "node", "id": 4, "lat": 10.0010, "lon": -84.0010},
+    {"type": "node", "id": 5, "lat": 10.0010, "lon": -84.0020},
+    {"type": "way", "id": 10, "nodes": [1, 2], "tags": {"highway": "residential", "name": "Approach Street"}},
+    {"type": "way", "id": 11, "nodes": [2, 3], "tags": {"highway": "residential", "name": "Direct Street"}},
+    {"type": "way", "id": 12, "nodes": [2, 4], "tags": {"highway": "residential", "name": "Detour North"}},
+    {"type": "way", "id": 13, "nodes": [4, 5], "tags": {"highway": "residential", "name": "Detour West"}},
+    {"type": "way", "id": 14, "nodes": [5, 3], "tags": {"highway": "residential", "name": "Detour South"}}
+  ]
+}
