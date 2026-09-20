@@ -148,7 +148,10 @@ class OSMIngestionService:
             outgoing = [segment for segment in segments_by_way[restriction.to_way_id] if segment.from_node_id == via_id]
             if len(incoming) != 1 or len(outgoing) != 1:
                 raise OSMIngestionError(f"restriction {restriction.source_id} cannot resolve exactly one incoming and outgoing segment")
-            candidates = repository.generate_candidates(via_id)
+            # Read the currently persisted state, not fresh defaults: a second
+            # restriction at the same intersection must build on what an earlier
+            # one already persisted, or it would reset it back to allowed.
+            candidates = repository.list_for_intersection(via_id)
             target = (incoming[0].id, outgoing[0].id)
             if not any((item.incoming_segment_id, item.outgoing_segment_id) == target for item in candidates):
                 raise OSMIngestionError(f"restriction {restriction.source_id} does not match a legal intersection transition")
