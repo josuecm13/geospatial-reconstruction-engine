@@ -263,6 +263,26 @@ Deliverables:
   than adding a parallel set of queries beside it.
 - Endpoints (on top of Milestone 7) to create, list, fetch, and delete traced boundaries for an
   import area, and to pass one as a query scope.
+- GeoJSON export of a scope — either the whole import area or one traced boundary — covering roads
+  (with their lane counts), buildings, POIs, and area features. `shapely`'s `mapping()` and PostGIS
+  `ST_AsGeoJSON` are already available, so this needs no new dependency.
+- Two explicit export modes, because they serve different consumers and are not interchangeable:
+  - **filter** — entities intersecting the scope are returned whole, so geometry may extend past
+    the traced edge. The network stays coherent: segments still end at real navigable nodes and
+    turn movements still resolve, so the result remains routable.
+  - **clip** — geometry is cut at the boundary (`ST_Intersection`), matching the traced shape
+    exactly. This is the right mode for rendering and the wrong one for analysis: a clipped
+    segment no longer terminates at a navigable node and its `distance_meters` no longer matches
+    its geometry, so a clipped export is a picture, not a routable dataset.
+- Local projection metadata on the export (an origin coordinate plus meters-per-degree factors) so
+  a Cartesian renderer can place the data in meters without reprojecting. Degrees are not uniform,
+  and a renderer given raw lat/lon draws a stretched scene.
+
+Note: rendering buildings with height is not possible from what is currently ingested. `Building`
+carries no height and the OSM adapter captures no `height` or `building:levels` tags, so an export
+can only describe footprints. Adding height is an *ingestion and schema* change to the
+`osm-fixture-ingestion` capability, not an export change, and belongs in its own change rather than
+being smuggled into this one.
 
 Acceptance checks:
 
@@ -273,9 +293,19 @@ Acceptance checks:
 - A self-intersecting polygon, or one extending outside its import area's rectangle, is rejected
   with an actionable error.
 - Several distinct traced boundaries can exist for one import area and be selected independently.
+- Exporting one scope in both modes differs as specified: filter mode yields geometry extending
+  beyond the traced edge, clip mode yields geometry contained by it.
+- An export states its scope, its mode, and its projection origin, and an export of the whole
+  import area matches an export of a traced boundary covering the entire rectangle.
 
-Note: the ≤ 1 km × 1 km cap applies to the imported rectangle; a traced boundary inherits it by
-containment, so it needs no separate size rule.
+Notes:
+
+- The ≤ 1 km × 1 km cap applies to the imported rectangle; a traced boundary inherits it by
+  containment, so it needs no separate size rule.
+- Mesh formats (glTF) and terrain elevation stay out of scope. Triangulation, extrusion, materials,
+  and level of detail are rendering decisions that belong in the client — a Three.js consumer can
+  extrude footprints itself, and baking meshes server-side would freeze those choices in the
+  backend and add a heavyweight dependency for one consumer.
 
 ## Milestone 9 — Minimal visualization and end-to-end demonstration
 
