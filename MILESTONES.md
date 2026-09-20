@@ -157,29 +157,29 @@ Acceptance checks:
 
 Status: **planned**
 
-Note: directed edges and the legal-transition index — the two things this milestone was originally
-scoped to build — already exist. `RoadSegment` (Milestone 2) is a directed edge with
-`from_node_id`/`to_node_id` and a `lane_count`; `TurnMovement` (Milestone 2) plus
+Note: directed edges, per-edge traversal distance, and the legal-transition index — the things this
+milestone was originally scoped to build — already exist. `RoadSegment` (Milestone 2) is a directed
+edge with `from_node_id`/`to_node_id`, a `lane_count`, and a geodesic `distance_meters` computed on
+every upsert; `TurnMovement` (Milestone 2) plus
 `TurnMovementRepository.generate_candidates`/`legal_outgoing_segments` (Milestone 3) already form a
 dense, persisted legal-transition index per intersection, populated by every import. This
-milestone is now about wrapping that already-persisted data in a traversal-ready, provider-neutral
-interface for a routing engine — not re-deriving edges or transitions from scratch.
+milestone is now only about wrapping that already-persisted data in a traversal-ready,
+provider-neutral interface for a routing engine — not re-deriving edges, distances, or transitions.
 
 Deliverables:
 
 - A provider-neutral `RoadGraph` interface and a graph repository that loads it from the persisted
   `road_segments` and `turn_movements` tables (via the existing repositories).
-- Segment traversal distance: `RoadSegment` does not yet store a length, so this milestone adds it
-  (derived from segment geometry, e.g. `ST_Length`).
 - Neighbor/edge queries usable by a routing engine without importing SQLAlchemy or OSM types,
-  restricted to movements `TurnMovementRepository` marks `allowed`.
+  restricted to movements `TurnMovementRepository` marks `allowed`, and exposing the existing
+  `RoadSegment.distance_meters` as edge cost.
 - Tests for connectivity, one-way roads, and disconnected components, exercised through the graph
   abstraction rather than direct repository calls.
 
 Acceptance checks:
 
 - The graph can be built from the persisted domain model without OSM dependencies.
-- Every edge has valid endpoints and exposes a non-negative traversal distance.
+- Every edge has valid endpoints and exposes its persisted non-negative traversal distance.
 - Connectivity tests demonstrate preserved intersections and directionality.
 - Transition tests demonstrate that segments with `TurnMovement.allowed = False` are not exposed as
   legal graph moves through the abstraction.
@@ -194,7 +194,8 @@ Deliverables:
   interface only — never SQLAlchemy models or OSM types directly.
 - Nearest-node preparation for origin and destination coordinates (Milestone 4's nearest-node
   lookup).
-- First strategy: distance-based Dijkstra, using Milestone 5's per-edge traversal distance.
+- First strategy: distance-based Dijkstra, using the existing `RoadSegment.distance_meters` as edge
+  cost via Milestone 5's graph interface.
 - Turn-aware search state based on the incoming segment at each intersection — the legality data
   itself (`TurnMovement.allowed`) already exists from Milestones 2–3; this milestone is the search
   algorithm that respects it during traversal, not the data.
