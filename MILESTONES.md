@@ -128,8 +128,8 @@ Notes:
    whole test transaction instead of just the failed writes, only surfacing under a live-PostGIS run.
    Fixed by binding the fixture's session with `join_transaction_mode="create_savepoint"` so nested
    application-level commits/rollbacks act on a SAVEPOINT.
-4. Deferred: live Overpass/OSM network access, block derivation trigger timing, graph traversal/routing,
-   and API endpoints — Milestones 4-7.
+4. Deferred: graph traversal/routing (Milestones 4-6), block derivation trigger timing and API
+   endpoints (Milestone 7), and live Overpass/OSM network access (Milestone 9).
 
 ## Milestone 4 — Spatial query capabilities
 
@@ -231,7 +231,53 @@ Acceptance checks:
 - Responses contain normalized application models and stable error shapes.
 - Database failures and disconnected routes are reported clearly.
 
-## Milestone 8 — Minimal visualization and end-to-end demonstration
+## Milestone 8 — Custom traced import-area boundaries
+
+Status: **planned**
+
+An import area is a rectangle today: `import_areas` stores min/max longitude/latitude and a `bbox`
+polygon, and everything imported is bounded by it. This milestone adds user-traced, arbitrarily
+shaped boundaries that *narrow* an import area without replacing it, so both references stay
+available and queryable side by side — the original rectangle that was imported, and the traced
+shape drawn over it.
+
+The defining constraint is that trimming is a **view, not a deletion**. A traced boundary never
+removes imported entities, so the original import stays intact and any number of different cuts can
+coexist over it. This also keeps derived data safe: blocks (Milestone 2) are polygonized from the
+whole import area's road graph, so a boundary filters them at read time rather than forcing a
+re-derivation that a later edit would invalidate.
+
+Deliverables:
+
+- A persisted traced-boundary entity belonging to an import area: an arbitrary (non-rectangular)
+  polygon in SRID 4326, GiST-indexed like every other geometry column, with a name so several cuts
+  can coexist over one import area.
+- Write-time validation: the polygon must be valid and simple (closed, non-self-intersecting) and
+  contained by its import area's original `bbox` — a trim narrows, never extends beyond what was
+  actually imported. Decide there whether this is enforced in the application or by a database
+  constraint/trigger, following the `turn_movements` integrity-trigger precedent from Milestone 2.
+- Non-destructive semantics: creating, editing, or deleting a traced boundary leaves imported
+  entities, their counts, and derived blocks untouched.
+- A scoping dimension on the existing spatial queries, so any query can run against a traced
+  boundary instead of the whole import area — this extends the `spatial-queries` capability rather
+  than adding a parallel set of queries beside it.
+- Endpoints (on top of Milestone 7) to create, list, fetch, and delete traced boundaries for an
+  import area, and to pass one as a query scope.
+
+Acceptance checks:
+
+- The original rectangular `bbox` and a traced boundary for the same import area can both be read
+  back, and imported entity counts are identical before and after a boundary is created or deleted.
+- A spatial query scoped to a traced boundary returns only entities inside that shape, while the
+  same query scoped to the import area still returns everything.
+- A self-intersecting polygon, or one extending outside its import area's rectangle, is rejected
+  with an actionable error.
+- Several distinct traced boundaries can exist for one import area and be selected independently.
+
+Note: the ≤ 1 km × 1 km cap applies to the imported rectangle; a traced boundary inherits it by
+containment, so it needs no separate size rule.
+
+## Milestone 9 — Minimal visualization and end-to-end demonstration
 
 Status: **planned**
 
@@ -262,6 +308,13 @@ Deliverables:
   above the fetch boundary.
 - Lightweight web map client.
 - Rendering of roads, buildings, POIs, and route geometry.
+- A boundary tracing tool: draw an arbitrary, non-rectangular shape over the loaded import area by
+  placing vertices (and/or freehand tracing), close it, and save it through Milestone 8's
+  endpoints.
+- Simultaneous, visually distinct rendering of both references — the original rectangular import
+  area and any saved traced boundaries — with a control to switch what is queried and displayed
+  between the whole import area and a selected traced boundary.
+- Reloading, re-selecting, and deleting previously saved traced boundaries across sessions.
 - Documented walkthrough using a bounded real-world import.
 - Operational runbook for starting services, migrating, importing, querying, and routing.
 
@@ -270,6 +323,10 @@ Acceptance checks:
 - A developer can follow the runbook from a clean checkout.
 - The map visibly demonstrates that imported data is served from the custom representation.
 - A route from Point A to Point B can be selected and displayed.
+- A non-rectangular shape can be traced over an imported rectangle, saved, and still be present
+  with the original rectangle after a page reload.
+- Switching the view to a traced boundary visibly narrows the rendered data, while switching back
+  to the import area restores the full set — demonstrating the trim is a view, not a deletion.
 
 ## Milestone completion record
 
