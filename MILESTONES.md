@@ -358,6 +358,127 @@ Acceptance checks:
 - Switching the view to a traced boundary visibly narrows the rendered data, while switching back
   to the import area restores the full set — demonstrating the trim is a view, not a deletion.
 
+## The raw layer and the content layer
+
+Milestones 10–12 extend the project from reconstructing a map to *enhancing* one: filling
+under-mapped blocks with plausible buildings, inferring heights, and attaching renderable asset
+identities, so a real city segment can be exported as a populated, renderable map.
+
+One rule governs all of it: **the raw layer is never written to by generation.** Everything OSM
+observed stays exactly as ingested, in the tables it already lives in; everything invented lives in
+its own tables and can be deleted and regenerated without touching a single observed row. Two
+concrete reasons, not just tidiness:
+
+- `buildings.source_id` is `NOT NULL` under `UNIQUE (import_area_id, source_id)`, and ingestion
+  upserts on exactly that key. A synthetic building placed in that table would need a fabricated
+  source identity, and would sit in the path of the re-import convergence guarantee Milestone 3
+  spec'd.
+- Keeping them apart preserves the same "both references" property as traced boundaries: the
+  observed city and the populated city remain separately queryable and separately exportable.
+
+`blocks` is the existing precedent — `BlockDerivationService` already persists entities that have
+no source, because "a block only exists because the enclosing road segments do."
+
+## Milestone 10 — Building attributes from source
+
+Status: **planned**
+
+This completes the *raw* layer rather than starting the generated one: `height` and
+`building:levels` are observations OSM carries and this project currently discards. `Building` has
+no height field and the adapter reads no height tags, so nothing downstream can render a skyline
+from real data.
+
+Deliverables:
+
+- Capture source building height and level count in the OSM adapter and persist them on buildings.
+- Unknown stays unknown: a building with no usable height tag stores null, never zero or a
+  substituted default — the same discipline already applied to `lane_count`.
+- Tolerant parsing of the values OSM actually contains (bare metres, `"12 m"`, and unit-suffixed
+  forms), treating unparseable values as unknown rather than failing the import.
+
+Acceptance checks:
+
+- A fixture building tagged with a height persists that height; one tagged only with levels
+  persists the level count; one tagged with neither persists nulls for both.
+- An unparseable height value leaves the height unknown and does not fail the import.
+- Existing imports remain valid: the migration adds nullable columns and changes no counts.
+
+Note: converting levels into an estimated height is *inference*, not observation, and belongs to
+Milestone 11. This milestone only records what the source stated.
+
+## Milestone 11 — Generated block content
+
+Status: **planned**
+
+Fills blocks with plausible buildings where the source has none, in new tables that extend the raw
+layer without modifying it. Fidelity is explicitly not the goal for unmapped blocks; plausibility
+and reproducibility are.
+
+Deliverables:
+
+- New tables for generated content, holding generated buildings (footprint, height, kind, owning
+  block) and the generation run that produced them (import area, seed, algorithm version,
+  parameters, timestamp). No observed table gains a row or a column.
+- A deterministic generation service: the same seed, inputs, and algorithm version SHALL produce
+  byte-identical output, so a playable map does not reshuffle between runs. Seeded randomness only;
+  never iteration order.
+- Block population from data already persisted: subdivide a block into lots along its **ordered**
+  `block_boundary_segments` frontage, apply a setback, and place footprints in the buildable area.
+- Context-driven density and height inference, using the `RoadClassification` of the block's
+  bounding roads, its real neighbours' footprints where present, and level counts from Milestone 10.
+- Provenance on every inferred value, so measured, inferred, and defaulted heights stay
+  distinguishable to consumers and to any later real-data import.
+- Respect for observed data: a generated footprint never overlaps a real building, and real
+  buildings in a partially mapped block inform the generated ones' size and setback.
+- A staleness policy: a run records the inputs it was derived from, so a re-import that changes the
+  road graph — and therefore the blocks — marks affected runs stale rather than leaving content
+  that silently no longer fits.
+- Extension of Milestone 8's export so a caller selects which layers to export: raw only, generated
+  only, or both.
+
+Acceptance checks:
+
+- Running generation twice with the same seed produces identical content; a different seed produces
+  different content.
+- Generation adds no rows to, and modifies no rows in, any observed table, and deleting a run
+  restores the area to raw-only with observed counts unchanged.
+- No generated footprint overlaps a real building or extends outside its block's buildable area.
+- A block bounded by a higher-classification road yields denser or taller content than one bounded
+  only by residential roads.
+- Re-importing an area whose road graph changed marks dependent runs stale.
+
+Open question: what "playable" commits us to. Collision geometry, spawn points, and a navmesh are
+plausible next asks, and the routing graph is already close to a vehicle navmesh — but none of that
+is in scope here until the target is named explicitly.
+
+## Milestone 12 — Renderable asset semantics
+
+Status: **planned**
+
+Gives real POIs and generated buildings a stable, renderable identity, so a consumer can show a
+recognisable restaurant rather than an anonymous box.
+
+Deliverables:
+
+- Stable asset identifiers attached to real POIs and generated buildings, derived from the
+  categories already persisted.
+- Asset hints carried through Milestone 8's export as semantic strings, not models — the server
+  ships identities and the renderer resolves them to geometry and materials, consistent with mesh
+  formats staying client-side.
+- A documented fallback chain, so anything without a specific identity still renders as a sensible
+  generic rather than disappearing.
+
+Acceptance checks:
+
+- A POI with a recognised category exports a specific asset identifier; an unrecognised one exports
+  the documented generic fallback.
+- Asset identifiers are stable across exports of unchanged data.
+- No 3D model, mesh, or material is produced or stored server-side.
+
+Open question: what "popular" means operationally. OSM carries no popularity measure; brand,
+`wikidata` presence, and cuisine tags are the available proxies, and which of them counts needs
+deciding before anything is built on it.
+
 ## Milestone completion record
 
 When completing a milestone, update its status and add a short note containing:
