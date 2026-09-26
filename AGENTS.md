@@ -56,3 +56,62 @@ those in prematurely; see `MILESTONES.md` for current status and what's next.
   connection.
 - New database access goes through SQLAlchemy/GeoAlchemy2, with schema changes made through an
   Alembic migration — never hand-edit the schema.
+
+## Backlog and issues
+
+GitHub Issues are the backlog, and they are part of every change — not bookkeeping done afterward.
+
+- **`MILESTONES.md`** is the roadmap: why each milestone exists, its deliverables, acceptance checks,
+  and order. It does not track individual items.
+- **GitHub Issues**, each assigned to the GitHub milestone it belongs to (`7.1 Street
+  cross-sections`, `9 Visualization and live OSM`, …), are every actionable item: milestone
+  deliverables, bugs, chores, docs. Housekeeping that belongs to no milestone has none.
+- **OpenSpec changes** are created only when a milestone or large issue actually starts, and are
+  linked from that issue. Small fixes need an issue, not a proposal.
+
+`gh` must run as the personal account: prefix every call with
+`GH_TOKEN=$(gh auth token --user josuecm13)` (see `../AGENTS.md`). The `/issues:next`,
+`/issues:new`, and `/issues:validate` commands in `.claude/commands/issues/` run the steps below.
+
+### The cycle
+
+1. **Pick.** Before starting work, check the open issues for the current milestone
+   (`gh issue list --milestone "<title>"`) and work from one. If the work has no issue, file one
+   first. A milestone's tracking issue is split into one issue per deliverable when the milestone
+   starts.
+2. **Validate.** An issue is a claim about the code at the time it was written. Before planning on
+   it, re-check its load-bearing claims (file/line references, "X is missing", "Y fails") against
+   the current source. If it's already fixed, close it with a comment saying where; if it's
+   partly stale, comment with what changed before starting.
+3. **Branch.** Name the branch `<type>/<issue-number>-<slug>`, e.g. `feat/13-stable-block-ids`.
+4. **Work.** Stay inside the issue. Anything else found along the way — a bug next door, a stale
+   doc, a missing guard — is not fixed in this branch; it becomes its own issue (step 5) and, if
+   related, is mentioned in a comment on the current one. Never let a finding silently disappear:
+   if it isn't worth an issue, say so explicitly.
+5. **File.** New issues use the format below. Agents draft the issue (title, labels, milestone,
+   body) and create it once the user confirms; the user may waive confirmation for a session.
+6. **Close.** The PR description carries `Fixes #<n>` for each issue it resolves, so merging
+   closes them. When a milestone's last issue closes, update that milestone's status and
+   completion note in `MILESTONES.md` and close the GitHub milestone.
+
+### Issue format
+
+Title: `[area] <problem or outcome>`, where area is one of `api`, `ingestion`, `domain`, `blocks`,
+`routing`, `persistence`, `client`, `docs`, `chore`, `test`, or `milestone` (tracking issues only).
+
+Labels: exactly one of `bug`, `enhancement`, `documentation`, `chore`.
+
+Body:
+
+```
+<one paragraph: the problem as currently understood, stated plainly>
+
+### Acceptance criteria
+- <observable, testable outcomes>
+
+### Reference
+<file:line, MILESTONES.md section, related issue or PR>
+```
+
+State the current understanding, not how it was discovered; the discovery context belongs in a
+comment or in the linked issue.
