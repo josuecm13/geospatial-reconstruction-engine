@@ -59,9 +59,9 @@
 
 ## 9. Verification and docs
 
-- [ ] 9.1 `pytest -q` from `server/` against live PostGIS, all green
-- [ ] 9.2 `openspec validate add-application-api --strict`
-- [ ] 9.3 Manual smoke test: `uvicorn` on `APP_PORT`, import `osm_routing.json` with curl, request a route
-- [ ] 9.4 `HOW_TO_RUN.md`: short "calling the API" section with the curl import and route examples
-- [ ] 9.5 `docs/architecture.md`: replace the initial endpoint list with the implemented surface; `docs/schema.md`: resolve the derivation-timing open question (automatic, inside the import, after reconciliation)
-- [ ] 9.6 `MILESTONES.md`: mark Milestone 7 complete with the completion-record note (change, verification, decisions — reconcile on re-import, automatic derivation, replace-on-rederive, payload guards — and deferred work)
+- [x] 9.1 `pytest -q` from `server/` against live PostGIS, all green
+- [x] 9.2 `openspec validate add-application-api --strict`
+- [x] 9.3 Manual smoke test: `uvicorn` on `APP_PORT`, import `osm_routing.json` with curl, request a route
+- [x] 9.4 `HOW_TO_RUN.md`: short "calling the API" section with the curl import and route examples
+- [x] 9.5 `docs/architecture.md`: replace the initial endpoint list with the implemented surface; `docs/schema.md`: resolve the derivation-timing open question (automatic, inside the import, after reconciliation)
+- [x] 9.6 `MILESTONES.md`: mark Milestone 7 complete with the completion-record note (change, verification, decisions — reconcile on re-import, automatic derivation, replace-on-rederive, payload guards — and deferred work)

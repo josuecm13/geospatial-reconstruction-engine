@@ -252,7 +252,7 @@ Notes:
 
 ## Milestone 7 — Application API
 
-Status: **planned**
+Status: **complete**
 
 Deliverables:
 
@@ -280,7 +280,25 @@ Acceptance checks:
 - Responses contain normalized application models and stable error shapes.
 - Database failures and disconnected routes are reported clearly.
 
-Change: `openspec/changes/add-application-api/`.
+Notes:
+
+1. Change: `openspec/changes/add-application-api/`.
+2. Verification: `docker compose up -d`, `alembic upgrade head` against the existing volume,
+   `pytest -q` from `server/` against live PostGIS (131 passed, up from 79), `openspec validate
+   add-application-api --strict` (valid), a manual `uvicorn` smoke test importing
+   `osm_routing.json` and requesting a route by curl (documented in `HOW_TO_RUN.md`).
+3. Decisions: recorded in the change's `design.md` — re-import **reconciles** rather than only
+   upserting (mark every upsert's id, reset derived blocks, sweep everything the payload no longer
+   produces children-first since no foreign key here cascades, then regenerate turns and
+   re-derive blocks over the reconciled network); blocks are derived and buildings linked
+   automatically inside every import's own transaction, replacing rather than duplicating on
+   re-derivation; a payload's features must intersect the declared bounding box; map data is one
+   GeoJSON `FeatureCollection` per layer with OSM attribution, exposing each segment's street name
+   and classification as values rather than a street id.
+4. Deferred: street grouping and generated lane cross-sections (Milestone 7.1); buildable blocks,
+   edge blocks, and stable block ids (Milestone 7.2); live Overpass retrieval and truncated-response
+   guarding (Milestone 9); the adapter's lane-count split and a missing-node error path (separate
+   `osm-fixture-ingestion` fixes, see "Pending fixes" below).
 
 ## Milestone 7.1 — Street cross-sections (generated lanes and width)
 

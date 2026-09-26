@@ -1,8 +1,8 @@
 # How to run it
 
-This project is a work-in-progress (Milestone 1 of `MILESTONES.md`). Right now you can run a
-FastAPI skeleton backed by a local PostGIS database, apply migrations, and run the bounding-box
-validation tests. There are no real API endpoints or domain data yet.
+This project is a work-in-progress (see `MILESTONES.md` for status). You can run the FastAPI
+application backed by a local PostGIS database, apply migrations, run the test suite, and call the
+HTTP API to import a fixture area, query it, and plan a route.
 
 ## Prerequisites
 
@@ -51,6 +51,35 @@ uvicorn app.main:app --reload --port "$APP_PORT"
 curl localhost:$APP_PORT/health
 # {"status":"ok"}
 ```
+
+## Calling the API
+
+Import a fixture payload for a bounding box, then request a route within it. The routing fixture
+below (`server/tests/fixtures/osm_routing.json`) is a small five-node road network with no
+buildings.
+
+```bash
+curl -s -X POST localhost:$APP_PORT/import-areas \
+  -H 'Content-Type: application/json' \
+  -d "{\"bbox\": {\"min_latitude\": 9.9995, \"min_longitude\": -84.003, \"max_latitude\": 10.002, \"max_longitude\": -83.999}, \"payload\": $(cat server/tests/fixtures/osm_routing.json)}"
+# {"id": "...", "provider": "osm", "status": "completed", "road_count": 5, ...}
+```
+
+Every response uses the same envelope: `{"error": {"code", "message", "details"}}` on failure, or
+the resource's own shape on success. Save the returned `id` as `AREA_ID`, then:
+
+```bash
+curl -s -X POST localhost:$APP_PORT/import-areas/$AREA_ID/routes \
+  -H 'Content-Type: application/json' \
+  -d '{"origin": {"latitude": 10.0, "longitude": -84.000}, "destination": {"latitude": 10.0, "longitude": -84.002}}'
+# {"node_ids": [...], "segment_ids": [...], "geometry": {"type": "LineString", ...},
+#  "total_distance_meters": ..., "strategy": "distance", ...}
+```
+
+`GET /import-areas/$AREA_ID/map-data` returns every persisted entity as one GeoJSON
+`FeatureCollection` per layer (road segments, navigable nodes, blocks, buildings, POIs, area
+features); the spatial-query endpoints (`/nearby`, `/within-bbox`, `/nearest`,
+`/buildings/{id}/footprint-area`) are scoped the same way, to one completed import area.
 
 ## Stopping everything
 
