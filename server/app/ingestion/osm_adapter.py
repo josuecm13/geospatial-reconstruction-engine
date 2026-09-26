@@ -16,6 +16,10 @@ class IngestionError(ValueError):
 class PayloadOutsideBoundingBox(IngestionError):
     """A supported feature in the payload does not belong to the declared bounding box."""
 
+    def __init__(self, message: str, source_ids: list[str]):
+        super().__init__(message)
+        self.source_ids = source_ids
+
 
 @dataclass(frozen=True)
 class ImportRoad:
@@ -161,7 +165,7 @@ def _split_lanes(tags: dict[str, Any], source_id: str, is_one_way: bool) -> tupl
     if total is not None:
         backward_lanes = total // 2
         forward_lanes = total - backward_lanes
-        return forward_lanes, backward_lanes
+        return forward_lanes, backward_lanes if backward_lanes >= 1 else None
 
     return None, None
 

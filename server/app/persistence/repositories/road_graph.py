@@ -114,6 +114,10 @@ class NavigableNodeRepository:
         self.session.flush()
         return self._to_domain(model)
 
+    def get(self, node_id) -> NavigableNode | None:
+        model = self.session.get(NavigableNodeModel, node_id)
+        return self._to_domain(model) if model is not None else None
+
     def list_for_import_area(self, import_area_id) -> list[NavigableNode]:
         models = self.session.execute(
             select(NavigableNodeModel).where(NavigableNodeModel.import_area_id == import_area_id)

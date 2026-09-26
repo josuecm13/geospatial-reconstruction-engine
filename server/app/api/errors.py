@@ -73,7 +73,7 @@ def register_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(PayloadOutsideBoundingBox)
     async def handle_payload_outside_bbox(request: Request, exc: PayloadOutsideBoundingBox) -> JSONResponse:
-        return _response(422, "payload_outside_bounding_box", str(exc))
+        return _response(422, "payload_outside_bounding_box", str(exc), {"source_ids": exc.source_ids})
 
     @app.exception_handler(InvalidBoundingBox)
     async def handle_invalid_bounding_box(request: Request, exc: InvalidBoundingBox) -> JSONResponse:

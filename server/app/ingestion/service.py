@@ -310,7 +310,8 @@ class OSMIngestionService:
         if offending:
             raise PayloadOutsideBoundingBox(
                 "payload contains features outside the import bounding box: "
-                + ", ".join(offending[:10])
+                + ", ".join(offending[:10]),
+                source_ids=offending,
             )
 
     @staticmethod

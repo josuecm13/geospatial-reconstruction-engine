@@ -101,7 +101,10 @@ class SpatialQueryService:
         model = self.session.execute(
             select(NavigableNodeModel)
             .where(NavigableNodeModel.import_area_id == import_area_id)
-            .order_by(func.ST_Distance(cast(NavigableNodeModel.geom, Geography), cast(point, Geography)))
+            .order_by(
+                func.ST_Distance(cast(NavigableNodeModel.geom, Geography), cast(point, Geography)),
+                NavigableNodeModel.id,
+            )
             .limit(1)
         ).scalar_one_or_none()
         return NavigableNodeRepository._to_domain(model) if model is not None else None

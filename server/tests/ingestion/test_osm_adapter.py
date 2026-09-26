@@ -91,6 +91,7 @@ def _road_way(tags: dict) -> dict:
         ({"highway": "residential", "lanes": "2"}, 1, 1),
         ({"highway": "primary", "lanes": "4"}, 2, 2),
         ({"highway": "primary", "lanes": "3"}, 2, 1),
+        ({"highway": "residential", "lanes": "1"}, 1, None),
         ({"highway": "primary", "lanes": "3", "lanes:forward": "2"}, 2, 1),
         ({"highway": "primary", "lanes:forward": "2", "lanes:backward": "1"}, 2, 1),
         ({"highway": "residential"}, None, None),

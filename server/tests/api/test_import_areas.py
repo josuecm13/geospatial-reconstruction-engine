@@ -75,7 +75,9 @@ def test_payload_outside_bounding_box(client):
     response = client.post("/import-areas", json={"bbox": NEIGHBORHOOD_BBOX, "payload": payload})
 
     assert response.status_code == 422
-    assert response.json()["error"]["code"] == "payload_outside_bounding_box"
+    error = response.json()["error"]
+    assert error["code"] == "payload_outside_bounding_box"
+    assert error["details"] == {"source_ids": ["9001"]}
 
 
 def test_payload_too_large_creates_no_area(client, db_session):

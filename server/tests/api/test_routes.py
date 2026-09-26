@@ -152,3 +152,34 @@ def test_no_navigable_node_when_area_has_no_road_data(client, db_session):
 
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "no_navigable_node"
+
+
+def test_reported_endpoint_nodes_match_the_route(client, monkeypatch):
+    # Stands in for a nearest-node distance tie: any lookup after the engine's
+    # own two returns a different node, so the response must not depend on
+    # repeating the lookup.
+    from app.persistence.repositories.road_graph import NavigableNodeRepository
+    from app.persistence.spatial_queries import SpatialQueryService
+
+    area = _import_routing_fixture(client)
+    original = SpatialQueryService.nearest_node
+    calls = []
+
+    def flaky_nearest_node(self, import_area_id, coordinate):
+        calls.append(coordinate)
+        node = original(self, import_area_id, coordinate)
+        if len(calls) <= 2:
+            return node
+        others = [n for n in NavigableNodeRepository(self.session).list_for_import_area(import_area_id) if n.id != node.id]
+        return others[0]
+
+    monkeypatch.setattr(SpatialQueryService, "nearest_node", flaky_nearest_node)
+
+    response = client.post(
+        f"/import-areas/{area['id']}/routes",
+        json=_route_body((10.0001, -84.0001), (10.0, -84.002)),
+    )
+
+    body = response.json()
+    assert body["origin_node_id"] == body["node_ids"][0]
+    assert body["destination_node_id"] == body["node_ids"][-1]

@@ -13,7 +13,7 @@ from app.api.schemas import RouteOut, RouteRequest
 from app.domain.bounding_box import Coordinate, InvalidBoundingBox
 from app.domain.geometry import point_distance_meters
 from app.domain.import_area import ImportArea
-from app.persistence.spatial_queries import SpatialQueryService
+from app.persistence.repositories.road_graph import NavigableNodeRepository
 from app.routing.engine import RoutingEngine
 from app.routing.strategies import DEFAULT_STRATEGY_NAME, UnknownRoutingStrategy, resolve_strategy
 
@@ -43,15 +43,14 @@ def create_route(
             422, "unknown_routing_strategy", str(exc), {"registered_strategies": exc.registered_names}
         ) from exc
 
-    # RoutingEngine.plan_route does its own nearest-node lookups internally
-    # (and raises NoNavigableNodeError if either is None); these are called
-    # again here only to report each coordinate's snap distance, which the
-    # engine doesn't return. Both calls are cheap, indexed nearest-neighbor
-    # lookups, so the duplication isn't worth restructuring the engine for.
-    spatial = SpatialQueryService(session)
+    # The engine returns only the route, not the nodes it snapped onto, so the
+    # endpoints are read back from the route itself. Repeating the
+    # nearest-node lookup here could pick a different node on a distance tie
+    # and contradict node_ids[0] / node_ids[-1].
     route = RoutingEngine(session, strategy).plan_route(area.id, origin, destination)
-    origin_node = spatial.nearest_node(area.id, origin)
-    destination_node = spatial.nearest_node(area.id, destination)
+    nodes = NavigableNodeRepository(session)
+    origin_node = nodes.get(route.node_ids[0])
+    destination_node = nodes.get(route.node_ids[-1])
 
     return route_out(
         route,
