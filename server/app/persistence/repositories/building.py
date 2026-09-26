@@ -54,6 +54,12 @@ class BuildingRepository:
         self.session.flush()
         return result.rowcount
 
+    def list_for_import_area(self, import_area_id) -> list[Building]:
+        models = self.session.execute(
+            select(BuildingModel).where(BuildingModel.import_area_id == import_area_id)
+        ).scalars().all()
+        return [self._to_domain(model) for model in models]
+
     def get(self, building_id) -> Building | None:
         model = self.session.get(BuildingModel, building_id)
         return self._to_domain(model) if model is not None else None

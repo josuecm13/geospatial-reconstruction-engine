@@ -1,4 +1,5 @@
 import uuid
+from collections import defaultdict
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -32,6 +33,24 @@ class BlockRepository:
         self.session.flush()
 
         return self._to_domain(model, block.bounding_segment_ids)
+
+    def list_for_import_area(self, import_area_id: uuid.UUID) -> list[Block]:
+        block_models = self.session.execute(
+            select(BlockModel).where(BlockModel.import_area_id == import_area_id)
+        ).scalars().all()
+        block_ids = [model.id for model in block_models]
+
+        # One extra query for every block's boundary segments, not one per block.
+        boundary_rows = self.session.execute(
+            select(BlockBoundarySegmentModel.block_id, BlockBoundarySegmentModel.road_segment_id)
+            .where(BlockBoundarySegmentModel.block_id.in_(block_ids))
+            .order_by(BlockBoundarySegmentModel.block_id, BlockBoundarySegmentModel.sequence_order)
+        ).all()
+        boundaries: dict[uuid.UUID, list[uuid.UUID]] = defaultdict(list)
+        for block_id, segment_id in boundary_rows:
+            boundaries[block_id].append(segment_id)
+
+        return [self._to_domain(model, tuple(boundaries.get(model.id, ()))) for model in block_models]
 
     def get_boundary_segment_ids(self, block_id: uuid.UUID) -> tuple[uuid.UUID, ...]:
         rows = self.session.execute(

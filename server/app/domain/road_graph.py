@@ -43,3 +43,15 @@ class RoadSegment:
     distance_meters: float | None = None
     lane_count: int | None = None
     is_vehicle_accessible: bool = True
+
+
+@dataclass(frozen=True)
+class RoadSegmentWithStreet:
+    """A road segment paired with its street's name/classification, as values —
+    no street id: a street is one OSM way today (Milestone 7.1 groups ways into
+    logical streets), so publishing a street identifier now would be a contract
+    that breaks."""
+
+    segment: RoadSegment
+    street_name: str | None
+    street_classification: RoadClassification

@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.domain.enums import RoadClassification
 from app.domain.geometry import linestring_length_meters
-from app.domain.road_graph import NavigableNode, Road, RoadSegment, Street
+from app.domain.road_graph import NavigableNode, Road, RoadSegment, RoadSegmentWithStreet, Street
 from app.persistence.geometry import geom_to_linestring, geom_to_point, linestring_to_geom, point_to_geom
 from app.persistence.models import NavigableNodeModel, RoadModel, RoadSegmentModel, StreetModel
 
@@ -114,6 +114,12 @@ class NavigableNodeRepository:
         self.session.flush()
         return self._to_domain(model)
 
+    def list_for_import_area(self, import_area_id) -> list[NavigableNode]:
+        models = self.session.execute(
+            select(NavigableNodeModel).where(NavigableNodeModel.import_area_id == import_area_id)
+        ).scalars().all()
+        return [self._to_domain(model) for model in models]
+
     @staticmethod
     def _to_domain(model: NavigableNodeModel) -> NavigableNode:
         return NavigableNode(
@@ -167,6 +173,22 @@ class RoadSegmentRepository:
             .where(RoadModel.import_area_id == import_area_id)
         ).scalars().all()
         return [self._to_domain(model) for model in models]
+
+    def list_for_import_area_with_street(self, import_area_id) -> list[RoadSegmentWithStreet]:
+        rows = self.session.execute(
+            select(RoadSegmentModel, StreetModel.name, StreetModel.classification)
+            .join(RoadModel, RoadSegmentModel.road_id == RoadModel.id)
+            .join(StreetModel, RoadModel.street_id == StreetModel.id)
+            .where(RoadModel.import_area_id == import_area_id)
+        ).all()
+        return [
+            RoadSegmentWithStreet(
+                segment=self._to_domain(segment_model),
+                street_name=street_name,
+                street_classification=RoadClassification(street_classification),
+            )
+            for segment_model, street_name, street_classification in rows
+        ]
 
     @staticmethod
     def _to_domain(model: RoadSegmentModel) -> RoadSegment:

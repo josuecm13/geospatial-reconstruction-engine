@@ -29,9 +29,9 @@
 
 ## 5. Read paths for map data
 
-- [ ] 5.1 Add `ImportAreaRepository.get(id)` and a block-count query for an area
-- [ ] 5.2 Add `list_for_import_area` to the building, POI, area-feature, navigable-node, and block repositories (blocks load boundary-segment ids in one extra query, not one per block), and a segment read that joins `roads` and `streets` for each segment's street name and classification
-- [ ] 5.3 Repository tests for each list method, including area scoping (another area's rows are excluded)
+- [x] 5.1 Add `ImportAreaRepository.get(id)` and a block-count query for an area
+- [x] 5.2 Add `list_for_import_area` to the building, POI, area-feature, navigable-node, and block repositories (blocks load boundary-segment ids in one extra query, not one per block), and a segment read that joins `roads` and `streets` for each segment's street name and classification
+- [x] 5.3 Repository tests for each list method, including area scoping (another area's rows are excluded)
 
 ## 6. API foundation
 
