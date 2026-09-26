@@ -35,11 +35,11 @@
 
 ## 6. API foundation
 
-- [ ] 6.1 `app/api/dependencies.py`: lazily-built engine and `sessionmaker`, `get_session`, plus `import_area` (exists) and `completed_import_area` (exists and `completed`) dependencies
-- [ ] 6.2 `app/api/errors.py`: `ApiError` and the exception handlers from design Decision 2, including validation errors, 404/405, `payload_outside_bounding_box`, database unavailability (and unwrapping it from `OSMIngestionError`), and the generic `internal_error`
-- [ ] 6.3 Body-size middleware rejecting a `Content-Length` over 16 MiB with `payload_too_large` before parsing
-- [ ] 6.4 `app/api/schemas.py` (pydantic request/response models, GeoJSON features and per-layer FeatureCollections) and `app/api/mappers.py` (domain → response, including null route geometry for a single-node route and snap distances)
-- [ ] 6.5 Rework `/health` to depend on `get_session` and the error contract; wire routers, handlers, and the middleware in `create_app()`
+- [x] 6.1 `app/api/dependencies.py`: lazily-built engine and `sessionmaker`, `get_session`, plus `import_area` (exists) and `completed_import_area` (exists and `completed`) dependencies
+- [x] 6.2 `app/api/errors.py`: `ApiError` and the exception handlers from design Decision 2, including validation errors, 404/405, `payload_outside_bounding_box`, database unavailability (and unwrapping it from `OSMIngestionError`), and the generic `internal_error`
+- [x] 6.3 Body-size middleware rejecting a `Content-Length` over 16 MiB with `payload_too_large` before parsing
+- [x] 6.4 `app/api/schemas.py` (pydantic request/response models, GeoJSON features and per-layer FeatureCollections) and `app/api/mappers.py` (domain → response, including null route geometry for a single-node route and snap distances)
+- [x] 6.5 Rework `/health` to depend on `get_session` and the error contract; wire routers, handlers, and the middleware in `create_app()`
 
 ## 7. Endpoints
 
