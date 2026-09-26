@@ -37,10 +37,12 @@ elsewhere. See `HOW_TO_RUN.md` for the full setup and what to do in your shell a
 
 ## Status
 
-This project is intentionally incomplete. As of Milestone 1, there is a running FastAPI skeleton,
-a local PostGIS database, migrations, and bounding-box validation — no domain persistence, OSM
-ingestion, graph, or routing yet. Don't add those prematurely; they belong to later milestones
-documented in `MILESTONES.md`.
+This project is intentionally incomplete. Through Milestone 7, it has domain persistence, OSM
+fixture ingestion (with automatic block derivation and reconciling re-import), spatial queries,
+road graph traversal, routing, and a full HTTP API in front of all of it. Milestones 7.1, 7.2, 8,
+and 9 onward — street/lane modeling, buildable blocks, custom traced boundaries, live OSM
+retrieval and visualization, and the generated-content milestones — remain unbuilt. Don't pull
+those in prematurely; see `MILESTONES.md` for current status and what's next.
 
 ## Conventions
 

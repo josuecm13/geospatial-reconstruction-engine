@@ -98,6 +98,46 @@ def test_reimport_with_changed_payload_removes_what_it_no_longer_produces(db_ses
     assert "3" not in remaining_source_ids
 
 
+def test_first_import_reports_only_created(db_session):
+    payload = json.loads(FIXTURE.read_text())
+    service = OSMIngestionService(db_session)
+
+    result = service.import_fixture(_bbox(), payload)
+
+    assert result.created_count > 0
+    assert result.updated_count == 0
+    assert result.removed_count == 0
+
+
+def test_reimport_unchanged_payload_reports_only_updated(db_session):
+    payload = json.loads(FIXTURE.read_text())
+    service = OSMIngestionService(db_session)
+    service.import_fixture(_bbox(), payload)
+
+    result = service.import_fixture(_bbox(), payload)
+
+    assert result.created_count == 0
+    assert result.updated_count > 0
+    assert result.removed_count == 0
+
+
+def test_reimport_with_changed_payload_reports_removed_matching_sweep(db_session):
+    payload = json.loads(FIXTURE.read_text())
+    service = OSMIngestionService(db_session)
+    service.import_fixture(_bbox(), payload)
+
+    changed = copy.deepcopy(payload)
+    changed["elements"] = [
+        element for element in changed["elements"]
+        if not (element["type"] == "way" and element["id"] in (200, 101))
+    ]
+    result = service.import_fixture(_bbox(), changed)
+
+    assert result.removed_count > 0
+    assert result.building_count == 0
+    assert result.road_count == 2
+
+
 def test_reimport_removing_a_connecting_road_breaks_a_route_that_needed_it(db_session):
     """A purpose-built, restriction-free linear fixture: A-B-C-D. Removing the
     middle way (B-C) after an import must disconnect A from D, not just shrink
