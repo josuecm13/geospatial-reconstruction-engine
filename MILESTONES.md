@@ -655,10 +655,12 @@ in flight.
   now runs inside the `try` that turns `KeyError` into `IngestionError`, so a POI mapped as a way
   with a missing node raises `IngestionError` naming the missing node id, not a bare `KeyError`.
   Covered by `server/tests/ingestion/test_osm_adapter.py`.
-- **Milestone 3 import report.** Milestone 3's acceptance check says a repeated import "reports
-  created/updated/skipped counts"; `ImportResult` reports totals only. Either add the breakdown
-  (mark-and-sweep makes "removed" and "created vs. updated" cheap) or correct the acceptance
-  check.
+- **Milestone 3 import report.** Resolved. `OSMIngestionService._persist` now snapshots each
+  reconciled table's existing ids for the import area before the upsert loop runs, then diffs
+  those against the touched-id sets the existing mark-and-sweep already builds to compute
+  aggregate `created_count` / `updated_count` / `removed_count` on `ImportResult`. Scoped to the
+  ingestion service only, not the HTTP API response. Covered by
+  `server/tests/ingestion/test_osm_ingestion_service.py`.
 - **`AGENTS.md` status.** The Status section still describes the project "as of Milestone 1".
 
 ## Milestone completion record

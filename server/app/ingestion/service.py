@@ -43,6 +43,9 @@ class ImportResult:
     area_feature_count: int
     block_count: int = 0
     linked_building_count: int = 0
+    created_count: int = 0
+    updated_count: int = 0
+    removed_count: int = 0
 
 
 class OSMIngestionService:
@@ -81,6 +84,35 @@ class OSMIngestionService:
         roads = RoadRepository(self.session)
         nodes = NavigableNodeRepository(self.session)
         segments = RoadSegmentRepository(self.session)
+
+        # 0. Snapshot ids that already exist for this area, before any upsert
+        #    runs, so created/updated/removed can be computed by diffing
+        #    against what each upsert loop touches below.
+        existing_node_ids_before = set(
+            self.session.scalars(select(NavigableNodeModel.id).where(NavigableNodeModel.import_area_id == area_id)).all()
+        )
+        existing_road_ids_before = set(
+            self.session.scalars(select(RoadModel.id).where(RoadModel.import_area_id == area_id)).all()
+        )
+        existing_street_ids_before = set(
+            self.session.scalars(select(StreetModel.id).where(StreetModel.import_area_id == area_id)).all()
+        )
+        existing_segment_ids_before = set(
+            self.session.scalars(
+                select(RoadSegmentModel.id)
+                .join(RoadModel, RoadSegmentModel.road_id == RoadModel.id)
+                .where(RoadModel.import_area_id == area_id)
+            ).all()
+        )
+        existing_building_ids_before = set(
+            self.session.scalars(select(BuildingModel.id).where(BuildingModel.import_area_id == area_id)).all()
+        )
+        existing_poi_ids_before = set(
+            self.session.scalars(select(PointOfInterestModel.id).where(PointOfInterestModel.import_area_id == area_id)).all()
+        )
+        existing_area_feature_ids_before = set(
+            self.session.scalars(select(AreaFeatureModel.id).where(AreaFeatureModel.import_area_id == area_id)).all()
+        )
 
         # 1. Upsert every source entity, tracking which rows this payload
         #    touched — anything for this area *not* in these sets is stale
@@ -140,10 +172,29 @@ class OSMIngestionService:
         # 7. Counts are read back from storage, so they always equal what map data returns.
         counts = self._counts_for_area(area_id)
         completed = ImportAreaRepository(self.session).mark_completed(area_id, **counts)
+
+        # 8. Created/updated/removed, aggregated across every reconciled table,
+        #    diffed against the pre-upsert snapshot taken in step 0.
+        reconciled = (
+            (existing_node_ids_before, touched_node_ids),
+            (existing_street_ids_before, touched_street_ids),
+            (existing_road_ids_before, touched_road_ids),
+            (existing_segment_ids_before, touched_segment_ids),
+            (existing_building_ids_before, touched_building_ids),
+            (existing_poi_ids_before, touched_poi_ids),
+            (existing_area_feature_ids_before, touched_area_feature_ids),
+        )
+        created_count = sum(len(touched - existing) for existing, touched in reconciled)
+        updated_count = sum(len(touched & existing) for existing, touched in reconciled)
+        removed_count = sum(len(existing - touched) for existing, touched in reconciled)
+
         return ImportResult(
             import_area=completed,
             block_count=len(blocks),
             linked_building_count=linked_building_count,
+            created_count=created_count,
+            updated_count=updated_count,
+            removed_count=removed_count,
             **counts,
         )
 
