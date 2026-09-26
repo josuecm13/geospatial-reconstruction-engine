@@ -1,0 +1,17 @@
+{
+  "elements": [
+    {"type": "node", "id": 1, "lat": 9.9400, "lon": -84.0900},
+    {"type": "node", "id": 2, "lat": 9.9400, "lon": -84.0895},
+    {"type": "node", "id": 3, "lat": 9.9405, "lon": -84.0895},
+    {"type": "node", "id": 4, "lat": 9.9405, "lon": -84.0900},
+    {"type": "node", "id": 21, "lat": 9.9401, "lon": -84.0899},
+    {"type": "node", "id": 22, "lat": 9.9401, "lon": -84.0896},
+    {"type": "node", "id": 23, "lat": 9.9404, "lon": -84.0896},
+    {"type": "node", "id": 24, "lat": 9.9404, "lon": -84.0899},
+    {"type": "way", "id": 10, "nodes": [1, 2], "tags": {"highway": "residential", "name": "South Street"}},
+    {"type": "way", "id": 11, "nodes": [2, 3], "tags": {"highway": "residential", "name": "East Street"}},
+    {"type": "way", "id": 12, "nodes": [3, 4], "tags": {"highway": "residential", "name": "North Street"}},
+    {"type": "way", "id": 13, "nodes": [4, 1], "tags": {"highway": "residential", "name": "West Street"}},
+    {"type": "way", "id": 200, "nodes": [21, 22, 23, 24, 21], "tags": {"building": "house"}}
+  ]
+}

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.domain.area_feature import AreaFeature
@@ -12,7 +13,18 @@ from app.domain.import_area import ImportArea
 from app.domain.poi import PointOfInterest
 from app.domain.road_graph import NavigableNode, Road, RoadSegment, Street
 from app.domain.turn_movement import TurnMovement
-from app.ingestion.osm_adapter import ImportRecords, OSMFixtureAdapter, OSMIngestionError
+from app.ingestion.osm_adapter import ImportRecords, OSMFixtureAdapter, OSMIngestionError, PayloadOutsideBoundingBox
+from app.persistence.block_derivation import BlockDerivationService
+from app.persistence.models import (
+    AreaFeatureModel,
+    BuildingModel,
+    NavigableNodeModel,
+    PointOfInterestModel,
+    RoadModel,
+    RoadSegmentModel,
+    StreetModel,
+    TurnMovementModel,
+)
 from app.persistence.repositories.area_feature import AreaFeatureRepository
 from app.persistence.repositories.building import BuildingRepository
 from app.persistence.repositories.import_area import ImportAreaRepository
@@ -29,6 +41,8 @@ class ImportResult:
     building_count: int
     poi_count: int
     area_feature_count: int
+    block_count: int = 0
+    linked_building_count: int = 0
 
 
 class OSMIngestionService:
@@ -45,6 +59,7 @@ class OSMIngestionService:
         try:
             area_repo.mark_importing(import_area.id)
             records = self.adapter.parse(payload)
+            self._validate_within_bounding_box(bbox, records)
             result = self._persist(import_area, records)
             self.session.commit()
             return result
@@ -67,34 +82,188 @@ class OSMIngestionService:
         nodes = NavigableNodeRepository(self.session)
         segments = RoadSegmentRepository(self.session)
 
+        # 1. Upsert every source entity, tracking which rows this payload
+        #    touched — anything for this area *not* in these sets is stale
+        #    from a previous import and gets swept below.
         node_ids = self._navigable_node_ids(records)
         persisted_nodes = {
             source_id: nodes.upsert(NavigableNode(None, area_id, source_id, records.nodes[source_id]))
             for source_id in node_ids
         }
-        road_by_source: dict[str, Road] = {}
+        touched_node_ids = {node.id for node in persisted_nodes.values()}
+
+        touched_street_ids: set = set()
+        touched_road_ids: set = set()
+        touched_segment_ids: set = set()
         segments_by_way: dict[str, list[RoadSegment]] = {}
         for source_road in records.roads:
             street = streets.upsert(Street(None, area_id, source_road.source_id, source_road.name, source_road.classification))
+            touched_street_ids.add(street.id)
             road = roads.upsert(
                 Road(None, area_id, source_road.source_id, source_road.classification,
                      tuple(records.nodes[node_id] for node_id in source_road.node_ids), street.id)
             )
-            road_by_source[source_road.source_id] = road
+            touched_road_ids.add(road.id)
             produced = self._segments_for_road(source_road, road, persisted_nodes, records.nodes, node_ids)
-            segments_by_way[source_road.source_id] = [segments.upsert(segment) for segment in produced]
+            persisted_segments = [segments.upsert(segment) for segment in produced]
+            segments_by_way[source_road.source_id] = persisted_segments
+            touched_segment_ids.update(segment.id for segment in persisted_segments)
 
-        self._persist_features(area_id, records)
-        self._persist_turns(records, segments_by_way, persisted_nodes)
-        completed = ImportAreaRepository(self.session).mark_completed(
+        touched_building_ids, touched_poi_ids, touched_area_feature_ids = self._persist_features(area_id, records)
+
+        # 2. Reset derived block data *before* sweeping stale segments: blocks
+        #    and block_boundary_segments reference segments, and no foreign
+        #    key here cascades, so a stale segment can't be deleted while a
+        #    block still points at it.
+        block_service = BlockDerivationService(self.session)
+        block_service.clear_for_import_area(area_id)
+
+        # 3-4. Sweep every row this payload no longer produces, children first.
+        self._sweep(
             area_id,
-            road_count=len(records.roads), node_count=len(persisted_nodes), building_count=len(records.buildings),
-            poi_count=len(records.pois), area_feature_count=len(records.areas),
+            touched_segment_ids=touched_segment_ids,
+            touched_road_ids=touched_road_ids,
+            touched_street_ids=touched_street_ids,
+            touched_node_ids=touched_node_ids,
+            touched_building_ids=touched_building_ids,
+            touched_poi_ids=touched_poi_ids,
+            touched_area_feature_ids=touched_area_feature_ids,
         )
-        return ImportResult(completed, len(records.roads), len(persisted_nodes), len(records.buildings), len(records.pois), len(records.areas))
+
+        # 5. Turn candidates/restrictions, generated only over the now-reconciled segments.
+        self._persist_turns(records, segments_by_way, persisted_nodes)
+
+        # 6. Derive fresh blocks and link buildings over the reconciled network.
+        blocks = block_service.derive_for_import_area(area_id)
+        linked_building_count = BuildingRepository(self.session).link_to_containing_block(area_id)
+
+        # 7. Counts are read back from storage, so they always equal what map data returns.
+        counts = self._counts_for_area(area_id)
+        completed = ImportAreaRepository(self.session).mark_completed(area_id, **counts)
+        return ImportResult(
+            import_area=completed,
+            block_count=len(blocks),
+            linked_building_count=linked_building_count,
+            **counts,
+        )
+
+    def _sweep(
+        self,
+        area_id,
+        *,
+        touched_segment_ids: set,
+        touched_road_ids: set,
+        touched_street_ids: set,
+        touched_node_ids: set,
+        touched_building_ids: set,
+        touched_poi_ids: set,
+        touched_area_feature_ids: set,
+    ) -> None:
+        session = self.session
+
+        stale_segment_ids = session.execute(
+            select(RoadSegmentModel.id)
+            .join(RoadModel, RoadSegmentModel.road_id == RoadModel.id)
+            .where(RoadModel.import_area_id == area_id, RoadSegmentModel.id.notin_(touched_segment_ids))
+        ).scalars().all()
+
+        if stale_segment_ids:
+            session.execute(
+                delete(TurnMovementModel).where(
+                    or_(
+                        TurnMovementModel.incoming_segment_id.in_(stale_segment_ids),
+                        TurnMovementModel.outgoing_segment_id.in_(stale_segment_ids),
+                    )
+                )
+            )
+            session.execute(delete(RoadSegmentModel).where(RoadSegmentModel.id.in_(stale_segment_ids)))
+
+        session.execute(
+            delete(RoadModel).where(RoadModel.import_area_id == area_id, RoadModel.id.notin_(touched_road_ids))
+        )
+        session.execute(
+            delete(StreetModel).where(StreetModel.import_area_id == area_id, StreetModel.id.notin_(touched_street_ids))
+        )
+        session.execute(
+            delete(NavigableNodeModel).where(
+                NavigableNodeModel.import_area_id == area_id, NavigableNodeModel.id.notin_(touched_node_ids)
+            )
+        )
+        session.execute(
+            delete(BuildingModel).where(
+                BuildingModel.import_area_id == area_id, BuildingModel.id.notin_(touched_building_ids)
+            )
+        )
+        session.execute(
+            delete(PointOfInterestModel).where(
+                PointOfInterestModel.import_area_id == area_id, PointOfInterestModel.id.notin_(touched_poi_ids)
+            )
+        )
+        session.execute(
+            delete(AreaFeatureModel).where(
+                AreaFeatureModel.import_area_id == area_id,
+                AreaFeatureModel.id.notin_(touched_area_feature_ids),
+            )
+        )
+        session.flush()
+
+    def _counts_for_area(self, area_id) -> dict[str, int]:
+        session = self.session
+
+        def count(model) -> int:
+            return session.scalar(select(func.count()).select_from(model).where(model.import_area_id == area_id))
+
+        return {
+            "road_count": count(RoadModel),
+            "node_count": count(NavigableNodeModel),
+            "building_count": count(BuildingModel),
+            "poi_count": count(PointOfInterestModel),
+            "area_feature_count": count(AreaFeatureModel),
+        }
 
     @staticmethod
-    def _navigable_node_ids(records: OSMImportRecords) -> set[str]:
+    def _validate_within_bounding_box(bbox: BoundingBox, records: ImportRecords) -> None:
+        """Reject a payload with features outside the declared bounding box.
+
+        A road, building, or area feature is accepted if its coordinate envelope
+        *intersects* the box (real ways legitimately cross the edge); a POI must
+        lie inside it, since a point has no edge to cross.
+        """
+        offending: list[str] = []
+
+        def envelope_intersects(node_ids: tuple[str, ...]) -> bool:
+            lats = [records.nodes[node_id].latitude for node_id in node_ids]
+            lons = [records.nodes[node_id].longitude for node_id in node_ids]
+            return not (
+                max(lats) < bbox.min_corner.latitude
+                or min(lats) > bbox.max_corner.latitude
+                or max(lons) < bbox.min_corner.longitude
+                or min(lons) > bbox.max_corner.longitude
+            )
+
+        for road in records.roads:
+            if not envelope_intersects(road.node_ids):
+                offending.append(road.source_id)
+        for feature in (*records.buildings, *records.areas):
+            if not envelope_intersects(feature.node_ids):
+                offending.append(feature.source_id)
+        for poi in records.pois:
+            point = poi.point
+            inside = (
+                bbox.min_corner.latitude <= point.latitude <= bbox.max_corner.latitude
+                and bbox.min_corner.longitude <= point.longitude <= bbox.max_corner.longitude
+            )
+            if not inside:
+                offending.append(poi.source_id)
+
+        if offending:
+            raise PayloadOutsideBoundingBox(
+                "payload contains features outside the import bounding box: "
+                + ", ".join(offending[:10])
+            )
+
+    @staticmethod
+    def _navigable_node_ids(records: ImportRecords) -> set[str]:
         usage: dict[str, int] = {}
         for road in records.roads:
             for node_id in road.node_ids:
@@ -125,16 +294,27 @@ class OSMIngestionService:
                 produced.pop(0)
         return produced
 
-    def _persist_features(self, area_id, records: OSMImportRecords) -> None:
+    def _persist_features(self, area_id, records: ImportRecords) -> tuple[set, set, set]:
         buildings = BuildingRepository(self.session)
         pois = PointOfInterestRepository(self.session)
         areas = AreaFeatureRepository(self.session)
+        touched_building_ids: set = set()
+        touched_poi_ids: set = set()
+        touched_area_feature_ids: set = set()
         for feature in records.buildings:
-            buildings.upsert(Building(None, area_id, feature.source_id, feature.category, tuple(records.nodes[node_id] for node_id in feature.node_ids)))
+            persisted = buildings.upsert(
+                Building(None, area_id, feature.source_id, feature.category, tuple(records.nodes[node_id] for node_id in feature.node_ids))
+            )
+            touched_building_ids.add(persisted.id)
         for poi in records.pois:
-            pois.upsert(PointOfInterest(None, area_id, poi.source_id, poi.category, poi.point, poi.name))
+            persisted = pois.upsert(PointOfInterest(None, area_id, poi.source_id, poi.category, poi.point, poi.name))
+            touched_poi_ids.add(persisted.id)
         for feature in records.areas:
-            areas.upsert(AreaFeature(None, area_id, feature.source_id, feature.category, tuple(records.nodes[node_id] for node_id in feature.node_ids)))
+            persisted = areas.upsert(
+                AreaFeature(None, area_id, feature.source_id, feature.category, tuple(records.nodes[node_id] for node_id in feature.node_ids))
+            )
+            touched_area_feature_ids.add(persisted.id)
+        return touched_building_ids, touched_poi_ids, touched_area_feature_ids
 
     def _persist_turns(self, records, segments_by_way, persisted_nodes) -> None:
         repository = TurnMovementRepository(self.session)

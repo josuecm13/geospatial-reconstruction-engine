@@ -2,12 +2,13 @@ import uuid
 
 from geoalchemy2.shape import from_shape
 from shapely import wkt as shapely_wkt
-from sqlalchemy import func, select, text
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.orm import Session
 
 from app.domain.block import Block
 from app.domain.bounding_box import Coordinate
-from app.persistence.models import BlockBoundarySegmentModel, BlockModel, RoadModel, RoadSegmentModel
+from app.persistence.models import BlockBoundarySegmentModel, BlockModel, BuildingModel, RoadModel, RoadSegmentModel
+from app.persistence.repositories.building import BuildingRepository
 
 SRID = 4326
 
@@ -20,6 +21,37 @@ class BlockDerivationService:
 
     def __init__(self, session: Session):
         self.session = session
+
+    def clear_for_import_area(self, import_area_id: uuid.UUID) -> None:
+        """Remove an area's derived blocks so its road segments can be swept and re-derived.
+
+        Clears buildings.block_id first (nothing references a block except
+        buildings), then block_boundary_segments, then the blocks themselves —
+        no foreign key here cascades. Safe to call on an area with no blocks yet.
+        """
+        self.session.execute(
+            update(BuildingModel)
+            .where(BuildingModel.import_area_id == import_area_id)
+            .values(block_id=None)
+        )
+        block_ids = select(BlockModel.id).where(BlockModel.import_area_id == import_area_id)
+        self.session.execute(
+            delete(BlockBoundarySegmentModel).where(BlockBoundarySegmentModel.block_id.in_(block_ids))
+        )
+        self.session.execute(delete(BlockModel).where(BlockModel.import_area_id == import_area_id))
+        self.session.flush()
+
+    def rederive_for_import_area(self, import_area_id: uuid.UUID) -> tuple[list[Block], int]:
+        """Replace an area's blocks and building links, standalone (outside an import).
+
+        Equivalent to what `OSMIngestionService._persist` does across the sweep,
+        but with no segment reconciliation in between — for direct re-derivation
+        of an area whose road graph did not change.
+        """
+        self.clear_for_import_area(import_area_id)
+        blocks = self.derive_for_import_area(import_area_id)
+        linked_building_count = BuildingRepository(self.session).link_to_containing_block(import_area_id)
+        return blocks, linked_building_count
 
     def derive_for_import_area(self, import_area_id: uuid.UUID) -> list[Block]:
         candidate_rows = self.session.execute(

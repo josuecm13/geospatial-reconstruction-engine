@@ -1,31 +1,31 @@
 ## 1. Setup
 
-- [ ] 1.1 Add pinned `httpx` and `pydantic` to `server/requirements.txt` and confirm `from fastapi.testclient import TestClient` imports in the venv
-- [ ] 1.2 Create `server/tests/api/` with a `client` fixture that overrides `get_session` with the existing `db_session` fixture
+- [x] 1.1 Add pinned `httpx` and `pydantic` to `server/requirements.txt` and confirm `from fastapi.testclient import TestClient` imports in the venv
+- [x] 1.2 Create `server/tests/api/` with a `client` fixture that overrides `get_session` with the existing `db_session` fixture
 
 ## 2. Reconciling import
 
-- [ ] 2.1 Collect the ids returned by every upsert in `OSMIngestionService._persist` into a per-table "touched" set
-- [ ] 2.2 Add the sweep, children first: turn movements referencing untouched segments, then untouched road segments → roads → streets → navigable nodes, and untouched buildings, POIs, area features (all scoped to the area)
-- [ ] 2.3 Reorder `_persist`: upserts → block reset (3.1) → sweep → turn generation and restrictions → block derivation → `mark_completed`
-- [ ] 2.4 Make `mark_completed` record `COUNT(*)` per table for the area instead of `len(records.*)`
-- [ ] 2.5 Tests: identical re-import keeps every entity id; a re-import that drops building 200 and way 101 removes both plus 101's segments and turn movements, lowers the recorded counts to match the stored rows, and makes a route over 101 fail; a re-import that drops a restriction relation leaves that movement allowed; a failed re-import leaves the previous rows intact and the area `failed`
-- [ ] 2.6 Mutation-check the sweep: skip it, confirm the dropped-entities test goes red, then restore it and confirm green
+- [x] 2.1 Collect the ids returned by every upsert in `OSMIngestionService._persist` into a per-table "touched" set
+- [x] 2.2 Add the sweep, children first: turn movements referencing untouched segments, then untouched road segments → roads → streets → navigable nodes, and untouched buildings, POIs, area features (all scoped to the area)
+- [x] 2.3 Reorder `_persist`: upserts → block reset (3.1) → sweep → turn generation and restrictions → block derivation → `mark_completed`
+- [x] 2.4 Make `mark_completed` record `COUNT(*)` per table for the area instead of `len(records.*)`
+- [x] 2.5 Tests: identical re-import keeps every entity id; a re-import that drops building 200 and way 101 removes both plus 101's segments and turn movements, lowers the recorded counts to match the stored rows, and makes a route over 101 fail; a re-import that drops a restriction relation leaves that movement allowed; a failed re-import leaves the previous rows intact and the area `failed`
+- [x] 2.6 Mutation-check the sweep: skip it, confirm the dropped-entities test goes red, then restore it and confirm green
 
 ## 3. Block derivation inside import
 
-- [ ] 3.1 Add `BlockDerivationService.rederive_for_import_area(id)`: clear the area's `buildings.block_id`, delete its `block_boundary_segments` and `blocks` (the reset step, run before the sweep), then after the sweep and turns derive and link; return blocks and linked-building count
-- [ ] 3.2 Add `block_count` and `linked_building_count` to `ImportResult`
-- [ ] 3.3 Add a small closed-loop fixture with a building inside the loop (neither existing fixture has one: `osm_neighborhood.json` has no loop, `osm_routing.json`'s loop 2-4-5-3 contains no building)
-- [ ] 3.4 Tests: import derives blocks and links buildings with no separate call; a no-loop import yields zero blocks and unset links; importing twice leaves the block count unchanged and no stale links; a re-import missing one loop road removes that block and unsets the building's link; re-deriving one area leaves another area's blocks and links untouched
-- [ ] 3.5 Tests: a derivation failure during import marks the area `failed` and leaves no partial blocks
-- [ ] 3.6 Mutation-check the duplicate guard: skip the block delete, confirm the re-import test goes red, then restore it and confirm green
+- [x] 3.1 Add `BlockDerivationService.rederive_for_import_area(id)`: clear the area's `buildings.block_id`, delete its `block_boundary_segments` and `blocks` (the reset step, run before the sweep), then after the sweep and turns derive and link; return blocks and linked-building count
+- [x] 3.2 Add `block_count` and `linked_building_count` to `ImportResult`
+- [x] 3.3 Add a small closed-loop fixture with a building inside the loop (neither existing fixture has one: `osm_neighborhood.json` has no loop, `osm_routing.json`'s loop 2-4-5-3 contains no building)
+- [x] 3.4 Tests: import derives blocks and links buildings with no separate call; a no-loop import yields zero blocks and unset links; importing twice leaves the block count unchanged and no stale links; a re-import missing one loop road removes that block and unsets the building's link; re-deriving one area leaves another area's blocks and links untouched
+- [x] 3.5 Tests: a derivation failure during import marks the area `failed` and leaves no partial blocks
+- [x] 3.6 Mutation-check the duplicate guard: skip the block delete, confirm the re-import test goes red, then restore it and confirm green
 
 ## 4. Payload guard
 
-- [ ] 4.1 Add `PayloadOutsideBoundingBox(IngestionError)` and an envelope check in the ingestion service after parsing: roads, buildings, and area features must intersect the import bbox, POIs must lie inside it; the error lists up to ten offending source ids
-- [ ] 4.2 Tests: a road crossing the bbox edge is accepted; a building entirely outside fails the import, names its source id, and marks the area `failed`
-- [ ] 4.3 Mutation-check the guard: disable the check, confirm the outside-building test goes red, then restore it and confirm green
+- [x] 4.1 Add `PayloadOutsideBoundingBox(IngestionError)` and an envelope check in the ingestion service after parsing: roads, buildings, and area features must intersect the import bbox, POIs must lie inside it; the error lists up to ten offending source ids
+- [x] 4.2 Tests: a road crossing the bbox edge is accepted; a building entirely outside fails the import, names its source id, and marks the area `failed`
+- [x] 4.3 Mutation-check the guard: disable the check, confirm the outside-building test goes red, then restore it and confirm green
 
 ## 5. Read paths for map data
 

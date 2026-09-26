@@ -13,6 +13,10 @@ class IngestionError(ValueError):
     """A supported OSM feature cannot safely be translated."""
 
 
+class PayloadOutsideBoundingBox(IngestionError):
+    """A supported feature in the payload does not belong to the declared bounding box."""
+
+
 @dataclass(frozen=True)
 class ImportRoad:
     source_id: str
