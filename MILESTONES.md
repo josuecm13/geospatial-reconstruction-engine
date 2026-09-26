@@ -646,16 +646,15 @@ deciding before anything is built on it.
 Defects found while planning Milestone 7. Each is its own small change, not part of the milestone
 in flight.
 
-- **Lane-count split (`osm-fixture-ingestion`).** OSM's `lanes` is the total for the whole road,
-  but `app/ingestion/osm_adapter.py` gives that total to *each* direction of a two-way road:
-  `lanes=2` becomes 2 + 2, and `lanes=3` with `lanes:forward=2` becomes 2 + 3. Correct is: the
-  total minus the tagged direction, and an even split (marked inferred) when only the total is
-  given. The spec's "forward and backward lane counts" scenario only covers ways tagged with both.
-  Needed before Milestone 7.1.
-- **Missing-node error path (`osm-fixture-ingestion`).** In `_polygon_center`, the node lookup
-  sits outside the `try` that turns `KeyError` into `IngestionError`, so a POI mapped as a way
-  with a missing node raises a bare `KeyError` (reproduced with a live Overpass payload).
-  Ingestion still wraps it as `OSMIngestionError`, but with the bare node id as the message.
+- **Lane-count split (`osm-fixture-ingestion`).** Resolved. `app/ingestion/osm_adapter.py` now
+  splits the total `lanes` tag across directions (total minus the tagged direction when only one
+  direction is tagged, an even split with the remainder to forward when only the total is given)
+  instead of giving the total to both directions. One-way ways are unaffected. Covered by
+  `server/tests/ingestion/test_osm_adapter.py`.
+- **Missing-node error path (`osm-fixture-ingestion`).** Resolved. `_polygon_center`'s node lookup
+  now runs inside the `try` that turns `KeyError` into `IngestionError`, so a POI mapped as a way
+  with a missing node raises `IngestionError` naming the missing node id, not a bare `KeyError`.
+  Covered by `server/tests/ingestion/test_osm_adapter.py`.
 - **Milestone 3 import report.** Milestone 3's acceptance check says a repeated import "reports
   created/updated/skipped counts"; `ImportResult` reports totals only. Either add the breakdown
   (mark-and-sweep makes "removed" and "created vs. updated" cheap) or correct the acceptance
