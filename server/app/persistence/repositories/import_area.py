@@ -1,19 +1,28 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.domain.bounding_box import BoundingBox, Coordinate
 from app.domain.enums import ImportStatus
 from app.domain.import_area import ImportArea
 from app.persistence.geometry import bbox_to_geom
-from app.persistence.models import ImportAreaModel
+from app.persistence.models import BlockModel, ImportAreaModel
 
 
 class ImportAreaRepository:
     def __init__(self, session: Session):
         self.session = session
+
+    def get(self, import_area_id: uuid.UUID) -> ImportArea | None:
+        model = self.session.get(ImportAreaModel, import_area_id)
+        return self._to_domain(model) if model is not None else None
+
+    def block_count(self, import_area_id: uuid.UUID) -> int:
+        return self.session.scalar(
+            select(func.count()).select_from(BlockModel).where(BlockModel.import_area_id == import_area_id)
+        )
 
     def get_or_create(self, provider: str, bbox: BoundingBox) -> ImportArea:
         existing = self.session.execute(

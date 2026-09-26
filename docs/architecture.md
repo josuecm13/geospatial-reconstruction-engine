@@ -67,12 +67,23 @@ The graph exposes both directed segments and legal transitions between an incomi
 
 ## API and visualization
 
-Initial HTTP endpoints:
+Implemented HTTP endpoints (Milestone 7):
 
-- `POST /imports` — validate a bounding box and begin/import OSM data.
-- `GET /map` — normalized roads, buildings, POIs, and areas for a bounding box/import.
-- `GET /nearby` — spatially query supported object types by coordinate and radius.
-- `POST /routes` — origin, destination, strategy; return a `Route` or a meaningful no-route response.
+- `POST /import-areas` — validate a bounding box and import an OSM fixture payload; re-importing
+  the same bounding box reconciles the area with the new payload rather than only upserting.
+- `GET /import-areas/{id}` — status and entity counts, including the derived block count.
+- `GET /import-areas/{id}/map-data` — every persisted entity for a completed area, as one GeoJSON
+  `FeatureCollection` per layer (road segments, navigable nodes, blocks, buildings, POIs, area
+  features).
+- `GET /import-areas/{id}/nearby`, `/within-bbox`, `/nearest` — spatially query supported object
+  types by coordinate/radius, bounding-box intersection/containment, or nearest node/segment.
+- `GET /import-areas/{id}/buildings/{building_id}/footprint-area` — a building's footprint area in
+  square meters.
+- `POST /import-areas/{id}/routes` — origin, destination, an optional named strategy; returns a
+  `Route` or a meaningful no-route/no-navigable-node response.
+
+Every error response uses one JSON shape with a machine-readable `code` (`app/api/errors.py`).
+`../HOW_TO_RUN.md` has worked curl examples.
 
 A thin Leaflet/OpenLayers client can render GeoJSON emitted by the API. It remains a verification surface, not a second map-domain implementation.
 

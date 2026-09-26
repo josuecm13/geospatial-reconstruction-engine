@@ -37,6 +37,12 @@ class PointOfInterestRepository:
         self.session.flush()
         return self._to_domain(model)
 
+    def list_for_import_area(self, import_area_id) -> list[PointOfInterest]:
+        models = self.session.execute(
+            select(PointOfInterestModel).where(PointOfInterestModel.import_area_id == import_area_id)
+        ).scalars().all()
+        return [self._to_domain(model) for model in models]
+
     @staticmethod
     def _to_domain(model: PointOfInterestModel) -> PointOfInterest:
         return PointOfInterest(

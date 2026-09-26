@@ -73,3 +73,53 @@ def test_adapter_translates_supported_poi_area_to_representative_point():
     assert poi.category is PoiCategory.FOOD_AND_DRINK
     assert poi.name == "Corner Cafe"
     assert poi.point.latitude == pytest.approx(9.934333333333333)
+
+
+def _road_way(tags: dict) -> dict:
+    return {
+        "elements": [
+            {"type": "node", "id": 1, "lat": 9.934, "lon": -84.080},
+            {"type": "node", "id": 2, "lat": 9.934, "lon": -84.079},
+            {"type": "way", "id": 10, "nodes": [1, 2], "tags": tags},
+        ]
+    }
+
+
+@pytest.mark.parametrize(
+    ("tags", "expected_forward", "expected_backward"),
+    [
+        ({"highway": "residential", "lanes": "2"}, 1, 1),
+        ({"highway": "primary", "lanes": "4"}, 2, 2),
+        ({"highway": "primary", "lanes": "3"}, 2, 1),
+        ({"highway": "residential", "lanes": "1"}, 1, None),
+        ({"highway": "primary", "lanes": "3", "lanes:forward": "2"}, 2, 1),
+        ({"highway": "primary", "lanes:forward": "2", "lanes:backward": "1"}, 2, 1),
+        ({"highway": "residential"}, None, None),
+    ],
+)
+def test_adapter_splits_bidirectional_lane_totals(tags, expected_forward, expected_backward):
+    road = OSMFixtureAdapter().parse(_road_way(tags)).roads[0]
+
+    assert road.forward_lanes == expected_forward
+    assert road.backward_lanes == expected_backward
+
+
+def test_adapter_keeps_one_way_lanes_unsplit():
+    payload = _road_way({"highway": "residential", "oneway": "yes", "lanes": "2"})
+
+    road = OSMFixtureAdapter().parse(payload).roads[0]
+
+    assert road.forward_lanes == 2
+
+
+def test_adapter_raises_ingestion_error_for_poi_way_with_missing_node():
+    payload = {
+        "elements": [
+            {"type": "node", "id": 1, "lat": 9.934, "lon": -84.080},
+            {"type": "node", "id": 2, "lat": 9.934, "lon": -84.079},
+            {"type": "way", "id": 10, "nodes": [1, 2, 99, 1], "tags": {"amenity": "restaurant"}},
+        ]
+    }
+
+    with pytest.raises(OSMIngestionError, match="missing node 99"):
+        OSMFixtureAdapter().parse(payload)

@@ -215,7 +215,12 @@ Key decisions:
   turn movements to enforce valid segment-to-intersection relationships at the schema level.
 - Standard `created_at`/`updated_at` on every table.
 
-## Open question
+## Derivation timing (resolved, Milestone 7)
 
-Whether block derivation runs as its own explicit step (e.g. a `POST /blocks/derive` action or CLI
-command against a completed import) or automatically at the end of every import — not yet decided.
+Block derivation and building-to-block linking run automatically, inside every import's own
+transaction, after the import reconciles its road segments and before the area is marked
+`completed` — not as a separate explicit step. `completed` therefore always implies "blocks are
+current". Re-deriving replaces an area's blocks rather than appending to them: an import clears the
+area's existing blocks and building links (`BlockDerivationService.clear_for_import_area`) before
+deriving afresh. See `openspec/changes/add-application-api/design.md` Decision 1 for the full
+ordering and rationale.

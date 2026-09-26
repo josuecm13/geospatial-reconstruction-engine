@@ -26,6 +26,11 @@ def linestring_length_meters(points: LineString) -> float:
     return sum(_haversine_meters(points[i], points[i + 1]) for i in range(len(points) - 1))
 
 
+def point_distance_meters(a: Coordinate, b: Coordinate) -> float:
+    """Public entry point for a single two-point distance (e.g. a route's snap distance)."""
+    return _haversine_meters(a, b)
+
+
 def bearing_degrees(a: Coordinate, b: Coordinate) -> float:
     lat1, lon1, lat2, lon2 = map(
         math.radians, (a.latitude, a.longitude, b.latitude, b.longitude)

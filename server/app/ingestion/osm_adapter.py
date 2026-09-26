@@ -13,6 +13,14 @@ class IngestionError(ValueError):
     """A supported OSM feature cannot safely be translated."""
 
 
+class PayloadOutsideBoundingBox(IngestionError):
+    """A supported feature in the payload does not belong to the declared bounding box."""
+
+    def __init__(self, message: str, source_ids: list[str]):
+        super().__init__(message)
+        self.source_ids = source_ids
+
+
 @dataclass(frozen=True)
 class ImportRoad:
     source_id: str
@@ -113,14 +121,53 @@ def _one_way_direction(value: Any, element_id: str) -> int:
 
 def _polygon_center(node_ids: tuple[str, ...], nodes: dict[str, Coordinate]) -> Coordinate:
     """Return a stable representative point for a supported POI-area way."""
-    vertices = [nodes[node_id] for node_id in node_ids[:-1]]
     try:
+        vertices = [nodes[node_id] for node_id in node_ids[:-1]]
         return Coordinate(
             sum(vertex.latitude for vertex in vertices) / len(vertices),
             sum(vertex.longitude for vertex in vertices) / len(vertices),
         )
     except KeyError as error:
         raise IngestionError(f"feature references missing node {error.args[0]}") from error
+
+
+def _split_lanes(tags: dict[str, Any], source_id: str, is_one_way: bool) -> tuple[int | None, int | None]:
+    forward_raw = tags.get("lanes:forward")
+    backward_raw = tags.get("lanes:backward")
+    total_raw = tags.get("lanes")
+
+    if is_one_way:
+        forward_lanes = _lane_count(forward_raw or total_raw, source_id, "lanes")
+        backward_lanes = _lane_count(backward_raw or total_raw, source_id, "lanes")
+        return forward_lanes, backward_lanes
+
+    forward_tagged = _lane_count(forward_raw, source_id, "lanes:forward")
+    backward_tagged = _lane_count(backward_raw, source_id, "lanes:backward")
+    total = _lane_count(total_raw, source_id, "lanes")
+
+    if forward_tagged is not None and backward_tagged is not None:
+        return forward_tagged, backward_tagged
+
+    if forward_tagged is not None:
+        if total is not None:
+            remainder = total - forward_tagged
+            backward_lanes = remainder if remainder >= 1 else None
+            return forward_tagged, backward_lanes
+        return forward_tagged, None
+
+    if backward_tagged is not None:
+        if total is not None:
+            remainder = total - backward_tagged
+            forward_lanes = remainder if remainder >= 1 else None
+            return forward_lanes, backward_tagged
+        return None, backward_tagged
+
+    if total is not None:
+        backward_lanes = total // 2
+        forward_lanes = total - backward_lanes
+        return forward_lanes, backward_lanes if backward_lanes >= 1 else None
+
+    return None, None
 
 
 class OSMFixtureAdapter:
@@ -167,15 +214,17 @@ class OSMFixtureAdapter:
                 node_ids = tuple(str(node_id) for node_id in element.get("nodes", []))
                 if len(node_ids) < 2:
                     raise IngestionError(f"road way {source_id} needs at least two nodes")
+                one_way_direction = _one_way_direction(tags.get("oneway"), source_id)
+                forward_lanes, backward_lanes = _split_lanes(tags, source_id, one_way_direction != 0)
                 roads.append(
                     ImportRoad(
                         source_id=source_id,
                         node_ids=node_ids,
                         classification=_ROAD_CLASSES[highway],
                         name=tags.get("name"),
-                        one_way_direction=_one_way_direction(tags.get("oneway"), source_id),
-                        forward_lanes=_lane_count(tags.get("lanes:forward") or tags.get("lanes"), source_id, "lanes"),
-                        backward_lanes=_lane_count(tags.get("lanes:backward") or tags.get("lanes"), source_id, "lanes"),
+                        one_way_direction=one_way_direction,
+                        forward_lanes=forward_lanes,
+                        backward_lanes=backward_lanes,
                     )
                 )
                 continue

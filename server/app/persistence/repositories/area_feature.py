@@ -35,6 +35,12 @@ class AreaFeatureRepository:
         self.session.flush()
         return self._to_domain(model)
 
+    def list_for_import_area(self, import_area_id) -> list[AreaFeature]:
+        models = self.session.execute(
+            select(AreaFeatureModel).where(AreaFeatureModel.import_area_id == import_area_id)
+        ).scalars().all()
+        return [self._to_domain(model) for model in models]
+
     @staticmethod
     def _to_domain(model: AreaFeatureModel) -> AreaFeature:
         return AreaFeature(

@@ -252,25 +252,120 @@ Notes:
 
 ## Milestone 7 — Application API
 
-Status: **planned**
+Status: **complete**
 
 Deliverables:
 
-- Import-area endpoint, wrapping the existing `OSMIngestionService`. This is also where the open
-  question from Milestones 2–3 finally gets decided: nothing currently invokes
-  `BlockDerivationService` or `BuildingRepository.link_to_containing_block` after an import
-  completes (both exist and are tested but unwired) — decide here whether the import endpoint
-  triggers them automatically or a separate explicit step does.
-- Map-data and spatial-query endpoints, wrapping Milestone 4's queries.
-- Route endpoint with selectable strategy, wrapping Milestone 6's `RoutingEngine`.
+- Import-area endpoint, wrapping the existing `OSMIngestionService`. This closes the open question
+  from Milestones 2–3: block derivation and building linking run **automatically inside every
+  import**, after reconciliation and before the area is marked `completed`.
+- Re-import **reconciles**: entities the new payload no longer produces are deleted
+  (mark-and-sweep over the ids each upsert returns, children first because no foreign key
+  cascades), unchanged entities keep their ids, and recorded counts are read from the database.
+  Until now re-import only upserted, so a payload that dropped a road left it stored and routable.
+- Payload guards at the new trust boundary: a request body size limit, and every imported feature
+  must intersect the declared bounding box.
+- Map-data and spatial-query endpoints, wrapping Milestone 4's queries. Map data is one GeoJSON
+  `FeatureCollection` per layer, carries OSM attribution, and exposes each segment's street name
+  and classification as values (not a street id — see Milestone 7.1).
+- Route endpoint with selectable strategy, wrapping Milestone 6's `RoutingEngine`, reporting snap
+  distances and a defined result when origin and destination snap to the same node.
 - Application-level request/response models and error handling.
 - API integration tests.
 
 Acceptance checks:
 
 - The API can import fixture data, query it, and return a route end to end.
+- Re-importing with a changed payload leaves exactly what the new payload produces.
 - Responses contain normalized application models and stable error shapes.
 - Database failures and disconnected routes are reported clearly.
+
+Notes:
+
+1. Change: `openspec/changes/add-application-api/`.
+2. Verification: `docker compose up -d`, `alembic upgrade head` against the existing volume,
+   `pytest -q` from `server/` against live PostGIS (131 passed, up from 79), `openspec validate
+   add-application-api --strict` (valid), a manual `uvicorn` smoke test importing
+   `osm_routing.json` and requesting a route by curl (documented in `HOW_TO_RUN.md`).
+3. Decisions: recorded in the change's `design.md` — re-import **reconciles** rather than only
+   upserting (mark every upsert's id, reset derived blocks, sweep everything the payload no longer
+   produces children-first since no foreign key here cascades, then regenerate turns and
+   re-derive blocks over the reconciled network); blocks are derived and buildings linked
+   automatically inside every import's own transaction, replacing rather than duplicating on
+   re-derivation; a payload's features must intersect the declared bounding box; map data is one
+   GeoJSON `FeatureCollection` per layer with OSM attribution, exposing each segment's street name
+   and classification as values rather than a street id.
+4. Deferred: street grouping and generated lane cross-sections (Milestone 7.1); buildable blocks,
+   edge blocks, and stable block ids (Milestone 7.2); live Overpass retrieval and truncated-response
+   guarding (Milestone 9); the adapter's lane-count split and a missing-node error path (separate
+   `osm-fixture-ingestion` fixes, see "Pending fixes" below).
+
+## Milestone 7.1 — Street cross-sections (generated lanes and width)
+
+Status: **planned** (sequenced before Milestone 8)
+
+The project builds its own representation of a map, and OSM is a source of hints rather than
+the truth to reproduce. Lanes and street width are therefore **generated**, not captured. OSM
+rarely carries enough to capture them anyway (global taginfo coverage, September 2026: `lanes`
+on 70% of primary but under 6% of residential ways; `width` under 2% on every road class;
+`turn:lanes` at most 7%).
+
+Deliverables:
+
+- Grouping of OSM ways into logical streets. Today a `Street` is one per OSM way, so a named
+  street mapped as four ways is four `Street` rows. Group by normalized name plus connectivity
+  (and one-way parallel pairs for divided roads); unnamed ways stay single-way streets. A street
+  becomes a derived entity like a block, so its id should be deterministic (e.g. from its grouped
+  road ids).
+- A generated cross-section per road, computed as a pure domain function on read rather than
+  stored:
+  - **Lane count**: a tagged `lanes` value when present, otherwise a default of **two lanes per
+    street**, split 1 + 1 on a two-way road and both forward on a one-way road.
+  - **Lane type**: `narrow` / `normal` / `wide` by road classification (service → narrow;
+    residential, unclassified, tertiary → normal; secondary and above → wide), with widths held
+    as constants in `app/domain/`, so changing a width needs no re-import.
+  - **Street width**: lane count × lane-type width. Carriageway only; parking and sidewalks are
+    out of scope.
+- Visible provenance: a consumer can tell a tagged lane count from a defaulted one.
+
+Notes:
+
+- Computing on read means no migration, and nothing goes stale on re-import. Storing lanes is
+  only needed once they involve randomness or manual edits, and they would then belong in
+  Milestone 11-style generated tables, per the raw/content rule below.
+- This replaces "a missing lane value is unknown" (`docs/architecture.md`, `docs/schema.md`) with
+  "a missing lane value is defaulted, visibly". The raw `road_segments.lane_count` still records
+  only what the source stated.
+- Legal car movements stay segment-to-segment (oneway, restriction relations, U-turns prohibited
+  by default). Per-lane `turn:lanes` arrows are not used, so "lane data must not imply turn
+  permissions" still holds.
+- Depends on the lane-count split fix listed under "Pending fixes", since a tagged `lanes` value is
+  the generator's only hint.
+
+## Milestone 7.2 — Buildable blocks
+
+Status: **planned** (after 7.1, before Milestone 8)
+
+Blocks are polygonized from road centerlines, so each block currently includes half of every
+surrounding road, and a divided road's median becomes a long, thin fake block.
+
+Deliverables:
+
+- A buildable area per block: the block minus each bounding road buffered by half its 7.1 street
+  width. Median slivers that collapse to (near) nothing are dropped or marked as medians.
+- Edge blocks: roads crossing the import bounding box dangle and never close a loop, so the ring
+  of blocks along the edge is never derived. Close them against the bounding box and flag them as
+  clipped by the import area.
+- Deterministic block ids derived from each block's bounding-segment set, so an unchanged block
+  keeps its id across re-imports (segment ids are already stable under reconcile). Milestone 11
+  attaches generated content to blocks and needs this.
+
+Acceptance checks:
+
+- A block's buildable area is smaller than its centerline area by the bounding roads' half-widths.
+- A fixture whose roads cross the bounding-box edge yields flagged edge blocks.
+- Re-importing an unchanged fixture keeps every block id; changing one road changes only the ids
+  of the blocks it bounds.
 
 ## Milestone 8 — Custom traced import-area boundaries
 
@@ -305,7 +400,9 @@ Deliverables:
 - Endpoints (on top of Milestone 7) to create, list, fetch, and delete traced boundaries for an
   import area, and to pass one as a query scope.
 - GeoJSON export of a scope — either the whole import area or one traced boundary — covering roads
-  (with their lane counts), buildings, POIs, and area features. `shapely`'s `mapping()` and PostGIS
+  (with their Milestone 7.1 cross-section: lane count, lane type, width, and its provenance),
+  buildings, blocks with their Milestone 7.2 buildable area, POIs, and area features. It extends
+  Milestone 7's per-layer `FeatureCollection` map-data shape rather than introducing a second one. `shapely`'s `mapping()` and PostGIS
   `ST_AsGeoJSON` are already available, so this needs no new dependency.
 - Two explicit export modes, because they serve different consumers and are not interchangeable:
   - **filter** — entities intersecting the scope are returned whole, so geometry may extend past
@@ -360,10 +457,18 @@ deferred — fixtures alone can't demonstrate it. Confirmed against the Overpass
   north, east) already matches this project's `BoundingBox.min_corner`/`max_corner` lat/lon fields
   directly — no reordering needed to build the query.
 - `out:json`'s element shape (`{"type","id","lat","lon"}` for nodes, `{"type","id","nodes","tags"}`
-  for ways, `{"type","id","members","tags"}` for relations) is exactly what
-  `tests/fixtures/osm_neighborhood.json` was already modeled on — a live adapter should reuse
-  `OSMFixtureAdapter`'s parsing rather than duplicate it, fetching real JSON instead of reading a
-  file.
+  for ways, `{"type","id","members","tags"}` for relations) is what
+  `tests/fixtures/osm_neighborhood.json` was modeled on — but **not** its completeness. Checked
+  against a live response (September 2026, about 100 m × 100 m in Berlin): with
+  `nwr(bbox); out geom;`, 46 of 87 ways referenced nodes that were not emitted as node elements
+  (only nodes inside the box are); their coordinates appear only in each way's inline `geometry`
+  array. `OSMFixtureAdapter` requires every referenced node as an element, so that response fails
+  to import. With the missing nodes filled in, the same payload parses. The live adapter must
+  either query with node recursion (`(nwr(bbox);>;); out;`) or read the inline `geometry`, then
+  reuse `OSMFixtureAdapter`'s parsing rather than duplicate it. (The editing API's
+  `/api/0.6/map` does return complete ways, but OSM's docs direct read-only use to Overpass.)
+- The public instance returned `406 Not Acceptable` to a request without an identifying
+  `User-Agent`. Send one naming the project and a contact.
 - Fair-use limits apply: the public instance expects sequential (not parallel) queries per IP and
   returns HTTP 429 if a query waits >15s in its execution queue — a live fetch needs a timeout and
   backoff, unlike the fixture path.
@@ -372,6 +477,20 @@ deferred — fixtures alone can't demonstrate it. Confirmed against the Overpass
   is more likely than the fixture to hit the "restriction cannot resolve" error path. That's
   correct, existing behavior (Milestone 3's spec requires failing unresolvable restrictions), not a
   bug to fix reactively — just don't be surprised by it when picking a real bounding box to demo.
+- Real data also carries values the adapter does not handle yet. Each either drops roads (which
+  breaks the topology generation depends on) or fails the whole import:
+  - `highway=*_link` and `living_street` are not in `RoadClassification` and are dropped, which
+    disconnects ramps and shared streets.
+  - `junction=roundabout` (implied one-way) is not honored, so roundabouts become two-way.
+  - `oneway=reversible` / `alternating` raise an error and fail the import.
+  - Restriction relations tagged only `restriction:<vehicle>=*` (no plain `restriction`) raise
+    "unsupported restriction" and fail the import.
+  - Multipolygon buildings and areas (relations) are ignored.
+  Decide per value whether to map it, skip the feature, or fail.
+- Milestone 7 made re-import reconcile (anything the payload omits is deleted), so a **truncated
+  live response is destructive**. The live adapter must reject an incomplete response before it
+  reaches ingestion — for example one carrying Overpass's runtime-error `remark` (confirm how the
+  public instance reports a timeout before relying on this).
 
 Deliverables:
 
@@ -473,7 +592,9 @@ Deliverables:
   buildings in a partially mapped block inform the generated ones' size and setback.
 - A staleness policy: a run records the inputs it was derived from, so a re-import that changes the
   road graph — and therefore the blocks — marks affected runs stale rather than leaving content
-  that silently no longer fits.
+  that silently no longer fits. This relies on Milestone 7's reconciling re-import and Milestone
+  7.2's deterministic block ids: a changed road changes only the ids of the blocks it bounds,
+  which identifies the affected runs.
 - Extension of Milestone 8's export so a caller selects which layers to export: raw only, generated
   only, or both.
 
@@ -519,6 +640,28 @@ Acceptance checks:
 Open question: what "popular" means operationally. OSM carries no popularity measure; brand,
 `wikidata` presence, and cuisine tags are the available proxies, and which of them counts needs
 deciding before anything is built on it.
+
+## Pending fixes
+
+Defects found while planning Milestone 7. Each is its own small change, not part of the milestone
+in flight.
+
+- **Lane-count split (`osm-fixture-ingestion`).** Resolved. `app/ingestion/osm_adapter.py` now
+  splits the total `lanes` tag across directions (total minus the tagged direction when only one
+  direction is tagged, an even split with the remainder to forward when only the total is given)
+  instead of giving the total to both directions. One-way ways are unaffected. Covered by
+  `server/tests/ingestion/test_osm_adapter.py`.
+- **Missing-node error path (`osm-fixture-ingestion`).** Resolved. `_polygon_center`'s node lookup
+  now runs inside the `try` that turns `KeyError` into `IngestionError`, so a POI mapped as a way
+  with a missing node raises `IngestionError` naming the missing node id, not a bare `KeyError`.
+  Covered by `server/tests/ingestion/test_osm_adapter.py`.
+- **Milestone 3 import report.** Resolved. `OSMIngestionService._persist` now snapshots each
+  reconciled table's existing ids for the import area before the upsert loop runs, then diffs
+  those against the touched-id sets the existing mark-and-sweep already builds to compute
+  aggregate `created_count` / `updated_count` / `removed_count` on `ImportResult`. Scoped to the
+  ingestion service only, not the HTTP API response. Covered by
+  `server/tests/ingestion/test_osm_ingestion_service.py`.
+- **`AGENTS.md` status.** The Status section still describes the project "as of Milestone 1".
 
 ## Milestone completion record
 
