@@ -50,12 +50,12 @@
 
 ## 8. API integration tests
 
-- [ ] 8.1 Import: success counts including blocks, idempotent re-import, changed-payload re-import lowering counts, `invalid_bounding_box` (with no area created), `ingestion_failed` with the area marked `failed`, `payload_outside_bounding_box`, `payload_too_large` (no area created), `import_conflict` (area creation forced to raise `IntegrityError`)
-- [ ] 8.2 Import-area read and map data: status and counts, `import_area_not_found`, `import_area_not_ready` for a failed area, layer counts equal recorded counts, buildings referencing their block id, segments carrying street name and classification with no street id, GeoJSON `[lon, lat]` ordering, attribution present, no raw OSM tags in the response
-- [ ] 8.3 Spatial queries: radius hit and empty result, non-positive radius, `invalid_coordinate`, `contains` vs `intersects`, oversized query bbox, nearest node, null nearest in an area with no road data, footprint area, `building_not_found`
-- [ ] 8.4 Routes: end-to-end import → route over HTTP, deterministic repeat, prohibited turn avoided, default strategy reported, snap distances, same-node route with null geometry and zero distance, `invalid_coordinate`, `unknown_routing_strategy` with registered names, `no_route_found`, `no_navigable_node`
-- [ ] 8.5 Error contract: `invalid_request` with field details, unknown path → `not_found`, `database_unavailable` for a query and for `/health` (session dependency overridden to a failing engine), `internal_error` without exception text, an `IntegrityError` outside area creation → `internal_error`
-- [ ] 8.6 Mutation-check the error contract: map one handled exception to the default handler, confirm its test goes red, then restore and confirm green; do the same for the readiness check (let a `failed` area through)
+- [x] 8.1 Import: success counts including blocks, idempotent re-import, changed-payload re-import lowering counts, `invalid_bounding_box` (with no area created), `ingestion_failed` with the area marked `failed`, `payload_outside_bounding_box`, `payload_too_large` (no area created), `import_conflict` (area creation forced to raise `IntegrityError`)
+- [x] 8.2 Import-area read and map data: status and counts, `import_area_not_found`, `import_area_not_ready` for a failed area, layer counts equal recorded counts, buildings referencing their block id, segments carrying street name and classification with no street id, GeoJSON `[lon, lat]` ordering, attribution present, no raw OSM tags in the response
+- [x] 8.3 Spatial queries: radius hit and empty result, non-positive radius, `invalid_coordinate`, `contains` vs `intersects`, oversized query bbox, nearest node, null nearest in an area with no road data, footprint area, `building_not_found`
+- [x] 8.4 Routes: end-to-end import → route over HTTP, deterministic repeat, prohibited turn avoided, default strategy reported, snap distances, same-node route with null geometry and zero distance, `invalid_coordinate`, `unknown_routing_strategy` with registered names, `no_route_found`, `no_navigable_node`
+- [x] 8.5 Error contract: `invalid_request` with field details, unknown path → `not_found`, `database_unavailable` for a query and for `/health` (session dependency overridden to a failing engine), `internal_error` without exception text, an `IntegrityError` outside area creation → `internal_error`
+- [x] 8.6 Mutation-check the error contract: map one handled exception to the default handler, confirm its test goes red, then restore and confirm green; do the same for the readiness check (let a `failed` area through)
 
 ## 9. Verification and docs
 
