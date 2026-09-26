@@ -22,7 +22,7 @@ from app.domain.building import Building
 from app.domain.geometry import LineString, Polygon
 from app.domain.import_area import ImportArea
 from app.domain.poi import PointOfInterest
-from app.domain.road_graph import NavigableNode, RoadSegmentWithStreet
+from app.domain.road_graph import NavigableNode, RoadSegment, RoadSegmentWithStreet
 from app.domain.routing import RouteResult
 
 
@@ -104,6 +104,22 @@ def segment_feature(entry: RoadSegmentWithStreet) -> Feature:
             "lane_count": segment.lane_count,
             "is_vehicle_accessible": segment.is_vehicle_accessible,
             "street": {"name": entry.street_name, "classification": entry.street_classification.value},
+        },
+    )
+
+
+def segment_feature_plain(segment: RoadSegment) -> Feature:
+    """For `nearest_segment`, which returns a plain `RoadSegment` with no
+    street join — unlike map data's `segment_feature`, which has one."""
+    return Feature(
+        id=segment.id,
+        geometry=linestring_geometry(segment.geom),
+        properties={
+            "from_node_id": segment.from_node_id,
+            "to_node_id": segment.to_node_id,
+            "distance_meters": segment.distance_meters,
+            "lane_count": segment.lane_count,
+            "is_vehicle_accessible": segment.is_vehicle_accessible,
         },
     )
 

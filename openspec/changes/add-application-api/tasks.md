@@ -43,10 +43,10 @@
 
 ## 7. Endpoints
 
-- [ ] 7.1 `POST /import-areas` (body `{bbox, payload}`, provider fixed to `osm`, `IntegrityError` from area creation → `import_conflict`) and `GET /import-areas/{id}`
-- [ ] 7.2 `GET /import-areas/{id}/map-data` with one FeatureCollection per layer and the OSM attribution string
-- [ ] 7.3 `GET /import-areas/{id}/nearby`, `/within-bbox`, `/nearest`, and `/buildings/{building_id}/footprint-area`, re-raising a point's `InvalidBoundingBox` as `invalid_coordinate`
-- [ ] 7.4 Strategy registry (`distance` → `DistanceDijkstraStrategy`) and `POST /import-areas/{id}/routes`, reporting snapped node ids and snap distances
+- [x] 7.1 `POST /import-areas` (body `{bbox, payload}`, provider fixed to `osm`, `IntegrityError` from area creation → `import_conflict`) and `GET /import-areas/{id}`
+- [x] 7.2 `GET /import-areas/{id}/map-data` with one FeatureCollection per layer and the OSM attribution string
+- [x] 7.3 `GET /import-areas/{id}/nearby`, `/within-bbox`, `/nearest`, and `/buildings/{building_id}/footprint-area`, re-raising a point's `InvalidBoundingBox` as `invalid_coordinate`
+- [x] 7.4 Strategy registry (`distance` → `DistanceDijkstraStrategy`) and `POST /import-areas/{id}/routes`, reporting snapped node ids and snap distances
 
 ## 8. API integration tests
 
