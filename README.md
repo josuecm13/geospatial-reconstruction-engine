@@ -17,8 +17,12 @@ OpenStreetMap is only an external source. The database schema, domain entities, 
 
 ## Design
 
-The initial architecture is recorded in [docs/architecture.md](docs/architecture.md), and the progressive implementation plan is tracked in [MILESTONES.md](MILESTONES.md).
+The architecture is recorded in [docs/architecture.md](docs/architecture.md), and the progressive implementation plan is in [MILESTONES.md](MILESTONES.md).
 
 ## Status
 
-Repository initialization and architecture planning are complete. Implementation starts with the project runtime, database migrations, and geographic validation.
+Milestones 0–7 are complete: persistence, OSM fixture ingestion with block derivation and reconciling re-import, spatial queries, road graph, routing, and an HTTP API in front of all of it. Next up are street cross-sections (7.1) and buildable blocks (7.2). See [HOW_TO_RUN.md](HOW_TO_RUN.md) to try it.
+
+## Backlog
+
+Work is tracked as [GitHub issues](https://github.com/josuecm13/geospatial-reconstruction-engine/issues), grouped by [milestones](https://github.com/josuecm13/geospatial-reconstruction-engine/milestones) that mirror `MILESTONES.md`. Every change starts from an issue and closes it from its PR; the workflow is described in [AGENTS.md](AGENTS.md#backlog-and-issues).

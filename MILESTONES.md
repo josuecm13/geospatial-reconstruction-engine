@@ -9,7 +9,8 @@ This project is built progressively. Each milestone should leave the repository 
 - Use fixtures and deterministic local data before relying on live external services.
 - Run the relevant automated tests after every change.
 - Do not add future-scope features to an earlier milestone merely because the infrastructure is available.
-- Record important decisions and any deferred work in `docs/`.
+- Record important decisions in `docs/`. Deferred work and defects are filed as GitHub issues on the
+  milestone they belong to (see `AGENTS.md` → "Backlog and issues"), not listed here.
 
 ## Milestone 0 — Repository and architecture baseline
 
@@ -298,7 +299,8 @@ Notes:
 4. Deferred: street grouping and generated lane cross-sections (Milestone 7.1); buildable blocks,
    edge blocks, and stable block ids (Milestone 7.2); live Overpass retrieval and truncated-response
    guarding (Milestone 9); the adapter's lane-count split and a missing-node error path (separate
-   `osm-fixture-ingestion` fixes, see "Pending fixes" below).
+   `osm-fixture-ingestion` fixes, resolved in PR #3 together with created/updated/removed counts on
+   `ImportResult`). Post-review fixes landed before merge in `198bfa5`.
 
 ## Milestone 7.1 — Street cross-sections (generated lanes and width)
 
@@ -339,7 +341,7 @@ Notes:
 - Legal car movements stay segment-to-segment (oneway, restriction relations, U-turns prohibited
   by default). Per-lane `turn:lanes` arrows are not used, so "lane data must not imply turn
   permissions" still holds.
-- Depends on the lane-count split fix listed under "Pending fixes", since a tagged `lanes` value is
+- Depends on the lane-count split fix (resolved in PR #3), since a tagged `lanes` value is
   the generator's only hint.
 
 ## Milestone 7.2 — Buildable blocks
@@ -641,27 +643,11 @@ Open question: what "popular" means operationally. OSM carries no popularity mea
 `wikidata` presence, and cuisine tags are the available proxies, and which of them counts needs
 deciding before anything is built on it.
 
-## Pending fixes
+## Backlog
 
-Defects found while planning Milestone 7. Each is its own small change, not part of the milestone
-in flight.
-
-- **Lane-count split (`osm-fixture-ingestion`).** Resolved. `app/ingestion/osm_adapter.py` now
-  splits the total `lanes` tag across directions (total minus the tagged direction when only one
-  direction is tagged, an even split with the remainder to forward when only the total is given)
-  instead of giving the total to both directions. One-way ways are unaffected. Covered by
-  `server/tests/ingestion/test_osm_adapter.py`.
-- **Missing-node error path (`osm-fixture-ingestion`).** Resolved. `_polygon_center`'s node lookup
-  now runs inside the `try` that turns `KeyError` into `IngestionError`, so a POI mapped as a way
-  with a missing node raises `IngestionError` naming the missing node id, not a bare `KeyError`.
-  Covered by `server/tests/ingestion/test_osm_adapter.py`.
-- **Milestone 3 import report.** Resolved. `OSMIngestionService._persist` now snapshots each
-  reconciled table's existing ids for the import area before the upsert loop runs, then diffs
-  those against the touched-id sets the existing mark-and-sweep already builds to compute
-  aggregate `created_count` / `updated_count` / `removed_count` on `ImportResult`. Scoped to the
-  ingestion service only, not the HTTP API response. Covered by
-  `server/tests/ingestion/test_osm_ingestion_service.py`.
-- **`AGENTS.md` status.** The Status section still describes the project "as of Milestone 1".
+Open work is tracked as GitHub issues, grouped by GitHub milestones that mirror the sections above:
+<https://github.com/josuecm13/geospatial-reconstruction-engine/issues>. See `AGENTS.md` →
+"Backlog and issues" for the workflow.
 
 ## Milestone completion record
 
@@ -670,4 +656,4 @@ When completing a milestone, update its status and add a short note containing:
 1. Commit or pull request reference.
 2. Tests and verification commands run.
 3. Important decisions or limitations.
-4. Deferred work for a later milestone.
+4. Deferred work for a later milestone, as links to the issues it was filed as.

@@ -2,6 +2,8 @@
 
 <!-- What this changes and why. Name the milestone (see MILESTONES.md) and the OpenSpec change, if any. -->
 
+Fixes #<!-- issue number; one line per issue this PR resolves -->
+
 ## Changes
 
 <!-- Grouped by area (API, ingestion, persistence, routing, docs, specs). Bullets, not a file list. -->
@@ -10,7 +12,7 @@
 
 ## Out of scope
 
-<!-- Later-milestone concerns or known follow-ups deliberately left out, and where they are recorded. -->
+<!-- Later-milestone concerns or findings deliberately left out, each with the issue it was filed as. -->
 
 ## Verification
 
