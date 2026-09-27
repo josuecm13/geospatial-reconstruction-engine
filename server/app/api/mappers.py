@@ -19,6 +19,7 @@ from app.domain.area_feature import AreaFeature
 from app.domain.block import Block
 from app.domain.bounding_box import BoundingBox, Coordinate
 from app.domain.building import Building
+from app.domain.cross_section import SegmentCrossSection
 from app.domain.geometry import LineString, Polygon
 from app.domain.import_area import ImportArea
 from app.domain.poi import PointOfInterest
@@ -92,7 +93,9 @@ def block_feature(block: Block) -> Feature:
     )
 
 
-def segment_feature(entry: RoadSegmentWithStreet) -> Feature:
+def segment_feature(entry: RoadSegmentWithStreet, cross_section: SegmentCrossSection) -> Feature:
+    """`lane_count` is the generated count for the segment's direction; what the
+    source stated (or null) stays visible as `source_lane_count`."""
     segment = entry.segment
     return Feature(
         id=segment.id,
@@ -101,7 +104,11 @@ def segment_feature(entry: RoadSegmentWithStreet) -> Feature:
             "from_node_id": segment.from_node_id,
             "to_node_id": segment.to_node_id,
             "distance_meters": segment.distance_meters,
-            "lane_count": segment.lane_count,
+            "lane_count": cross_section.lane_count,
+            "lane_count_provenance": cross_section.lane_count_provenance.value,
+            "source_lane_count": segment.lane_count,
+            "lane_type": cross_section.lane_type.value,
+            "width_meters": cross_section.width_meters,
             "is_vehicle_accessible": segment.is_vehicle_accessible,
             "street": {"name": entry.street_name, "classification": entry.street_classification.value},
         },

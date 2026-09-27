@@ -157,3 +157,25 @@ def test_map_data_after_import_matches_counts_and_links_buildings(client):
     assert "street" in segment["properties"]
     raw = json.dumps(body)
     assert "highway" not in raw and "tags" not in raw
+
+
+def test_map_data_segments_carry_the_generated_cross_section_and_its_provenance(client):
+    created = _import(client).json()
+
+    segments = client.get(f"/import-areas/{created['id']}/map-data").json()["road_segments"]["features"]
+
+    by_street: dict[str | None, list[dict]] = {}
+    for feature in segments:
+        by_street.setdefault(feature["properties"]["street"]["name"], []).append(feature["properties"])
+    # West Street is tagged lanes:forward=2 / lanes:backward=1: each direction keeps its tag.
+    west = sorted((p["lane_count"], p["lane_count_provenance"], p["source_lane_count"]) for p in by_street["West Street"])
+    assert west == [(1, "tagged", 1), (2, "tagged", 2)]
+    assert {p["width_meters"] for p in by_street["West Street"]} == {3 * 3.25}
+    # East Street has no lane tags: 1 + 1 defaulted, and the raw value stays unknown.
+    for props in by_street["East Street"]:
+        assert (props["lane_count"], props["lane_count_provenance"], props["source_lane_count"]) == (1, "defaulted", None)
+        assert props["lane_type"] == "normal"
+        assert props["width_meters"] == 2 * 3.25
+    # The unnamed one-way is tagged lanes=1, in its travel direction only.
+    (one_way,) = by_street[None]
+    assert (one_way["lane_count"], one_way["lane_count_provenance"], one_way["width_meters"]) == (1, "tagged", 3.25)

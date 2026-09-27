@@ -83,7 +83,7 @@ erDiagram
         uuid to_node_id FK
         geometry geom "LineString,4326"
         double distance_meters
-        smallint lane_count "nullable = unknown; direction is the segment's own from/to"
+        smallint lane_count "source-stated only; null = defaulted on read; direction is the segment's own from/to"
         boolean is_vehicle_accessible
     }
     TURN_MOVEMENTS {
@@ -102,6 +102,11 @@ arbitrary digitization order, not a real-world direction. Once a `Road` is split
 `RoadSegment`s, each segment already has an explicit direction (`from_node -> to_node`), so it
 only needs a single `lane_count` for travel in its own direction. The forward/backward split is a
 transient ingestion-time translation, never a stored column.
+
+**Generated cross-section**: `lane_count` records only what the source stated. A null value is not
+"unknown" to consumers: the cross-section (lanes per direction, lane type, width) is generated on
+read by `app/domain/cross_section.py` and marked `defaulted`, so changing a default or a lane width
+needs no migration and no re-import.
 
 **Turn movements are dense, not sparse**: ingestion enumerates every geometrically plausible
 `(incoming_segment, outgoing_segment)` pair at each node and stores one row per pair, classified
