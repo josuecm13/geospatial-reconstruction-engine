@@ -26,7 +26,8 @@ The OSM adapter owns Overpass/API requests and tag interpretation. It produces a
 | `NavigableNode` | A routable coordinate; intersections are represented explicitly. |
 | `RoadSegment` | Directed traversable connection, length, direction, lane profile, and access metadata. |
 | `TurnMovement` | An allowed or prohibited transition from an incoming segment to an outgoing segment at a node, classified as left, right, straight, or U-turn. |
-| `Building` | Classified polygon footprint and source identity. |
+| `Block` | Derived, not sourced: a face enclosed by road segments, or closed against the import bounding box where roads leave it (`is_clipped`). It carries its ordered bounding segments, a buildable area (the block minus each bounding road's half-width), and an `is_median` flag when that area is too narrow to build on. Its id derives from its bounding-segment set, so it survives an unchanged re-import. |
+| `Building` | Classified polygon footprint, source identity, and the block that contains it, if any. |
 | `PointOfInterest` | Categorized named/unnamed point or representative location. |
 | `AreaFeature` | An extension point for parks now and natural features later. |
 | `Route` | Origin/destination, ordered nodes and segments, total distance, and cost. |
@@ -43,7 +44,9 @@ PostgreSQL with PostGIS is the only persistence requirement. A future runtime sh
 | `navigable_nodes` | UUID, import ID, provider/source ID, point geometry |
 | `road_segments` | UUID, road ID, from-node ID, to-node ID, line geometry, distance meters, allowed direction, lane profile, access metadata |
 | `turn_movements` | UUID, intersection node ID, incoming segment ID, outgoing segment ID, movement kind, allowed flag, restriction kind, source metadata |
-| `buildings` | UUID, import ID, provider/source ID, category, polygon geometry, metadata |
+| `blocks` | UUID (uuid5 of import ID + bounding-segment set), import ID, boundary polygon, area square meters, buildable area multipolygon (nullable), buildable area square meters, is_median, is_clipped |
+| `block_boundary_segments` | block ID, road segment ID, sequence order |
+| `buildings` | UUID, import ID, block ID (nullable), provider/source ID, category, polygon geometry, metadata |
 | `points_of_interest` | UUID, import ID, provider/source ID, category, name, point geometry, metadata |
 | `area_features` | UUID, import ID, provider/source ID, kind, polygon geometry, metadata |
 
