@@ -27,9 +27,12 @@ def resolve_test_database_url(database_url: str) -> URL:
     return url.set(database=f"{url.database}_test")
 
 
-def _create_database_if_missing(server_url: URL, name: str) -> None:
+def _create_database_if_missing(url: URL) -> None:
+    # Connect to the test database's own server, through its maintenance database,
+    # since TEST_DATABASE_URL may point somewhere other than DATABASE_URL.
     # CREATE DATABASE can't run inside a transaction, hence AUTOCOMMIT.
-    admin_engine = create_engine(server_url, isolation_level="AUTOCOMMIT")
+    name = url.database
+    admin_engine = create_engine(url.set(database="postgres"), isolation_level="AUTOCOMMIT")
     try:
         with admin_engine.connect() as connection:
             exists = connection.scalar(text("SELECT 1 FROM pg_database WHERE datname = :name"), {"name": name})
@@ -46,11 +49,11 @@ def test_database():
     url = resolve_test_database_url(dev_url.render_as_string(hide_password=False))
     if url.database == dev_url.database and url.host == dev_url.host and url.port == dev_url.port:
         pytest.exit("The test database must not be the development database (DATABASE_URL).", returncode=2)
-    _create_database_if_missing(dev_url, url.database)
+    _create_database_if_missing(url)
 
     rendered = url.render_as_string(hide_password=False)
     # alembic/env.py and the app's lazily created engine both read DATABASE_URL,
-    # so point it at the test database for the whole session.
+    # so point it at the test database from the first test that needs one onward.
     original = os.environ["DATABASE_URL"]
     os.environ["DATABASE_URL"] = rendered
     alembic_config = Config(str(SERVER_DIR / "alembic.ini"))
