@@ -207,6 +207,10 @@ class BlockModel(Base):
     )
     boundary = Column(Geometry(geometry_type="POLYGON", srid=4326), nullable=False)
     area_square_meters = Column(Float, nullable=False)
+    # NULL when nothing is left once the bounding roads' half-widths are removed.
+    buildable_area = Column(Geometry(geometry_type="MULTIPOLYGON", srid=4326), nullable=True)
+    buildable_area_square_meters = Column(Float, nullable=False, server_default="0")
+    is_median = Column(Boolean, nullable=False, server_default="false")
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at = Column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()

@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.domain.block import Block
-from app.persistence.geometry import geom_to_polygon, polygon_to_geom
+from app.persistence.geometry import geom_to_multipolygon, geom_to_polygon, polygon_to_geom
 from app.persistence.models import BlockBoundarySegmentModel, BlockModel
 
 
@@ -68,4 +68,7 @@ class BlockRepository:
             boundary=geom_to_polygon(model.boundary),
             area_square_meters=model.area_square_meters,
             bounding_segment_ids=tuple(bounding_segment_ids),
+            buildable_area=geom_to_multipolygon(model.buildable_area) if model.buildable_area is not None else None,
+            buildable_area_square_meters=model.buildable_area_square_meters,
+            is_median=model.is_median,
         )

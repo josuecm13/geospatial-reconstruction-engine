@@ -5,7 +5,7 @@ from shapely.geometry import Point as ShapelyPoint
 from shapely.geometry import Polygon as ShapelyPolygon
 
 from app.domain.bounding_box import BoundingBox, Coordinate
-from app.domain.geometry import LineString, Polygon
+from app.domain.geometry import LineString, MultiPolygon, Polygon
 
 SRID = 4326
 
@@ -37,6 +37,13 @@ def polygon_to_geom(ring: Polygon) -> WKBElement:
 def geom_to_polygon(geom: WKBElement) -> Polygon:
     shape = to_shape(geom)
     return tuple(Coordinate(latitude=y, longitude=x) for x, y in shape.exterior.coords)
+
+
+def geom_to_multipolygon(geom: WKBElement) -> MultiPolygon:
+    return tuple(
+        tuple(Coordinate(latitude=y, longitude=x) for x, y in part.exterior.coords)
+        for part in to_shape(geom).geoms
+    )
 
 
 def bbox_to_geom(bbox: BoundingBox) -> WKBElement:

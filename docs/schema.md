@@ -145,6 +145,9 @@ erDiagram
         uuid import_area_id FK
         geometry boundary "Polygon,4326, derived"
         double area_square_meters "derived"
+        geometry buildable_area "MultiPolygon,4326, nullable, derived"
+        double buildable_area_square_meters "derived"
+        boolean is_median "derived"
         timestamptz created_at
         timestamptz updated_at
     }
@@ -186,6 +189,13 @@ Key decisions:
   discarded, not stored. `postgis_topology` is already enabled in the local DB (bundled with the
   `postgis/postgis` image) as a more rigorous fallback if `ST_Polygonize` produces gaps/slivers on
   real data, but start with plain `ST_Polygonize`.
+- **A block's buildable area is net of its bounding roads (Milestone 7.2).** The boundary follows
+  road centerlines, so it includes half of every surrounding road. `buildable_area` is the boundary
+  minus each bounding segment buffered, in meters, by half its road's generated 7.1 width. It is
+  stored at derivation, so a change to the width constants needs a re-derivation, not a re-import.
+  It is `NULL` when nothing is left. A block whose buildable area is nowhere
+  `MIN_BUILDABLE_WIDTH_METERS` (5 m) wide, typically a divided road's median, is kept with
+  `is_median = true` rather than dropped.
 - **`block_boundary_segments` is a real join table, not a `uuid[]` column.** A `road_segment`
   typically borders two blocks (one on each side) or one block plus the "outside" of the import
   area — a plain array on `blocks` can't answer "which blocks touch this segment?" without a full
