@@ -55,3 +55,4 @@ class RoadSegmentWithStreet:
     segment: RoadSegment
     street_name: str | None
     street_classification: RoadClassification
+    road_classification: RoadClassification
