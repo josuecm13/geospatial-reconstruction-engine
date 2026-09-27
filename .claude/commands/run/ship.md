@@ -13,6 +13,11 @@ Prefix every `gh` call with `GH_TOKEN=$(gh auth token --user josuecm13)`.
 1. **Gate, once.** `cd server && pytest -q`, then `openspec validate --all --strict` from the repo
    root. Red → fix, or mark the issue `blocked(<failure>)` in the ledger. Never commit red. Note the
    before → after test counts.
+   - Decide on each tool's **own** exit status, in its own command: `pytest -q > /tmp/pytest.out;
+     echo $?`. Never chain `commit` after `pytest … | tail` — the pipe reports `tail`'s success.
+   - Tests share the dev database and expect it empty. Any end-to-end check against a running
+     server comes **before** the gate and deletes what it imported; if the gate then fails on
+     leftover rows rather than on code, clean up and rerun rather than debugging the code.
 2. **Guards.** Every new guard or regression test has a ledger `Guard checks` line from
    `/run:guard`. Missing → run it now.
 3. **Scope.** Read `git diff main...` (or the stack base). Every hunk must serve an acceptance
