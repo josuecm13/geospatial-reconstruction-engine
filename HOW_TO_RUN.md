@@ -38,6 +38,11 @@ set -a && source .env && set +a
 pytest -q
 ```
 
+The tests never use the development database. They run against `TEST_DATABASE_URL` when it's set,
+otherwise against `DATABASE_URL` with `_test` appended to the database name (`geodb_test` with
+the default `.env`), which the test session creates and migrates on first run. Data you import
+through the running app therefore can't affect the tests, and a test run leaves `geodb` untouched.
+
 ## 3. Start the app
 
 ```bash
