@@ -372,7 +372,7 @@ Completion:
 
 ## Milestone 7.2 — Buildable blocks
 
-Status: **planned** (after 7.1, before Milestone 8)
+Status: **complete**
 
 Blocks are polygonized from road centerlines, so each block currently includes half of every
 surrounding road, and a divided road's median becomes a long, thin fake block.
@@ -394,6 +394,30 @@ Acceptance checks:
 - A fixture whose roads cross the bounding-box edge yields flagged edge blocks.
 - Re-importing an unchanged fixture keeps every block id; changing one road changes only the ids
   of the blocks it bounds.
+
+Completion:
+
+1. Change: `openspec/changes/archive/2026-09-27-add-buildable-blocks/`, which extends the
+   `block-derivation` spec. Issues #11, #12, and #13 shipped in stacked PRs #39, #40, and #41,
+   tracked by #26.
+2. Verification: `pytest -q` from `server/` against live PostGIS (190 passed, up from 179),
+   `openspec validate --all --strict` (valid), both new migrations round-tripped, and mutation
+   checks on every new guard: half-width buffering, the median threshold, the bbox ring, the
+   clipped flag, line-sharing bounding segments, the crossing-road filter, deterministic and
+   segment-scoped block ids, and domain purity.
+3. Decisions: recorded in the change's `design.md`. They cover these points:
+   - The buildable area is stored at derivation. Each bounding segment is buffered, on geography,
+     by half its road's generated width.
+   - A block too narrow to build on anywhere (5 m, `MIN_BUILDABLE_WIDTH_METERS`) is kept and
+     flagged `is_median`, not dropped.
+   - The bbox ring is polygonized with the road segments. A face along the box is an edge block
+     (`is_clipped`) only when a road crossing the box bounds it, so areas whose roads stay inside
+     the box derive the same blocks as before. Faces outside the box aren't blocks.
+   - A block's id is a uuid5 of its area and bounding-segment set. Faces sharing a set are told
+     apart by representative point. Blocks are still cleared and re-inserted on every import, so
+     only `created_at` resets.
+4. Deferred: exporting the buildable area and flags (Milestone 8's GeoJSON export), and an
+   in-place block reconcile once Milestone 11 references blocks by foreign key.
 
 ## Milestone 8 — Custom traced import-area boundaries
 

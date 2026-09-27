@@ -7,6 +7,7 @@ from sqlalchemy import delete, func, or_, select, text, update
 from sqlalchemy.orm import Session
 
 from app.domain.block import MIN_BUILDABLE_WIDTH_METERS, Block
+from app.domain.block_identity import BlockKeyInput, block_ids_for
 from app.domain.bounding_box import Coordinate
 from app.domain.cross_section import cross_sections_by_classified_segment
 from app.persistence.geometry import geom_to_multipolygon
@@ -118,15 +119,10 @@ class BlockDerivationService:
             },
         ).fetchall()
 
-        blocks: list[Block] = []
+        faces = []
         for row in candidate_rows:
             shapely_polygon = shapely_wkt.loads(row.boundary_wkt)
             boundary_geom = from_shape(shapely_polygon, srid=SRID)
-
-            area_square_meters = self.session.execute(
-                text("SELECT ST_Area(ST_GeogFromText(:wkt))"), {"wkt": row.boundary_wkt}
-            ).scalar_one()
-
             segment_ids = (
                 self.session.execute(
                     select(RoadSegmentModel.id)
@@ -156,11 +152,28 @@ class BlockDerivationService:
                 .scalars()
                 .all()
             )
+            faces.append((row, shapely_polygon, boundary_geom, segment_ids))
+
+        block_ids = block_ids_for(
+            import_area_id,
+            [
+                BlockKeyInput(frozenset(segment_ids), shapely_polygon.representative_point().coords[0])
+                for _, shapely_polygon, _, segment_ids in faces
+            ],
+        )
+
+        blocks: list[Block] = []
+        for block_id, (row, shapely_polygon, boundary_geom, segment_ids) in zip(block_ids, faces):
+            area_square_meters = self.session.execute(
+                text("SELECT ST_Area(ST_GeogFromText(:wkt))"), {"wkt": row.boundary_wkt}
+            ).scalar_one()
+
             buildable = self._buildable_area(
                 row.boundary_wkt, {segment_id: cross_sections[segment_id].width_meters / 2 for segment_id in segment_ids}
             )
 
             block_model = BlockModel(
+                id=block_id,
                 import_area_id=import_area_id,
                 boundary=boundary_geom,
                 area_square_meters=area_square_meters,

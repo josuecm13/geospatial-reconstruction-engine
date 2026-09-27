@@ -37,12 +37,12 @@ elsewhere. See `HOW_TO_RUN.md` for the full setup and what to do in your shell a
 
 ## Status
 
-This project is intentionally incomplete. Through Milestone 7.1, it has domain persistence, OSM
+This project is intentionally incomplete. Through Milestone 7.2, it has domain persistence, OSM
 fixture ingestion (with automatic block derivation and reconciling re-import), spatial queries,
-road graph traversal, routing, a full HTTP API in front of all of it, and logical streets with
-generated cross-sections (lanes, lane type, width). Milestones 7.2, 8, and 9 onward — buildable
-blocks, custom traced boundaries, live OSM retrieval and visualization, and the generated-content
-milestones — remain unbuilt. Don't pull
+road graph traversal, routing, a full HTTP API in front of all of it, logical streets with
+generated cross-sections (lanes, lane type, width), and buildable blocks (buildable area, median
+and edge-block flags, stable ids). Milestones 8 and 9 onward — custom traced boundaries, live OSM
+retrieval and visualization, and the generated-content milestones — remain unbuilt. Don't pull
 those in prematurely; see `MILESTONES.md` for current status and what's next.
 
 ## Conventions
