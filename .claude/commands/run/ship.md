@@ -26,6 +26,10 @@ Prefix every `gh` call with `GH_TOKEN=$(gh auth token --user josuecm13)`.
    match migrations), `MILESTONES.md` status when it's the milestone's last issue, and this
    issue's task checkboxes in the OpenSpec change.
 5. **Commit** in Conventional Commits form with the attribution trailer. Push with `-u`.
+   - When this issue ticks the OpenSpec change's **last** task, archive it in this PR, as its own
+     commit: `openspec archive <change> --yes`, replace the `TBD` Purpose of any newly created spec
+     with a real one, rerun `openspec validate --all --strict`, and commit
+     `spec: archive <change>`. For a milestone stack, that's the last PR.
 6. **PR** from `.github/pull_request_template.md`, base per the ledger's branch layout:
    - Summary: milestone, OpenSpec change, and the ledger `Decisions` for this issue.
    - `Fixes #<n>`.
