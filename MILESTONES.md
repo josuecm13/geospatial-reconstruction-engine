@@ -304,7 +304,7 @@ Notes:
 
 ## Milestone 7.1 — Street cross-sections (generated lanes and width)
 
-Status: **planned** (sequenced before Milestone 8)
+Status: **implemented, in review** (PRs #31, #32, #33; sequenced before Milestone 8)
 
 The project builds its own representation of a map, and OSM is a source of hints rather than
 the truth to reproduce. Lanes and street width are therefore **generated**, not captured. OSM

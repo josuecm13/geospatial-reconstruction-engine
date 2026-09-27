@@ -12,6 +12,7 @@ from app.domain.enums import RestrictionKind
 from app.domain.import_area import ImportArea
 from app.domain.poi import PointOfInterest
 from app.domain.road_graph import NavigableNode, Road, RoadSegment, Street
+from app.domain.street_grouping import GroupableWay, group_ways_into_streets, street_id_for
 from app.domain.turn_movement import TurnMovement
 from app.ingestion.osm_adapter import ImportRecords, OSMFixtureAdapter, OSMIngestionError, PayloadOutsideBoundingBox
 from app.persistence.block_derivation import BlockDerivationService
@@ -128,9 +129,10 @@ class OSMIngestionService:
         touched_road_ids: set = set()
         touched_segment_ids: set = set()
         segments_by_way: dict[str, list[RoadSegment]] = {}
+        street_by_way = self._persist_streets(streets, area_id, records)
+        touched_street_ids.update(street.id for street in street_by_way.values())
         for source_road in records.roads:
-            street = streets.upsert(Street(None, area_id, source_road.source_id, source_road.name, source_road.classification))
-            touched_street_ids.add(street.id)
+            street = street_by_way[source_road.source_id]
             road = roads.upsert(
                 Road(None, area_id, source_road.source_id, source_road.classification,
                      tuple(records.nodes[node_id] for node_id in source_road.node_ids), street.id)
@@ -326,6 +328,22 @@ class OSMIngestionService:
             result.add(road.node_ids[-1])
         result.update(restriction.via_node_id for restriction in records.restrictions)
         return result
+
+    @staticmethod
+    def _persist_streets(streets: StreetRepository, area_id, records: ImportRecords) -> dict[str, Street]:
+        """Upsert one logical street per group of ways; return each way's street."""
+        groups = group_ways_into_streets([
+            GroupableWay(road.source_id, road.name, road.classification, road.node_ids,
+                         tuple(records.nodes[node_id] for node_id in road.node_ids), road.one_way_direction)
+            for road in records.roads
+        ])
+        street_by_way: dict[str, Street] = {}
+        for group in groups:
+            street = streets.upsert(
+                Street(street_id_for(area_id, group.key), area_id, group.key, group.name, group.classification)
+            )
+            street_by_way.update({source_id: street for source_id in group.way_source_ids})
+        return street_by_way
 
     @staticmethod
     def _segments_for_road(source_road, road, persisted_nodes, coordinates, navigable_ids):

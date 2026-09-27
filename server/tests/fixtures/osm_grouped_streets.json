@@ -1,0 +1,21 @@
+{
+  "elements": [
+    {"type": "node", "id": 1, "lat": 9.9500, "lon": -84.1000},
+    {"type": "node", "id": 2, "lat": 9.9500, "lon": -84.0995},
+    {"type": "node", "id": 3, "lat": 9.9500, "lon": -84.0990},
+    {"type": "node", "id": 4, "lat": 9.9500, "lon": -84.0985},
+    {"type": "node", "id": 5, "lat": 9.9495, "lon": -84.1000},
+    {"type": "node", "id": 6, "lat": 9.9490, "lon": -84.1000},
+    {"type": "node", "id": 10, "lat": 9.9510, "lon": -84.1000},
+    {"type": "node", "id": 11, "lat": 9.9510, "lon": -84.0990},
+    {"type": "node", "id": 12, "lat": 9.95115, "lon": -84.0990},
+    {"type": "node", "id": 13, "lat": 9.95115, "lon": -84.1000},
+    {"type": "way", "id": 100, "nodes": [1, 2], "tags": {"highway": "residential", "name": "Main Street"}},
+    {"type": "way", "id": 101, "nodes": [2, 3], "tags": {"highway": "residential", "name": "main  street"}},
+    {"type": "way", "id": 102, "nodes": [3, 4], "tags": {"highway": "tertiary", "name": "MAIN STREET"}},
+    {"type": "way", "id": 200, "nodes": [10, 11], "tags": {"highway": "primary", "name": "Central Avenue", "oneway": "yes"}},
+    {"type": "way", "id": 201, "nodes": [12, 13], "tags": {"highway": "primary", "name": "Central Avenue", "oneway": "yes"}},
+    {"type": "way", "id": 300, "nodes": [1, 5], "tags": {"highway": "service"}},
+    {"type": "way", "id": 301, "nodes": [5, 6], "tags": {"highway": "service"}}
+  ]
+}

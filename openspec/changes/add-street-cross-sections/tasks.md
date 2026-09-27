@@ -13,7 +13,7 @@
 
 ## 3. Logical streets (#8)
 
-- [ ] 3.1 Add `app/domain/street_grouping.py` (name + connectivity, divided one-way pairs, deterministic group key and id)
-- [ ] 3.2 Ingestion upserts one street per group and points each road at its group's street
-- [ ] 3.3 Unit tests for grouping; ingestion test with a grouped-streets fixture covering count, shared street id, and id stability across re-import
-- [ ] 3.4 Update `docs/schema.md`, the `RoadSegmentWithStreet` docstring, and `MILESTONES.md` status for 7.1
+- [x] 3.1 Add `app/domain/street_grouping.py` (name + connectivity, divided one-way pairs, deterministic group key and id)
+- [x] 3.2 Ingestion upserts one street per group and points each road at its group's street
+- [x] 3.3 Unit tests for grouping; ingestion test with a grouped-streets fixture covering count, shared street id, and id stability across re-import
+- [x] 3.4 Update `docs/schema.md`, the `RoadSegmentWithStreet` docstring, and `MILESTONES.md` status for 7.1

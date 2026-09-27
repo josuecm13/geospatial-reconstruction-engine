@@ -56,9 +56,9 @@ erDiagram
         timestamptz updated_at
     }
     STREETS {
-        uuid id PK
+        uuid id PK "uuid5 of import area + group key"
         uuid import_area_id FK
-        text source_id
+        text source_id "group key: sorted way source ids joined with +"
         text name "nullable, unnamed ways allowed"
         road_classification classification
     }
@@ -200,7 +200,9 @@ Key decisions:
 
 - `UNIQUE (import_area_id, source_id)` on `streets`, `roads`, `navigable_nodes`, `buildings`,
   `points_of_interest`, `area_features`. `provider` lives only on `import_areas` and is reachable
-  via `import_area_id`, so it is not duplicated into this tuple.
+  via `import_area_id`, so it is not duplicated into this tuple. A street is a logical group of
+  ways (`app/domain/street_grouping.py`), so its `source_id` is the group key rather than a single
+  way's id, and its `id` is derived from the import area and that key.
 - `UNIQUE (provider, min_longitude, min_latitude, max_longitude, max_latitude)` on `import_areas`
   — re-importing the same bounding box reuses the same row (updates status/counts/`imported_at`)
   rather than creating a new one; all child entities upsert against that same `import_area_id`.
