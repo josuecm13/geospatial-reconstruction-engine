@@ -39,7 +39,8 @@ def _create_database_if_missing(server_url: URL, name: str) -> None:
         admin_engine.dispose()
 
 
-@pytest.fixture(scope="session", autouse=True)
+# Not autouse: pure domain tests must keep running without any database.
+@pytest.fixture(scope="session")
 def test_database():
     dev_url = make_url(load_settings().database_url)
     url = resolve_test_database_url(dev_url.render_as_string(hide_password=False))
