@@ -12,14 +12,14 @@ The system SHALL record, for each derived block, a buildable area equal to the b
 - **THEN** the strip's block is flagged as a median, and blocks with room to build are not
 
 ### Requirement: Blocks along the import bounding box SHALL be closed against it and flagged as clipped
-The system SHALL close faces between road segments and the import area's bounding box against the box, derive them as blocks, and flag them as clipped by the import area. A face whose outer boundary lies entirely on the bounding box, or that lies outside the bounding box, SHALL NOT be a block.
+The system SHALL close faces between road segments and the import area's bounding box against the box, derive them as blocks, and flag them as clipped by the import area. A face along the bounding box SHALL be a block only if a road segment crossing the bounding box bounds it. A face outside the bounding box SHALL NOT be a block.
 
 #### Scenario: Roads crossing the bounding box yield edge blocks
 - **WHEN** a fixture whose roads cross the bounding-box edge is imported
 - **THEN** the faces between those roads and the box are persisted as blocks flagged as clipped, and blocks closed by roads alone are not flagged
 
-#### Scenario: Roads that never reach the edge add no edge block
-- **WHEN** a fixture whose roads form a closed loop that doesn't reach the bounding box is imported
+#### Scenario: Roads that never cross the edge add no edge block
+- **WHEN** a fixture whose roads form a closed loop that stays inside the bounding box, or only touches its edge, is imported
 - **THEN** the area has only the loop's block, not flagged as clipped
 
 ### Requirement: A block's id SHALL be derived from its bounding-segment set

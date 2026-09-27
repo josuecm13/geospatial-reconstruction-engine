@@ -7,9 +7,9 @@
 
 ## 2. Edge blocks (#12)
 
-- [ ] 2.1 Migration adding `blocks.is_clipped`; polygonize the bbox ring with the segments; keep faces inside the bbox that aren't wholly bbox ring; flag `is_clipped`
-- [ ] 2.2 Bounding segments include segments sharing a line with the face boundary
-- [ ] 2.3 Fixture whose roads cross the bbox edge yields flagged edge blocks; mutation-check
+- [x] 2.1 Migration adding `blocks.is_clipped`; polygonize the bbox ring with the segments; keep faces inside the bbox; flag `is_clipped`; keep a clipped face only when a bbox-crossing road bounds it
+- [x] 2.2 Bounding segments include segments sharing a line with the face boundary
+- [x] 2.3 Fixture whose roads cross the bbox edge yields flagged edge blocks; mutation-check
 
 ## 3. Stable block ids (#13)
 

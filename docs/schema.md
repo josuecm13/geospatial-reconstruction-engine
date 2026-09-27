@@ -148,6 +148,7 @@ erDiagram
         geometry buildable_area "MultiPolygon,4326, nullable, derived"
         double buildable_area_square_meters "derived"
         boolean is_median "derived"
+        boolean is_clipped "derived, closed by the bbox"
         timestamptz created_at
         timestamptz updated_at
     }
@@ -184,9 +185,12 @@ erDiagram
 Key decisions:
 
 - **`Block` is derived, not sourced.** Nothing in OSM tags a block directly. After road ingestion,
-  the pipeline nodes and unions `road_segments.geom` and polygonizes it (`ST_Polygonize`); each
-  resulting closed ring becomes one `blocks.boundary`. The single unbounded outer face is
-  discarded, not stored. `postgis_topology` is already enabled in the local DB (bundled with the
+  the pipeline nodes and unions `road_segments.geom` together with the import area's bbox ring and
+  polygonizes it (`ST_Polygonize`); each resulting face inside the bbox becomes one
+  `blocks.boundary`. Roads that leave the bbox therefore close the blocks along its edge, which are
+  flagged `is_clipped`. Their bbox stretch has no road segment, so their
+  `block_boundary_segments` don't close a loop. A face along the bbox that no bbox-crossing road
+  bounds (what is left of the box around loops that stay inside it) is discarded, not stored. `postgis_topology` is already enabled in the local DB (bundled with the
   `postgis/postgis` image) as a more rigorous fallback if `ST_Polygonize` produces gaps/slivers on
   real data, but start with plain `ST_Polygonize`.
 - **A block's buildable area is net of its bounding roads (Milestone 7.2).** The boundary follows

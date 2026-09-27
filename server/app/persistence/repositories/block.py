@@ -71,4 +71,5 @@ class BlockRepository:
             buildable_area=geom_to_multipolygon(model.buildable_area) if model.buildable_area is not None else None,
             buildable_area_square_meters=model.buildable_area_square_meters,
             is_median=model.is_median,
+            is_clipped=model.is_clipped,
         )

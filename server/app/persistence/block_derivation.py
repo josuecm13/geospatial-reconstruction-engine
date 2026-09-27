@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 from geoalchemy2.shape import from_shape
 from shapely import wkt as shapely_wkt
-from sqlalchemy import delete, func, select, text, update
+from sqlalchemy import delete, func, or_, select, text, update
 from sqlalchemy.orm import Session
 
 from app.domain.block import MIN_BUILDABLE_WIDTH_METERS, Block
@@ -15,10 +15,17 @@ from app.persistence.repositories.building import BuildingRepository
 from app.persistence.repositories.road_graph import RoadSegmentRepository
 
 SRID = 4326
+# Noding computes crossing points in floating point, so "lies along" a line is
+# tested within ~0.1 mm, and a shared stretch must be longer than ~1 cm to count.
+_COLLINEAR_TOLERANCE_DEGREES = 1e-9
+_MIN_SHARED_LENGTH_DEGREES = 1e-7
 
 
 class BlockDerivationService:
     """Derives block polygons from an import area's road graph via ST_Polygonize.
+
+    The bounding box's ring is polygonized with the road segments, so roads that
+    leave the box close the blocks along its edge; those are flagged as clipped.
 
     Not sourced from OSM: a block only exists because the enclosing road segments do.
     """
@@ -64,14 +71,51 @@ class BlockDerivationService:
         candidate_rows = self.session.execute(
             text(
                 """
-                SELECT ST_AsText((ST_Dump(ST_Polygonize(ARRAY[ST_Node(ST_Union(rs.geom))]))).geom)
-                    AS boundary_wkt
-                FROM road_segments rs
-                JOIN roads r ON r.id = rs.road_id
-                WHERE r.import_area_id = :import_area_id
+                WITH area AS (
+                    SELECT bbox FROM import_areas WHERE id = :import_area_id
+                ),
+                segments AS (
+                    SELECT rs.geom
+                    FROM road_segments rs
+                    JOIN roads r ON r.id = rs.road_id
+                    WHERE r.import_area_id = :import_area_id
+                ),
+                near_roads AS (
+                    SELECT ST_Buffer(ST_Union(geom), :tolerance) AS geom FROM segments
+                ),
+                near_crossing_roads AS (
+                    SELECT ST_Buffer(ST_Union(segments.geom), :tolerance) AS geom
+                    FROM segments, area
+                    WHERE NOT ST_CoveredBy(segments.geom, area.bbox)
+                ),
+                faces AS (
+                    SELECT (ST_Dump(ST_Polygonize(ARRAY[ST_Node(ST_Union(geom))]))).geom AS geom
+                    FROM (SELECT geom FROM segments UNION ALL SELECT ST_ExteriorRing(bbox) FROM area) AS lines
+                ),
+                candidates AS (
+                    -- Faces come from roads and the box's ring, so any stretch of a face's
+                    -- exterior that isn't along a road is along the box: the face is clipped.
+                    SELECT faces.geom,
+                           ST_Length(ST_Difference(ST_ExteriorRing(faces.geom), near_roads.geom)) > :min_shared_length
+                               AS is_clipped
+                    FROM faces, area, near_roads
+                    WHERE ST_Within(ST_PointOnSurface(faces.geom), area.bbox)  -- faces outside the box aren't blocks
+                )
+                SELECT ST_AsText(candidates.geom) AS boundary_wkt, candidates.is_clipped
+                FROM candidates LEFT JOIN near_crossing_roads ON true
+                -- A clipped face is an edge block only where roads leave the box to close it.
+                -- Otherwise it's what's left of the box around loops that stay inside it or
+                -- merely touch its edge.
+                WHERE NOT candidates.is_clipped
+                   OR ST_Length(ST_Intersection(ST_ExteriorRing(candidates.geom), near_crossing_roads.geom))
+                          > :min_shared_length
                 """
             ),
-            {"import_area_id": str(import_area_id)},
+            {
+                "import_area_id": str(import_area_id),
+                "tolerance": _COLLINEAR_TOLERANCE_DEGREES,
+                "min_shared_length": _MIN_SHARED_LENGTH_DEGREES,
+            },
         ).fetchall()
 
         blocks: list[Block] = []
@@ -89,7 +133,18 @@ class BlockDerivationService:
                     .join(RoadModel, RoadModel.id == RoadSegmentModel.road_id)
                     .where(
                         RoadModel.import_area_id == import_area_id,
-                        func.ST_Covers(boundary_geom, RoadSegmentModel.geom),
+                        or_(
+                            func.ST_Covers(boundary_geom, RoadSegmentModel.geom),
+                            # A segment crossing the bounding box runs along a clipped
+                            # block's boundary without the block covering it.
+                            func.ST_Length(
+                                func.ST_Intersection(
+                                    RoadSegmentModel.geom,
+                                    func.ST_Buffer(func.ST_Boundary(boundary_geom), _COLLINEAR_TOLERANCE_DEGREES),
+                                )
+                            )
+                            > _MIN_SHARED_LENGTH_DEGREES,
+                        ),
                     )
                     .order_by(
                         func.ST_LineLocatePoint(
@@ -112,6 +167,7 @@ class BlockDerivationService:
                 buildable_area=buildable.geom,
                 buildable_area_square_meters=buildable.area_square_meters,
                 is_median=buildable.is_median,
+                is_clipped=row.is_clipped,
             )
             self.session.add(block_model)
             self.session.flush()
@@ -139,6 +195,7 @@ class BlockDerivationService:
                     buildable_area=geom_to_multipolygon(buildable.geom) if buildable.geom is not None else None,
                     buildable_area_square_meters=buildable.area_square_meters,
                     is_median=buildable.is_median,
+                    is_clipped=row.is_clipped,
                 )
             )
 

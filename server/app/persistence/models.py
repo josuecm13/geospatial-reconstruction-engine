@@ -211,6 +211,8 @@ class BlockModel(Base):
     buildable_area = Column(Geometry(geometry_type="MULTIPOLYGON", srid=4326), nullable=True)
     buildable_area_square_meters = Column(Float, nullable=False, server_default="0")
     is_median = Column(Boolean, nullable=False, server_default="false")
+    # True when part of the boundary is the import area's bounding box, not a road.
+    is_clipped = Column(Boolean, nullable=False, server_default="false")
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at = Column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
