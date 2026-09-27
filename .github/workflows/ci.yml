@@ -3,8 +3,10 @@ name: CI
 on:
   push:
     branches: [main]
+  # Any base branch, not just main: a milestone ships as a stack of PRs, each
+  # based on the previous issue's branch. A push to a PR's branch only fires
+  # pull_request, since push is limited to main, so nothing runs twice.
   pull_request:
-    branches: [main]
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
