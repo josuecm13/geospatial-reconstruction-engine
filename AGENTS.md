@@ -12,6 +12,8 @@ database today; possibly more once `client/` exists) rather than belonging to ei
   anything that touches persistence, ingestion, the graph, or routing.
 - `docs/schema.md` — the persistence schema design (ER diagrams, enums, constraints). Keep it in
   sync with the actual Alembic migrations; it's design intent, not generated from the DB.
+- `docs/client-features.md` — every API capability the client must surface, plus a UI brainstorm.
+  A PR that adds or changes an API capability updates its row there.
 - `MILESTONES.md` — the progressive delivery plan. Work is scoped to one milestone at a time;
   don't pull in a later milestone's concerns early just because the scaffolding exists.
 - `server/app/domain/` — framework-agnostic domain value objects and entities. No FastAPI,
