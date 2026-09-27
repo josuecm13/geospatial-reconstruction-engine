@@ -11,7 +11,9 @@ MIN_BUILDABLE_WIDTH_METERS = 5.0
 @dataclass(frozen=True)
 class Block:
     """`boundary` follows road centerlines; `buildable_area` is what's left once each
-    bounding road's half-width is removed, None when nothing is."""
+    bounding road's half-width is removed, None when nothing is. A clipped block is
+    closed by the import area's bounding box where roads leave it, so part of its
+    boundary has no road segment."""
 
     id: uuid.UUID | None
     import_area_id: uuid.UUID
@@ -21,3 +23,4 @@ class Block:
     buildable_area: MultiPolygon | None = None
     buildable_area_square_meters: float = 0.0
     is_median: bool = False
+    is_clipped: bool = False

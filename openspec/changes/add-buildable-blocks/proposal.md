@@ -14,10 +14,10 @@ attached to a block across re-imports, which Milestone 11's generated content ne
   minus each bounding road buffered by half that road's generated 7.1 width. A block whose
   buildable area can't fit `MIN_BUILDABLE_WIDTH_METERS` (5 m) anywhere is kept but flagged
   `is_median`.
-- **Edge blocks (#12)**: the bbox ring is polygonized together with the road segments. Faces
-  inside the bbox whose boundary runs partly along the ring become blocks flagged `is_clipped`.
-  A face whose outer boundary is entirely the bbox ring is not a block, and neither is any face
-  outside the bbox.
+- **Edge blocks (#12)**: the bbox ring is polygonized together with the road segments. A face
+  inside the bbox whose boundary runs partly along the ring becomes a block flagged `is_clipped`,
+  provided a road that crosses the bbox bounds it. Otherwise it's only what is left of the box
+  around loops that stay inside it. No face outside the bbox is a block.
 - **Stable block ids (#13)**: a block's id is `uuid5` of its import area and its sorted set of
   bounding segment ids. Blocks are still cleared and re-inserted on every import, but an unchanged
   block is re-inserted under the same id.

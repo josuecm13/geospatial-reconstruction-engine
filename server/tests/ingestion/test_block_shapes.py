@@ -1,4 +1,4 @@
-"""Milestone 7.2: blocks' buildable area and median flag, through a full import."""
+"""Milestone 7.2: blocks' buildable area, median and clipped flags, through a full import."""
 
 import json
 from pathlib import Path
@@ -37,6 +37,7 @@ def test_buildable_area_is_the_block_minus_its_bounding_roads_half_widths(db_ses
     assert block.buildable_area_square_meters < block.area_square_meters
     assert block.buildable_area_square_meters == pytest.approx(expected, rel=0.005)
     assert not block.is_median
+    assert not block.is_clipped
 
 
 # A divided road: two one-way carriageways 9 m apart, joined at both ends, above a
@@ -77,3 +78,52 @@ def test_a_divided_roads_median_is_flagged_and_a_real_block_is_not(db_session):
     assert 0 < median.buildable_area_square_meters < median.area_square_meters
     assert not block.is_median
     assert block.buildable_area_square_meters > 0
+
+
+# A "#" of two east-west and two north-south streets, each running past the bounding box on
+# both sides: one block closed by roads alone in the middle, and eight along the box's edge.
+_GRID_LATS, _GRID_LONS = (9.9601, 9.9604), (-84.0899, -84.0896)
+GRID_BBOX = BoundingBox(Coordinate(9.9600, -84.0900), Coordinate(9.9605, -84.0895))
+_OUTSIDE_SOUTH, _OUTSIDE_NORTH, _OUTSIDE_WEST, _OUTSIDE_EAST = 9.9598, 9.9607, -84.0902, -84.0893
+
+
+def _grid_payload() -> dict:
+    nodes: dict[int, tuple[float, float]] = {}
+    ways = []
+    crossings = {(i, j): 100 + 10 * i + j for i in range(2) for j in range(2)}
+    for (i, j), node_id in crossings.items():
+        nodes[node_id] = (_GRID_LATS[i], _GRID_LONS[j])
+    for i, lat in enumerate(_GRID_LATS):
+        west, east = 200 + i, 210 + i
+        nodes[west], nodes[east] = (lat, _OUTSIDE_WEST), (lat, _OUTSIDE_EAST)
+        ways.append((300 + i, [west, crossings[(i, 0)], crossings[(i, 1)], east]))
+    for j, lon in enumerate(_GRID_LONS):
+        south, north = 220 + j, 230 + j
+        nodes[south], nodes[north] = (_OUTSIDE_SOUTH, lon), (_OUTSIDE_NORTH, lon)
+        ways.append((310 + j, [south, crossings[(0, j)], crossings[(1, j)], north]))
+    return {
+        "elements": [{"type": "node", "id": n, "lat": lat, "lon": lon} for n, (lat, lon) in nodes.items()]
+        + [{"type": "way", "id": w, "nodes": refs, "tags": {"highway": "residential"}} for w, refs in ways]
+    }
+
+
+def test_roads_crossing_the_bounding_box_close_flagged_edge_blocks(db_session):
+    result = OSMIngestionService(db_session).import_fixture(GRID_BBOX, _grid_payload())
+
+    blocks = _blocks(db_session, result)
+
+    assert len(blocks) == 9
+    clipped = [block for block in blocks if block.is_clipped]
+    assert len(clipped) == 8
+    [middle] = [block for block in blocks if not block.is_clipped]
+    # The middle block is the grid's own square; every block lies inside the box.
+    assert len(middle.bounding_segment_ids) == 8
+    for block in blocks:
+        for point in block.boundary:
+            assert GRID_BBOX.min_corner.latitude - 1e-9 <= point.latitude <= GRID_BBOX.max_corner.latitude + 1e-9
+            assert GRID_BBOX.min_corner.longitude - 1e-9 <= point.longitude <= GRID_BBOX.max_corner.longitude + 1e-9
+    # A corner block is bounded by the two roads that leave the box there.
+    corner_segment_counts = sorted(len(block.bounding_segment_ids) for block in clipped)
+    assert corner_segment_counts == [4, 4, 4, 4, 6, 6, 6, 6]
+    for block in clipped:
+        assert 0 < block.buildable_area_square_meters < block.area_square_meters

@@ -30,11 +30,13 @@ stable across unchanged re-imports.
   Keeping the row keeps the topology and building links intact, and consumers filter on the flag.
   An empty buildable area is stored as `NULL`, with area 0.
 - **Edge blocks come from polygonizing the bbox ring together with the segments.** Faces are kept
-  only if they lie inside the bbox (`ST_PointOnSurface` within the bbox) and their exterior ring
-  isn't entirely bbox ring. The second condition drops the "bbox minus every loop" face, so an
-  area whose roads never cross the edge derives the same blocks as before. A kept face whose
-  boundary shares a line with the ring is `is_clipped`. Faces outside the bbox, formed by roads
-  that leave and re-enter it, are no longer blocks.
+  only if they lie inside the bbox (`ST_PointOnSurface` within the bbox). A face is clipped when
+  part of its exterior isn't along a road, which means that part is along the ring. A clipped
+  face is kept only if a road segment that crosses the bbox (not covered by it) runs along its
+  exterior. That drops what is left of the box around loops that stay inside it or merely touch
+  its edge, so an area whose roads never cross the edge derives the same blocks as before. Faces
+  outside the bbox, formed by roads that leave and re-enter it, are no longer blocks. "Along" is
+  tested within a ~0.1 mm buffer, because noding computes crossing points in floating point.
 - **Bounding segments of any block** are the segments the face covers, plus the segments that
   share a line with the face's boundary. The second group catches a segment that crosses the bbox
   edge and so extends past the face. The order is still by position along the exterior ring. On a
