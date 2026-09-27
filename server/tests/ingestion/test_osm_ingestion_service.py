@@ -6,7 +6,8 @@ import pytest
 from sqlalchemy import func, select
 
 from app.domain.bounding_box import BoundingBox, Coordinate
-from app.domain.enums import ImportStatus, RestrictionKind
+from app.domain.enums import ImportStatus, RestrictionKind, RoadClassification
+from app.domain.street_grouping import street_id_for
 from app.ingestion.osm_adapter import OSMIngestionError, PayloadOutsideBoundingBox
 from app.ingestion.service import OSMIngestionService
 from app.persistence.models import (
@@ -14,6 +15,7 @@ from app.persistence.models import (
     ImportAreaModel,
     RoadModel,
     RoadSegmentModel,
+    StreetModel,
     TurnMovementModel,
 )
 
@@ -296,3 +298,36 @@ def test_only_turn_restriction_keeps_target_and_prohibits_competing_turns(db_ses
     ).all()
     assert len(only_turns) == 3
     assert sum(movement.allowed for movement in only_turns) == 1
+
+
+GROUPED_FIXTURE = Path(__file__).parents[1] / "fixtures" / "osm_grouped_streets.json"
+
+
+def _grouped_bbox():
+    return BoundingBox(Coordinate(9.9488, -84.1002), Coordinate(9.9513, -84.0983))
+
+
+def test_ways_are_grouped_into_logical_streets_with_ids_stable_across_reimport(db_session):
+    payload = json.loads(GROUPED_FIXTURE.read_text())
+    service = OSMIngestionService(db_session)
+
+    area_id = service.import_fixture(_grouped_bbox(), payload).import_area.id
+    street_by_road = dict(db_session.execute(select(RoadModel.source_id, RoadModel.street_id)).all())
+    streets_before = {street.id: street for street in db_session.scalars(select(StreetModel)).all()}
+
+    # Main Street (three connected ways, names differing in case and spacing),
+    # Central Avenue (a divided road's two one-way carriageways), and two
+    # connected unnamed ways that stay separate.
+    assert len(streets_before) == 4
+    assert street_by_road["100"] == street_by_road["101"] == street_by_road["102"]
+    assert street_by_road["200"] == street_by_road["201"]
+    assert street_by_road["300"] != street_by_road["301"]
+    main = streets_before[street_by_road["100"]]
+    assert (main.name, main.classification) == ("Main Street", RoadClassification.TERTIARY)
+    # Deterministic, not just stable: derived from the area and the grouped ways.
+    assert main.id == street_id_for(area_id, "100+101+102")
+
+    service.import_fixture(_grouped_bbox(), payload)
+
+    assert set(db_session.scalars(select(StreetModel.id)).all()) == set(streets_before)
+    assert dict(db_session.execute(select(RoadModel.source_id, RoadModel.street_id)).all()) == street_by_road

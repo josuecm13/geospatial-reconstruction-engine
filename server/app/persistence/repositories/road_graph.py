@@ -22,6 +22,7 @@ class StreetRepository:
 
         if model is None:
             model = StreetModel(
+                id=street.id,
                 import_area_id=street.import_area_id,
                 source_id=street.source_id,
                 name=street.name,

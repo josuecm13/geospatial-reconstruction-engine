@@ -47,10 +47,10 @@ class RoadSegment:
 
 @dataclass(frozen=True)
 class RoadSegmentWithStreet:
-    """A road segment paired with its street's name/classification, as values —
-    no street id: a street is one OSM way today (Milestone 7.1 groups ways into
-    logical streets), so publishing a street identifier now would be a contract
-    that breaks."""
+    """A road segment paired with its street's name/classification, as values,
+    and its road's own classification (a logical street can group roads of
+    different classes). The street id is deterministic now that streets group
+    ways, but it is not part of the map-data contract yet."""
 
     segment: RoadSegment
     street_name: str | None
