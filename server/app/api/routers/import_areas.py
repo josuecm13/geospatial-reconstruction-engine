@@ -21,6 +21,7 @@ from app.api.mappers import (
 )
 from app.api.schemas import ImportAreaCreate, ImportAreaOut, MapDataOut
 from app.domain.bounding_box import BoundingBox, Coordinate
+from app.domain.cross_section import cross_sections_by_segment
 from app.domain.import_area import ImportArea
 from app.ingestion.service import OSMIngestionService
 from app.persistence.repositories.area_feature import AreaFeatureRepository
@@ -65,6 +66,7 @@ def get_map_data(
     area: ImportArea = Depends(completed_import_area), session: Session = Depends(get_session)
 ) -> MapDataOut:
     segments = RoadSegmentRepository(session).list_for_import_area_with_street(area.id)
+    cross_sections = cross_sections_by_segment(segments)
     nodes = NavigableNodeRepository(session).list_for_import_area(area.id)
     blocks = BlockRepository(session).list_for_import_area(area.id)
     buildings = BuildingRepository(session).list_for_import_area(area.id)
@@ -72,7 +74,9 @@ def get_map_data(
     area_features = AreaFeatureRepository(session).list_for_import_area(area.id)
 
     return MapDataOut(
-        road_segments=feature_collection([segment_feature(entry) for entry in segments]),
+        road_segments=feature_collection(
+            [segment_feature(entry, cross_sections[entry.segment.id]) for entry in segments]
+        ),
         navigable_nodes=feature_collection([node_feature(node) for node in nodes]),
         blocks=feature_collection([block_feature(block) for block in blocks]),
         buildings=feature_collection([building_feature(building) for building in buildings]),

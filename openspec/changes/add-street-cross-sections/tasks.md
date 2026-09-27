@@ -7,9 +7,9 @@
 
 ## 2. Visible provenance (#10)
 
-- [ ] 2.1 Map-data road segments carry generated `lane_count`, `lane_type`, `width_meters`, `lane_count_provenance`, and raw `source_lane_count`
-- [ ] 2.2 API test over `osm_neighborhood.json`: defaulted counts, lane type, width, and raw value still null; mutation-check the raw-value guard
-- [ ] 2.3 Replace "a missing lane value is unknown" in `docs/architecture.md` and `docs/schema.md`
+- [x] 2.1 Map-data road segments carry generated `lane_count`, `lane_type`, `width_meters`, `lane_count_provenance`, and raw `source_lane_count`
+- [x] 2.2 API test over `osm_neighborhood.json`: defaulted counts, lane type, width, and raw value still null; mutation-check the raw-value guard
+- [x] 2.3 Replace "a missing lane value is unknown" in `docs/architecture.md` and `docs/schema.md`
 
 ## 3. Logical streets (#8)
 
