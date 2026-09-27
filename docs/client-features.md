@@ -33,7 +33,7 @@ beyond parity.
 | Logical street id on segments | planned (#35) | — | Needed to select or highlight a whole street |
 | Navigable nodes | shipped | — | Usually hidden. Useful in a debug layer |
 | Blocks: boundary polygon, `area_square_meters` | shipped | — | |
-| Blocks: buildable area, `is_median`, `is_clipped`, stable id | domain only, not in the API | — | Computed and persisted since M7.2, but `block_feature` exposes only `area_square_meters` |
+| Blocks: buildable area, `is_median`, `is_clipped` | planned (#50) | — | Computed and persisted since M7.2, but `block_feature` exposes only `area_square_meters` |
 | Buildings: footprint, `category`, `block_id` | shipped | — | Footprints only, with no height until M10 |
 | POIs: point, `category`, `name` | shipped | — | |
 | Area features: polygon, `kind` | shipped | — | |
@@ -58,15 +58,15 @@ beyond parity.
 | Snap info: origin and destination node, and snap distance | `POST …/routes` | shipped | — | Show the snap offset. Warn when it's large |
 | Turn restrictions honored | shipped (implicit) | — | Explain a detour ("no left turn here") |
 
-### Traced boundaries and export (Milestone 8, planned: issues being drafted under #21)
+### Traced boundaries and export (Milestone 8, #21)
 
 | Capability | API status | Client | Client notes |
 |---|---|---|---|
-| Create / list / fetch / delete named traced boundaries within the import rectangle | planned | — | Tracing tool (by vertices or freehand). Show the validation reason on rejection |
-| Scope `nearby` / `within-bbox` / `nearest` to a boundary | planned | — | A global "scope" selector: import area or one boundary |
-| Export a scope in filter mode (whole entities, routable) | planned | — | |
-| Export a scope in clip mode (cut at the edge, render-only) | planned | — | Label clip mode as "not routable" |
-| Local projection metadata (origin plus meters per degree) | planned | — | For a Cartesian or 3D renderer (Three.js) |
+| Create / list / fetch / delete named traced boundaries within the import rectangle | planned (#47, #48) | — | Tracing tool (by vertices or freehand). Show the validation reason on rejection |
+| Scope `nearby` / `within-bbox` / `nearest` to a boundary | planned (#49) | — | A global "scope" selector: import area or one boundary |
+| Export a scope in filter mode (whole entities, routable) | planned (#50) | — | |
+| Export a scope in clip mode (cut at the edge, render-only) | planned (#51) | — | Label clip mode as "not routable" |
+| Local projection metadata (scope centroid as origin, plus meters per degree) | planned (#50) | — | For a Cartesian or 3D renderer (Three.js) |
 
 ### Later milestones (planned)
 
