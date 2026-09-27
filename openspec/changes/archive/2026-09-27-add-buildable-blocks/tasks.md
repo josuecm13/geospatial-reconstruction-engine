@@ -13,7 +13,7 @@
 
 ## 3. Stable block ids (#13)
 
-- [ ] 3.1 `app/domain/block_identity.py`: `block_id_for(import_area_id, segment_ids)`, with purity test and table-driven tests
-- [ ] 3.2 Derivation inserts blocks under their deterministic id
-- [ ] 3.3 Tests: unchanged re-import keeps every block id; changing one road changes only the ids of the blocks it bounds; mutation-check
-- [ ] 3.4 Update `docs/schema.md`, `docs/architecture.md`, and `MILESTONES.md` status for 7.2
+- [x] 3.1 `app/domain/block_identity.py`: `block_id_for(import_area_id, segment_ids)`, with purity test and table-driven tests
+- [x] 3.2 Derivation inserts blocks under their deterministic id
+- [x] 3.3 Tests: unchanged re-import keeps every block id; changing one road changes only the ids of the blocks it bounds; mutation-check
+- [x] 3.4 Update `docs/schema.md`, `docs/architecture.md`, and `MILESTONES.md` status for 7.2

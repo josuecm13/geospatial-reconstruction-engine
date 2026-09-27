@@ -141,7 +141,7 @@ erDiagram
     IMPORT_AREAS ||--o{ AREA_FEATURES : contains
 
     BLOCKS {
-        uuid id PK
+        uuid id PK "uuid5 of area + bounding-segment set"
         uuid import_area_id FK
         geometry boundary "Polygon,4326, derived"
         double area_square_meters "derived"
@@ -243,5 +243,9 @@ transaction, after the import reconciles its road segments and before the area i
 `completed` — not as a separate explicit step. `completed` therefore always implies "blocks are
 current". Re-deriving replaces an area's blocks rather than appending to them: an import clears the
 area's existing blocks and building links (`BlockDerivationService.clear_for_import_area`) before
-deriving afresh. See `openspec/changes/add-application-api/design.md` Decision 1 for the full
-ordering and rationale.
+deriving afresh. Since Milestone 7.2, a block's id is a uuid5 of its import area and its set of
+bounding segment ids (`app/domain/block_identity.py`). Segment ids survive an unchanged
+re-import, so a re-derived block with the same bounding segments comes back under the same id,
+and a changed road changes only the ids of the blocks it bounds. Only `created_at` resets.
+See `openspec/changes/add-application-api/design.md` Decision 1 for the full ordering and
+rationale.

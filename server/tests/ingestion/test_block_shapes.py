@@ -1,15 +1,17 @@
-"""Milestone 7.2: blocks' buildable area, median and clipped flags, through a full import."""
+"""Milestone 7.2: blocks' buildable area, median and clipped flags, and stable ids, through a full import."""
 
 import json
 from pathlib import Path
 
 import pytest
+from sqlalchemy import select
 
 from app.domain.bounding_box import BoundingBox, Coordinate
 from app.domain.cross_section import LANE_WIDTH_METERS, DEFAULT_LANES_PER_STREET
 from app.domain.enums import LaneType
 from app.domain.geometry import linestring_length_meters
 from app.ingestion.service import OSMIngestionService
+from app.persistence.models import RoadModel, RoadSegmentModel
 from app.persistence.repositories.block import BlockRepository
 
 LOOP_FIXTURE = Path(__file__).parents[1] / "fixtures" / "osm_block_loop.json"
@@ -127,3 +129,43 @@ def test_roads_crossing_the_bounding_box_close_flagged_edge_blocks(db_session):
     assert corner_segment_counts == [4, 4, 4, 4, 6, 6, 6, 6]
     for block in clipped:
         assert 0 < block.buildable_area_square_meters < block.area_square_meters
+
+
+def _block_ids(db_session, result) -> set:
+    return {block.id for block in _blocks(db_session, result)}
+
+
+def test_reimporting_an_unchanged_payload_keeps_every_block_id(db_session):
+    service = OSMIngestionService(db_session)
+    first = _block_ids(db_session, service.import_fixture(GRID_BBOX, _grid_payload()))
+
+    second = _block_ids(db_session, service.import_fixture(GRID_BBOX, _grid_payload()))
+
+    assert len(first) == 9
+    assert second == first
+
+
+def test_changing_one_road_changes_only_the_ids_of_the_blocks_it_bounds(db_session):
+    service = OSMIngestionService(db_session)
+    first_result = service.import_fixture(GRID_BBOX, _grid_payload())
+    before = _blocks(db_session, first_result)
+    road_310_segment_ids = set(
+        db_session.scalars(
+            select(RoadSegmentModel.id)
+            .join(RoadModel, RoadModel.id == RoadSegmentModel.road_id)
+            .where(RoadModel.import_area_id == first_result.import_area.id, RoadModel.source_id == "310")
+        )
+    )
+    bounded_by_310 = {block.id for block in before if road_310_segment_ids & set(block.bounding_segment_ids)}
+    elsewhere = {block.id for block in before} - bounded_by_310
+
+    # Road 310 now starts from a different node south of the box, so its southern segment changes.
+    changed = _grid_payload()
+    changed["elements"].append({"type": "node", "id": 999, "lat": _OUTSIDE_SOUTH, "lon": _GRID_LONS[0] - 0.00005})
+    [road_310] = [element for element in changed["elements"] if element["type"] == "way" and element["id"] == 310]
+    road_310["nodes"][0] = 999
+    after = _block_ids(db_session, service.import_fixture(GRID_BBOX, changed))
+
+    assert elsewhere and elsewhere <= after
+    renamed = {block.id for block in before} - after
+    assert renamed and renamed <= bounded_by_310
