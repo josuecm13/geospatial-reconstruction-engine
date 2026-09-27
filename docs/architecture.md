@@ -30,6 +30,7 @@ The OSM adapter owns Overpass/API requests and tag interpretation. It produces a
 | `Building` | Classified polygon footprint, source identity, and the block that contains it, if any. |
 | `PointOfInterest` | Categorized named/unnamed point or representative location. |
 | `AreaFeature` | An extension point for parks now and natural features later. |
+| `TracedBoundary` | A named, non-rectangular polygon over an import area that narrows it for queries and exports without changing anything imported. Several can coexist over one area. |
 | `Route` | Origin/destination, ordered nodes and segments, total distance, and cost. |
 
 ## Database model
@@ -49,6 +50,7 @@ PostgreSQL with PostGIS is the only persistence requirement. A future runtime sh
 | `buildings` | UUID, import ID, block ID (nullable), provider/source ID, category, polygon geometry, metadata |
 | `points_of_interest` | UUID, import ID, provider/source ID, category, name, point geometry, metadata |
 | `area_features` | UUID, import ID, provider/source ID, kind, polygon geometry, metadata |
+| `traced_boundaries` | UUID, import ID, name (unique per import), polygon geometry (valid, simple, covered by the import's bbox) |
 
 Use GiST indexes on spatial columns, foreign keys for graph relationships, and unique constraints on `(provider, source_id, import_area_id)` where a source ID is only unique within an import. Lane counts are stored as structured values on each directed segment: total lanes where known, plus forward and backward counts when available. A missing lane value is defaulted, visibly: the stored value records only what the source stated (null when it is silent), and the cross-section read from it is generated — tagged lanes win, otherwise two lanes per street (1 + 1 two-way, both forward one-way), a lane type (`narrow`/`normal`/`wide`) by road classification, and a carriageway width of lane count × lane-type width — with each lane count marked `tagged` or `defaulted`. The cross-section is computed on read (`app/domain/cross_section.py`), never stored. `road_segments` are the canonical graph edges, so their explicit direction prevents routing from inferring semantics from a raw line. `turn_movements` are constrained so their incoming segment ends at the intersection node and their outgoing segment starts there.
 

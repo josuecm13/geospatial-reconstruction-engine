@@ -9,6 +9,7 @@ from app.persistence.repositories.road_graph import (
     RoadSegmentRepository,
     StreetRepository,
 )
+from app.persistence.repositories.traced_boundary import TracedBoundaryRepository
 from app.persistence.repositories.turn_movement import TurnMovementRepository
 
 __all__ = [
@@ -21,5 +22,6 @@ __all__ = [
     "RoadRepository",
     "RoadSegmentRepository",
     "StreetRepository",
+    "TracedBoundaryRepository",
     "TurnMovementRepository",
 ]

@@ -293,3 +293,24 @@ class AreaFeatureModel(Base):
             "import_area_id", "source_id", name="uq_area_features_import_area_source"
         ),
     )
+
+
+class TracedBoundaryModel(Base):
+    __tablename__ = "traced_boundaries"
+
+    id = uuid_pk()
+    import_area_id = Column(
+        UUID(as_uuid=True), ForeignKey("import_areas.id"), nullable=False, index=True
+    )
+    name = Column(String, nullable=False)
+    # Valid, simple, and covered by the import area's bbox: a CHECK constraint and a
+    # trigger enforce it in the database (migration 202609280001).
+    geom = Column(Geometry(geometry_type="POLYGON", srid=4326), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint("import_area_id", "name", name="uq_traced_boundaries_import_area_name"),
+    )
