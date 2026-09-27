@@ -11,7 +11,8 @@ File an issue following AGENTS.md → "Backlog and issues" → "Issue format".
 Prefix every `gh` call with `GH_TOKEN=$(gh auth token --user josuecm13)`.
 
 **Input**: a description of the problem or work after `/issues:new`. With no input, use the
-findings logged earlier in this session that haven't been filed yet.
+findings logged earlier in this session that haven't been filed yet, starting with the
+`Tangents` section of `.claude/run/ledger.md` when a run is in progress.
 
 1. **Check for duplicates.** `gh issue list --state all --search "<keywords>"`. If an issue
    already covers it, show it and offer to comment there instead.
