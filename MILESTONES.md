@@ -304,7 +304,7 @@ Notes:
 
 ## Milestone 7.1 — Street cross-sections (generated lanes and width)
 
-Status: **implemented, in review** (PRs #31, #32, #33; sequenced before Milestone 8)
+Status: **complete**
 
 The project builds its own representation of a map, and OSM is a source of hints rather than
 the truth to reproduce. Lanes and street width are therefore **generated**, not captured. OSM
@@ -343,6 +343,32 @@ Notes:
   permissions" still holds.
 - Depends on the lane-count split fix (resolved in PR #3), since a tagged `lanes` value is
   the generator's only hint.
+
+Completion:
+
+1. Change: `openspec/changes/archive/2026-09-27-add-street-cross-sections/`, which adds the
+   `street-cross-sections` spec and extends the `import-area-api` map-data requirement. Issues #9,
+   #10, and #8 shipped in PRs #31, #32, and #33, tracked by #25.
+2. Verification: `pytest -q` from `server/` against live PostGIS (179 passed, up from 144),
+   `openspec validate --all --strict` (valid), a manual `uvicorn` import of `osm_neighborhood.json`
+   with map-data read by curl, and mutation checks on every new guard (domain purity for both new
+   modules, exhaustive lane-type mapping, raw `source_lane_count` staying null, deterministic street
+   ids, divided-road pairing).
+3. Decisions: recorded in the change's `design.md`. They cover these points:
+   - Lane widths are narrow 2.75 m, normal 3.25 m, and wide 3.65 m.
+   - A tagged direction keeps its tag. An untagged direction defaults to 1 on a two-way road, and
+     to 2 forward and 0 back on a one-way road.
+   - One-way is inferred on read from the absence of a reverse twin segment on the same road.
+   - The cross-section uses the road's own classification, not its street's.
+   - On map-data, `lane_count` is now the generated value. The raw value is `source_lane_count`,
+     alongside `lane_count_provenance`, `lane_type`, and `width_meters`.
+   - Streets are grouped by name plus connectivity, and a divided road's one-way carriageways are
+     paired when their headings are ≥ 135° apart and they are within 30 m.
+   - A street's `source_id` is its group key, and its id is a uuid5 of the area and that key, so
+     no migration is needed. Existing per-way street rows are replaced on the first re-import.
+4. Deferred: exposing the logical street id on map-data, and the generated cross-section on
+   `nearest_segment` (drafted on #25, not yet filed). The test suite also shares the dev database
+   and assumes it is empty (drafted on #25 as a `[test]` bug).
 
 ## Milestone 7.2 — Buildable blocks
 

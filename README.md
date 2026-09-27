@@ -21,7 +21,7 @@ The architecture is recorded in [docs/architecture.md](docs/architecture.md), an
 
 ## Status
 
-Milestones 0–7 are complete: persistence, OSM fixture ingestion with block derivation and reconciling re-import, spatial queries, road graph, routing, and an HTTP API in front of all of it. Next up are street cross-sections (7.1) and buildable blocks (7.2). See [HOW_TO_RUN.md](HOW_TO_RUN.md) to try it.
+Milestones 0–7.1 are complete: persistence, OSM fixture ingestion with block derivation and reconciling re-import, spatial queries, road graph, routing, an HTTP API in front of all of it, and logical streets with generated cross-sections. Next up are buildable blocks (7.2). See [HOW_TO_RUN.md](HOW_TO_RUN.md) to try it.
 
 ## Backlog
 
