@@ -23,5 +23,8 @@ Prefix every `gh` call with `GH_TOKEN=$(gh auth token --user josuecm13)`.
    - From `main` by default.
    - Stacked on another issue's branch **only** when GitHub records a "blocked by" between them;
      the PR's base is then the blocker's branch.
-   - Overlapping files are not a reason to stack — order the work instead.
+   - The milestone's OpenSpec change lands with the first issue's PR, so any later issue that
+     edits the change's artifacts (ticking its tasks, its specs) stacks on the branch that
+     introduces it. In practice a milestone's issues form one linear stack in plan order.
+   - Overlapping *code* alone is not a reason to stack — order the work instead.
    Write the layout and the change name into the ledger `Plan`.
