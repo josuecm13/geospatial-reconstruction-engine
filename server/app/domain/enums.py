@@ -19,6 +19,17 @@ class RoadClassification(str, enum.Enum):
     UNCLASSIFIED = "unclassified"
 
 
+class LaneType(str, enum.Enum):
+    NARROW = "narrow"
+    NORMAL = "normal"
+    WIDE = "wide"
+
+
+class LaneCountProvenance(str, enum.Enum):
+    TAGGED = "tagged"
+    DEFAULTED = "defaulted"
+
+
 class BuildingCategory(str, enum.Enum):
     RESIDENTIAL = "residential"
     COMMERCIAL = "commercial"

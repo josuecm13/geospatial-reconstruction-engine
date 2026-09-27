@@ -264,7 +264,7 @@ def test_road_segment_list_with_street_reports_name_and_classification(db_sessio
     from app.persistence.models import RoadModel
 
     street = StreetRepository(db_session).upsert(
-        Street(id=None, import_area_id=import_area_id, source_id="way/named", name="Named Ave", classification=RoadClassification.PRIMARY)
+        Street(id=None, import_area_id=import_area_id, source_id="way/named", name="Named Ave", classification=RoadClassification.SECONDARY)
     )
     db_session.execute(
         RoadModel.__table__.update().where(RoadModel.id == road.id).values(street_id=street.id)
@@ -274,4 +274,7 @@ def test_road_segment_list_with_street_reports_name_and_classification(db_sessio
 
     assert len(segments) == 1
     assert segments[0].street_name == "Named Ave"
-    assert segments[0].street_classification == RoadClassification.PRIMARY
+    # The street's and the road's own classification are reported separately:
+    # a logical street can group roads of different classes.
+    assert segments[0].street_classification == RoadClassification.SECONDARY
+    assert segments[0].road_classification == RoadClassification.PRIMARY
