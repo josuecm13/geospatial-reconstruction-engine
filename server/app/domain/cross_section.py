@@ -12,7 +12,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 from app.domain.enums import LaneCountProvenance, LaneType, RoadClassification
-from app.domain.road_graph import RoadSegmentWithStreet
+from app.domain.road_graph import RoadSegment, RoadSegmentWithStreet
 
 # Carriageway width of one lane, in meters.
 LANE_WIDTH_METERS: dict[LaneType, float] = {
@@ -100,7 +100,14 @@ def cross_section_for_road(
 
 
 def cross_sections_by_segment(entries: Iterable[RoadSegmentWithStreet]) -> dict[uuid.UUID, SegmentCrossSection]:
-    """Cross-section per segment id, from an import area's directed segments.
+    """Cross-section per segment id, from an import area's directed segments."""
+    return cross_sections_by_classified_segment((entry.segment, entry.road_classification) for entry in entries)
+
+
+def cross_sections_by_classified_segment(
+    entries: Iterable[tuple[RoadSegment, RoadClassification]],
+) -> dict[uuid.UUID, SegmentCrossSection]:
+    """Cross-section per segment id, from an import area's directed segments and their roads' classifications.
 
     Ingestion emits a reverse twin (same road, endpoints swapped) for every
     piece of a two-way road and none for a one-way road, so a segment without
@@ -108,15 +115,13 @@ def cross_sections_by_segment(entries: Iterable[RoadSegmentWithStreet]) -> dict[
     """
     entries = list(entries)
     by_direction = {
-        (entry.segment.road_id, entry.segment.from_node_id, entry.segment.to_node_id): entry.segment
-        for entry in entries
+        (segment.road_id, segment.from_node_id, segment.to_node_id): segment for segment, _ in entries
     }
     result: dict[uuid.UUID, SegmentCrossSection] = {}
-    for entry in entries:
-        segment = entry.segment
+    for segment, classification in entries:
         twin = by_direction.get((segment.road_id, segment.to_node_id, segment.from_node_id))
         road = cross_section_for_road(
-            entry.road_classification,
+            classification,
             forward_lanes=segment.lane_count,
             backward_lanes=twin.lane_count if twin else None,
             is_one_way=twin is None,

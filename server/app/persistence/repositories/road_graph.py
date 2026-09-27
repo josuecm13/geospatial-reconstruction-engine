@@ -196,6 +196,17 @@ class RoadSegmentRepository:
             for segment_model, street_name, street_classification, road_classification in rows
         ]
 
+    def list_for_import_area_with_road_classification(
+        self, import_area_id
+    ) -> list[tuple[RoadSegment, RoadClassification]]:
+        """Every segment of the area with its road's classification, whether or not the road has a street."""
+        rows = self.session.execute(
+            select(RoadSegmentModel, RoadModel.classification)
+            .join(RoadModel, RoadSegmentModel.road_id == RoadModel.id)
+            .where(RoadModel.import_area_id == import_area_id)
+        ).all()
+        return [(self._to_domain(model), RoadClassification(classification)) for model, classification in rows]
+
     @staticmethod
     def _to_domain(model: RoadSegmentModel) -> RoadSegment:
         return RoadSegment(

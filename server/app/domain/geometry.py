@@ -5,6 +5,7 @@ from app.domain.enums import MovementKind
 
 LineString = tuple[Coordinate, ...]
 Polygon = tuple[Coordinate, ...]
+MultiPolygon = tuple[Polygon, ...]
 
 EARTH_RADIUS_METERS = 6_371_000.0
 
