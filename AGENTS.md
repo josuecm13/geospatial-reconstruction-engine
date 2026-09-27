@@ -73,12 +73,39 @@ GitHub Issues are the backlog, and they are part of every change — not bookkee
 `GH_TOKEN=$(gh auth token --user josuecm13)` (see `../AGENTS.md`). The `/issues:next`,
 `/issues:new`, and `/issues:validate` commands in `.claude/commands/issues/` run the steps below.
 
+### How the order is recorded
+
+The pick order lives in GitHub, not in anyone's head, so every agent picks the same issue:
+
+- **Milestone order**: GitHub milestone titles start with the roadmap number, compared as version
+  numbers (7.1 < 7.2 < 8 < 9 < 10 < 11). The current milestone is the lowest one with open issues.
+- **Order within a milestone**: each milestone has one tracking issue (`[milestone] … (tracking)`).
+  Its **sub-issues, in order, are the plan**. Reorder them in the GitHub UI to change the plan.
+- **Dependencies**: GitHub's native "blocked by" relationship, for real prerequisites only
+  (e.g. buildable area needs street widths), including across milestones.
+- **Labels**: `in-progress` marks an issue that's been started; `priority:urgent` marks one that
+  jumps the queue (e.g. data loss).
+
+### Picking the next issue
+
+Take the first match:
+
+1. **Resume**: an open issue labeled `in-progress`, or with an open PR or an existing
+   `*/<n>-*` branch.
+2. **Urgent**: an open issue labeled `priority:urgent`, in any milestone.
+3. **Plan**: in the current milestone's tracking issue, the first open sub-issue whose blockers are
+   all closed. Tracking issues themselves are never picked.
+4. **Housekeeping**: issues with no milestone are picked only when labeled urgent, when the user
+   asks, or when the current milestone has nothing unblocked.
+
+If nothing matches, say so rather than guessing. Always state the pick and the rule that chose it;
+the user can override.
+
 ### The cycle
 
-1. **Pick.** Before starting work, check the open issues for the current milestone
-   (`gh issue list --milestone "<title>"`) and work from one. If the work has no issue, file one
-   first. A milestone's tracking issue is split into one issue per deliverable when the milestone
-   starts.
+1. **Pick** by the rule above. If the work has no issue, file one first. When a milestone starts,
+   split its deliverables into one issue each and add them as sub-issues of its tracking issue.
+   Add `in-progress` when starting, and remove it if the work is abandoned.
 2. **Validate.** An issue is a claim about the code at the time it was written. Before planning on
    it, re-check its load-bearing claims (file/line references, "X is missing", "Y fails") against
    the current source. If it's already fixed, close it with a comment saying where; if it's
@@ -89,10 +116,12 @@ GitHub Issues are the backlog, and they are part of every change — not bookkee
    related, is mentioned in a comment on the current one. Never let a finding silently disappear:
    if it isn't worth an issue, say so explicitly.
 5. **File.** New issues use the format below. Agents draft the issue (title, labels, milestone,
-   body) and create it once the user confirms; the user may waive confirmation for a session.
+   body, where it goes in the milestone's sub-issue order, and any blockers) and create it once
+   the user confirms; the user may waive confirmation for a session. An issue with a milestone is
+   always added as a sub-issue of that milestone's tracking issue.
 6. **Close.** The PR description carries `Fixes #<n>` for each issue it resolves, so merging
-   closes them. When a milestone's last issue closes, update that milestone's status and
-   completion note in `MILESTONES.md` and close the GitHub milestone.
+   closes them. When a milestone's last sub-issue closes, close its tracking issue and the GitHub
+   milestone, and update that milestone's status and completion note in `MILESTONES.md`.
 
 ### Issue format
 

@@ -23,8 +23,17 @@ findings logged earlier in this session that haven't been filed yet.
    - A milestone: the GitHub milestone whose `MILESTONES.md` scope it belongs to, or none for
      housekeeping. Say why.
    - A body with the problem paragraph, `### Acceptance criteria`, and `### Reference`.
+   - Its place in the plan: which sub-issue of the milestone's tracking issue it goes after, and
+     any real blockers ("blocked by #n"), including in other milestones. Also say if it blocks an
+     existing issue. Suggest `priority:urgent` only for things like data loss or a broken `main`.
 4. **Show the draft** and create it only after the user confirms (unless they've waived
    confirmation for this session):
    `gh issue create --title ... --label ... --milestone ... --body ...`
-5. **Link it.** If it was found while working another issue, comment on that issue with a link.
+5. **Place it.** With a milestone, add it as a sub-issue of that milestone's tracking issue
+   (`gh api -X POST repos/{owner}/{repo}/issues/<tracking>/sub_issues -F sub_issue_id=<issue id>`),
+   and move it to its agreed position
+   (`gh api -X PATCH repos/{owner}/{repo}/issues/<tracking>/sub_issues/priority -F sub_issue_id=<id> -F after_id=<id>`).
+   Add each blocker (`gh api -X POST repos/{owner}/{repo}/issues/<n>/dependencies/blocked_by -F issue_id=<blocker id>`).
+   These endpoints take the issue's `id`, not its number (`gh api repos/{owner}/{repo}/issues/<n> --jq .id`).
+6. **Link it.** If it was found while working another issue, comment on that issue with a link.
    Report the new issue number and URL.

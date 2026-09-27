@@ -30,5 +30,12 @@ For each issue in scope (`gh issue view <n> --comments`):
 Then apply the proposed actions (comments, closes with a reason, relabels, milestone moves) only
 after the user confirms. Never close an issue on a claim you haven't confirmed in the source.
 
-Also check milestone state: if a GitHub milestone has no open issues left, flag that its
-`MILESTONES.md` status and completion note need updating.
+Also check the plan's structure:
+
+- Every milestoned, non-tracking issue is a sub-issue of its milestone's tracking issue, and each
+  milestone has exactly one tracking issue.
+- Blockers still make sense: flag closed blockers that no longer matter and dependencies the
+  issue text mentions but GitHub doesn't record.
+- `in-progress` labels are live: flag any with no branch, PR, or activity in the last 14 days.
+- If a milestone has no open sub-issues left, flag that its tracking issue, GitHub milestone, and
+  `MILESTONES.md` status and completion note need closing out.
