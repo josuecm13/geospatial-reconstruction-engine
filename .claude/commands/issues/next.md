@@ -41,4 +41,5 @@ Prefix every `gh` call with `GH_TOKEN=$(gh auth token --user josuecm13)`.
    whether an OpenSpec change is warranted (milestone deliverables and large issues: yes; small
    fixes: no).
 
-Don't start implementing until the user confirms the plan.
+Don't start implementing until the user confirms the plan. Inside `/run:start`, skip this stop:
+the run is the confirmation.

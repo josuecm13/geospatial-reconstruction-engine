@@ -1,0 +1,27 @@
+---
+name: "Run: Milestone"
+description: "Kick off a milestone: its issues, one OpenSpec change, and the branch layout"
+allowed-tools: Bash(gh:*), Bash(git:*), Bash(openspec:*)
+category: "Workflow"
+tags: ["workflow", "milestone", "openspec"]
+---
+
+Start a milestone per AGENTS.md → "The cycle", step 1.
+
+Prefix every `gh` call with `GH_TOKEN=$(gh auth token --user josuecm13)`.
+
+**Input**: the tracking issue number, or the milestone title.
+
+1. **Issues.** Read the milestone's section of `MILESTONES.md` and the tracking issue's
+   sub-issues. For any deliverable without an issue, draft one with `/issues:new`. Create it only
+   if the run authorizes filing; otherwise put the draft under the ledger's `Tangents`.
+2. **One OpenSpec change** for the whole milestone via `openspec-propose` — not one per issue. The
+   design records the decisions the issues leave open; tasks are grouped under a heading per issue
+   number so `/run:ship` can tick one issue's tasks at a time. Comment the change path on the
+   tracking issue.
+3. **Branch layout.** One branch per issue, `<type>/<n>-<slug>`.
+   - From `main` by default.
+   - Stacked on another issue's branch **only** when GitHub records a "blocked by" between them;
+     the PR's base is then the blocker's branch.
+   - Overlapping files are not a reason to stack — order the work instead.
+   Write the layout and the change name into the ledger `Plan`.

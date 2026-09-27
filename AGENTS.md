@@ -71,7 +71,9 @@ GitHub Issues are the backlog, and they are part of every change — not bookkee
 
 `gh` must run as the personal account: prefix every call with
 `GH_TOKEN=$(gh auth token --user josuecm13)` (see `../AGENTS.md`). The `/issues:next`,
-`/issues:new`, and `/issues:validate` commands in `.claude/commands/issues/` run the steps below.
+`/issues:new`, and `/issues:validate` commands in `.claude/commands/issues/` run the steps below;
+the `/run:*` commands in `.claude/commands/run/` chain them into an autonomous run over several
+issues, with its state in the gitignored `.claude/run/ledger.md`.
 
 ### How the order is recorded
 

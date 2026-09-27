@@ -16,3 +16,6 @@ __pycache__/
 .DS_Store
 .idea/
 .vscode/
+
+# Autonomous-run state (/run:* commands)
+.claude/run/
