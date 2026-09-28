@@ -501,7 +501,7 @@ Completion:
 
 1. Change: `openspec/changes/archive/2026-09-27-add-traced-import-boundaries/`, which adds the
    `traced-boundaries` spec and extends `spatial-queries`, `spatial-query-api`, and
-   `import-area-api`. Issues #47–#51 shipped in PRs #53, #56, #57, #58, and the #51 PR, tracked by
+   `import-area-api`. Issues #47–#51 shipped in PRs #53, #56, #57, #58, and #59, tracked by
    #21. It is the first change on the project's `milestone-driven` OpenSpec schema (#54, PR #55).
 2. Verification: `pytest -q` from `server/` against live PostGIS (257 passed, up from 190),
    `openspec validate --all --strict` (valid), the new migration round-tripped, and mutation
