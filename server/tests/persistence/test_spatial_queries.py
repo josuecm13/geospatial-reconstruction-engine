@@ -19,7 +19,13 @@ from app.persistence.repositories.road_graph import (
     RoadRepository,
     RoadSegmentRepository,
 )
-from app.persistence.spatial_queries import InvalidSpatialQuery, SpatialQueryService, UnknownImportArea
+from app.persistence.repositories.traced_boundary import TracedBoundaryRepository
+from app.persistence.spatial_queries import (
+    InvalidSpatialQuery,
+    SpatialQueryService,
+    UnknownImportArea,
+    UnknownTracedBoundary,
+)
 
 
 def _import_area_id(db_session, min_corner=Coordinate(30.0, -97.8), max_corner=Coordinate(30.005, -97.795)):
@@ -279,3 +285,16 @@ def test_zero_radius_raises(db_session):
 def test_out_of_range_coordinate_is_rejected_by_construction():
     with pytest.raises(InvalidBoundingBox):
         Coordinate(latitude=95.0, longitude=-97.8)
+
+
+def test_scope_to_a_boundary_of_another_import_area_raises(db_session):
+    repo = ImportAreaRepository(db_session)
+    area = repo.get_or_create("osm", BoundingBox(Coordinate(30.0, -97.8), Coordinate(30.005, -97.795)))
+    other = repo.get_or_create("osm", BoundingBox(Coordinate(31.0, -97.8), Coordinate(31.005, -97.795)))
+    foreign = TracedBoundaryRepository(db_session).create(other, "Other", _square_ring(31.001, -97.799, 31.002, -97.798))
+    service = SpatialQueryService(db_session)
+
+    with pytest.raises(UnknownTracedBoundary):
+        service.nodes_within_radius(area.id, Coordinate(30.001, -97.799), 100, boundary_id=foreign.id)
+    with pytest.raises(UnknownTracedBoundary):
+        service.nearest_segment(area.id, Coordinate(30.001, -97.799), boundary_id=foreign.id)

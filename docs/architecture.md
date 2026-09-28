@@ -81,7 +81,8 @@ Implemented HTTP endpoints (Milestone 7):
   `FeatureCollection` per layer (road segments, navigable nodes, blocks, buildings, POIs, area
   features).
 - `GET /import-areas/{id}/nearby`, `/within-bbox`, `/nearest` — spatially query supported object
-  types by coordinate/radius, bounding-box intersection/containment, or nearest node/segment.
+  types by coordinate/radius, bounding-box intersection/containment, or nearest node/segment;
+  an optional `boundary_id` narrows any of them to one traced boundary (Milestone 8).
 - `GET /import-areas/{id}/buildings/{building_id}/footprint-area` — a building's footprint area in
   square meters.
 - `POST /import-areas/{id}/routes` — origin, destination, an optional named strategy; returns a

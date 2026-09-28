@@ -1,5 +1,7 @@
 """Spatial-query endpoints (design.md Decision 8): radius, bounding-box,
-nearest, and footprint-area, scoped to one completed import area."""
+nearest, and footprint-area, scoped to one completed import area. All but
+footprint-area also take an optional `boundary_id` that narrows the scope to
+one of the area's traced boundaries (Milestone 8)."""
 
 from __future__ import annotations
 
@@ -8,7 +10,7 @@ import uuid
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import completed_import_area, get_session
+from app.api.dependencies import completed_import_area, get_session, scope_boundary
 from app.api.errors import ApiError
 from app.api.mappers import area_feature_feature, building_feature, node_feature, poi_feature, segment_feature_plain
 from app.api.schemas import (
@@ -23,6 +25,7 @@ from app.api.schemas import (
 )
 from app.domain.bounding_box import BoundingBox, Coordinate, InvalidBoundingBox
 from app.domain.import_area import ImportArea
+from app.domain.traced_boundary import TracedBoundary
 from app.persistence.spatial_queries import SpatialQueryService, UnknownImportArea
 
 router = APIRouter(tags=["spatial-queries"])
@@ -41,6 +44,7 @@ def nearby(
     longitude: float = Query(...),
     radius_meters: float = Query(...),
     kind: EntityKind = Query(...),
+    scope: TracedBoundary | None = Depends(scope_boundary),
     area: ImportArea = Depends(completed_import_area),
     session: Session = Depends(get_session),
 ) -> NearbyOut:
@@ -53,7 +57,7 @@ def nearby(
         EntityKind.AREA_FEATURE: (service.area_features_within_radius, area_feature_feature),
     }
     query_fn, mapper = dispatch[kind]
-    results = query_fn(area.id, coordinate, radius_meters)
+    results = query_fn(area.id, coordinate, radius_meters, boundary_id=scope.id if scope else None)
     return NearbyOut(results=[mapper(item) for item in results])
 
 
@@ -65,6 +69,7 @@ def within_bbox(
     max_longitude: float = Query(...),
     kind: BboxEntityKind = Query(...),
     mode: BboxMode = Query(...),
+    scope: TracedBoundary | None = Depends(scope_boundary),
     area: ImportArea = Depends(completed_import_area),
     session: Session = Depends(get_session),
 ) -> WithinBboxOut:
@@ -83,7 +88,7 @@ def within_bbox(
         (BboxEntityKind.AREA_FEATURE, BboxMode.CONTAINS): (service.area_features_contained_by_bbox, area_feature_feature),
     }
     query_fn, mapper = dispatch[(kind, mode)]
-    results = query_fn(area.id, bbox)
+    results = query_fn(area.id, bbox, boundary_id=scope.id if scope else None)
     return WithinBboxOut(results=[mapper(item) for item in results])
 
 
@@ -92,15 +97,16 @@ def nearest(
     latitude: float = Query(...),
     longitude: float = Query(...),
     kind: NearestKind = Query(...),
+    scope: TracedBoundary | None = Depends(scope_boundary),
     area: ImportArea = Depends(completed_import_area),
     session: Session = Depends(get_session),
 ) -> NearestOut:
     coordinate = _as_coordinate(latitude, longitude)
     service = SpatialQueryService(session)
     if kind is NearestKind.NODE:
-        node = service.nearest_node(area.id, coordinate)
+        node = service.nearest_node(area.id, coordinate, boundary_id=scope.id if scope else None)
         return NearestOut(result=node_feature(node) if node is not None else None)
-    segment = service.nearest_segment(area.id, coordinate)
+    segment = service.nearest_segment(area.id, coordinate, boundary_id=scope.id if scope else None)
     return NearestOut(result=segment_feature_plain(segment) if segment is not None else None)
 
 
