@@ -63,7 +63,7 @@ beyond parity.
 | Capability | API status | Client | Client notes |
 |---|---|---|---|
 | Create / list / fetch / delete named traced boundaries within the import rectangle: `POST`/`GET …/boundaries`, `GET`/`DELETE …/boundaries/{id}`. Returned as GeoJSON `Feature`s (list as a `FeatureCollection`) with `name`, `import_area_id`, `created_at` | shipped | — | Tracing tool (by vertices or freehand). On 422 `invalid_boundary`, show `details.rule` (`self_intersecting`, `outside_import_area`, `holes_not_supported`, `not_closed`, …). A single ring, no holes |
-| Scope `nearby` / `within-bbox` / `nearest` to a boundary | planned (#49) | — | A global "scope" selector: import area or one boundary |
+| Scope `nearby` / `within-bbox` / `nearest` to a boundary: optional `boundary_id` query parameter; entities that intersect the boundary. `footprint-area` stays unscoped | shipped | — | A global "scope" selector: import area or one boundary. 404 `boundary_not_found` if the boundary was deleted meanwhile |
 | Export a scope in filter mode (whole entities, routable) | planned (#50) | — | |
 | Export a scope in clip mode (cut at the edge, render-only) | planned (#51) | — | Label clip mode as "not routable" |
 | Local projection metadata (scope centroid as origin, plus meters per degree) | planned (#50) | — | For a Cartesian or 3D renderer (Three.js) |

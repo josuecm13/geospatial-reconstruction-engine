@@ -13,7 +13,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Generator
 
-from fastapi import Depends
+from fastapi import Depends, Query
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -73,3 +73,14 @@ def traced_boundary(
     if boundary is None or boundary.import_area_id != area.id:
         raise ApiError(404, "boundary_not_found", f"boundary {boundary_id} not found in import area {area.id}")
     return boundary
+
+
+def scope_boundary(
+    boundary_id: uuid.UUID | None = Query(None),
+    area: ImportArea = Depends(import_area),
+    session: Session = Depends(get_session),
+) -> TracedBoundary | None:
+    """The optional `boundary_id` query parameter that scopes a query to one traced boundary."""
+    if boundary_id is None:
+        return None
+    return traced_boundary(boundary_id, area, session)
