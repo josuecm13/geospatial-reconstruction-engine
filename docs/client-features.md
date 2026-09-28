@@ -33,7 +33,7 @@ beyond parity.
 | Logical street id on segments | planned (#35) | — | Needed to select or highlight a whole street |
 | Navigable nodes | shipped | — | Usually hidden. Useful in a debug layer |
 | Blocks: boundary polygon, `area_square_meters` | shipped | — | |
-| Blocks: buildable area, `is_median`, `is_clipped` | planned (#50) | — | Computed and persisted since M7.2, but `block_feature` exposes only `area_square_meters` |
+| Blocks: `buildable_area` (MultiPolygon or null), `buildable_area_square_meters`, `is_median`, `is_clipped` | shipped | — | Computed and persisted since M7.2, but `block_feature` exposes only `area_square_meters` |
 | Buildings: footprint, `category`, `block_id` | shipped | — | Footprints only, with no height until M10 |
 | POIs: point, `category`, `name` | shipped | — | |
 | Area features: polygon, `kind` | shipped | — | |
@@ -64,9 +64,9 @@ beyond parity.
 |---|---|---|---|
 | Create / list / fetch / delete named traced boundaries within the import rectangle: `POST`/`GET …/boundaries`, `GET`/`DELETE …/boundaries/{id}`. Returned as GeoJSON `Feature`s (list as a `FeatureCollection`) with `name`, `import_area_id`, `created_at` | shipped | — | Tracing tool (by vertices or freehand). On 422 `invalid_boundary`, show `details.rule` (`self_intersecting`, `outside_import_area`, `holes_not_supported`, `not_closed`, …). A single ring, no holes |
 | Scope `nearby` / `within-bbox` / `nearest` to a boundary: optional `boundary_id` query parameter; entities that intersect the boundary. `footprint-area` stays unscoped | shipped | — | A global "scope" selector: import area or one boundary. 404 `boundary_not_found` if the boundary was deleted meanwhile |
-| Export a scope in filter mode (whole entities, routable) | planned (#50) | — | |
+| Export a scope in filter mode: `map-data?boundary_id=…` (whole entities intersecting it, plus every endpoint node of its segments, so still routable). The response states `scope` (`{type: import_area|boundary, id}`) and `mode` | shipped | — | |
 | Export a scope in clip mode (cut at the edge, render-only) | planned (#51) | — | Label clip mode as "not routable" |
-| Local projection metadata (scope centroid as origin, plus meters per degree) | planned (#50) | — | For a Cartesian or 3D renderer (Three.js) |
+| Local projection metadata on every `map-data` response: `projection.origin` (the scope's centroid) and `meters_per_degree_latitude` / `_longitude`, on the same sphere as `distance_meters` | shipped | — | For a Cartesian or 3D renderer (Three.js) |
 
 ### Later milestones (planned)
 

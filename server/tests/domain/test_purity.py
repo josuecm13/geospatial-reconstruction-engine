@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 DOMAIN_DIR = Path(__file__).parents[2] / "app" / "domain"
-GRAPH_AND_ROUTING_MODULES = ["graph.py", "routing.py", "routing_strategies.py", "cross_section.py", "street_grouping.py", "block_identity.py", "traced_boundary.py"]
+GRAPH_AND_ROUTING_MODULES = ["graph.py", "routing.py", "routing_strategies.py", "cross_section.py", "street_grouping.py", "block_identity.py", "traced_boundary.py", "local_projection.py"]
 FORBIDDEN_PREFIXES = ("sqlalchemy", "geoalchemy2", "app.persistence", "app.ingestion", "app.routing")
 
 

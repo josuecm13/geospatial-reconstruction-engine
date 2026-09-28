@@ -79,7 +79,9 @@ Implemented HTTP endpoints (Milestone 7):
 - `GET /import-areas/{id}` — status and entity counts, including the derived block count.
 - `GET /import-areas/{id}/map-data` — every persisted entity for a completed area, as one GeoJSON
   `FeatureCollection` per layer (road segments, navigable nodes, blocks, buildings, POIs, area
-  features).
+  features). An optional `boundary_id` exports one traced boundary instead (Milestone 8); every
+  response states its scope and mode and carries a local projection (origin plus meters per
+  degree) for Cartesian renderers.
 - `GET /import-areas/{id}/nearby`, `/within-bbox`, `/nearest` — spatially query supported object
   types by coordinate/radius, bounding-box intersection/containment, or nearest node/segment;
   an optional `boundary_id` narrows any of them to one traced boundary (Milestone 8).
