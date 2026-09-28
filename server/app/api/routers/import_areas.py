@@ -25,14 +25,14 @@ from app.api.mappers import (
     projection_out,
     segment_feature,
 )
-from app.api.schemas import ExportMode, ImportAreaCreate, ImportAreaOut, MapDataOut, ScopeOut, ScopeType
+from app.api.schemas import ExportMode, Feature, ImportAreaCreate, ImportAreaOut, MapDataOut, ScopeOut, ScopeType
 from app.domain.bounding_box import BoundingBox, Coordinate
 from app.domain.cross_section import cross_sections_by_segment
 from app.domain.import_area import ImportArea
 from app.domain.local_projection import local_projection_for
 from app.domain.traced_boundary import TracedBoundary
 from app.ingestion.service import OSMIngestionService
-from app.persistence.map_scope import ids_intersecting_boundary
+from app.persistence.map_scope import ClippedGeometries, clip_to_scope, ids_intersecting_boundary
 from app.persistence.repositories.area_feature import AreaFeatureRepository
 from app.persistence.repositories.block import BlockRepository
 from app.persistence.repositories.building import BuildingRepository
@@ -78,7 +78,9 @@ def get_map_data(
     session: Session = Depends(get_session),
 ) -> MapDataOut:
     """Filter mode returns whole entities that intersect the scope. Segments keep their full
-    geometry, and the nodes they end at are always included, so the result stays routable."""
+    geometry, and the nodes they end at are always included, so the result stays routable.
+    Clip mode cuts every geometry at the scope (the boundary, or the bounding box), which is a
+    picture: distances and areas still describe the whole entity."""
     segments = RoadSegmentRepository(session).list_for_import_area_with_street(area.id)
     # Cross-sections read the whole area (a direction is inferred from a road's reverse
     # twin), so they are computed before the scope narrows the segments.
@@ -104,16 +106,35 @@ def get_map_data(
         pois = [poi for poi in pois if poi.id in in_scope.pois]
         area_features = [feature for feature in area_features if feature.id in in_scope.area_features]
 
+    layers = {
+        "road_segments": [segment_feature(entry, cross_sections[entry.segment.id]) for entry in segments],
+        "navigable_nodes": [node_feature(node) for node in nodes],
+        "blocks": [block_feature(block) for block in blocks],
+        "buildings": [building_feature(building) for building in buildings],
+        "pois": [poi_feature(poi) for poi in pois],
+        "area_features": [area_feature_feature(feature) for feature in area_features],
+    }
+    if mode is ExportMode.CLIP:
+        layers = _clipped(layers, clip_to_scope(session, area.id, scope.id if scope else None))
+
     return MapDataOut(
         scope=scope_out,
         mode=mode,
         projection=projection_out(projection),
-        road_segments=feature_collection(
-            [segment_feature(entry, cross_sections[entry.segment.id]) for entry in segments]
-        ),
-        navigable_nodes=feature_collection([node_feature(node) for node in nodes]),
-        blocks=feature_collection([block_feature(block) for block in blocks]),
-        buildings=feature_collection([building_feature(building) for building in buildings]),
-        pois=feature_collection([poi_feature(poi) for poi in pois]),
-        area_features=feature_collection([area_feature_feature(feature) for feature in area_features]),
+        **{name: feature_collection(features) for name, features in layers.items()},
     )
+
+
+def _clipped(layers: dict[str, list[Feature]], clipped: ClippedGeometries) -> dict[str, list[Feature]]:
+    """Swaps in each feature's clipped geometry, dropping features with nothing left inside."""
+    result = {}
+    for name, features in layers.items():
+        geometries = getattr(clipped, name)
+        result[name] = [
+            feature.model_copy(update={"geometry": geometries[feature.id]})
+            for feature in features
+            if feature.id in geometries
+        ]
+    for block in result["blocks"]:
+        block.properties = {**block.properties, "buildable_area": clipped.block_buildable_areas.get(block.id)}
+    return result

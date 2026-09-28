@@ -89,7 +89,11 @@ class ImportAreaOut(BaseModel):
 
 
 class ExportMode(str, Enum):
+    """`filter` returns whole entities and stays routable; `clip` cuts geometry at the
+    scope for rendering, so a clipped segment no longer ends at a node."""
+
     FILTER = "filter"
+    CLIP = "clip"
 
 
 class ScopeType(str, Enum):

@@ -58,14 +58,14 @@ beyond parity.
 | Snap info: origin and destination node, and snap distance | `POST …/routes` | shipped | — | Show the snap offset. Warn when it's large |
 | Turn restrictions honored | shipped (implicit) | — | Explain a detour ("no left turn here") |
 
-### Traced boundaries and export (Milestone 8, #21)
+### Traced boundaries and export (Milestone 8, #21, complete)
 
 | Capability | API status | Client | Client notes |
 |---|---|---|---|
 | Create / list / fetch / delete named traced boundaries within the import rectangle: `POST`/`GET …/boundaries`, `GET`/`DELETE …/boundaries/{id}`. Returned as GeoJSON `Feature`s (list as a `FeatureCollection`) with `name`, `import_area_id`, `created_at` | shipped | — | Tracing tool (by vertices or freehand). On 422 `invalid_boundary`, show `details.rule` (`self_intersecting`, `outside_import_area`, `holes_not_supported`, `not_closed`, …). A single ring, no holes |
 | Scope `nearby` / `within-bbox` / `nearest` to a boundary: optional `boundary_id` query parameter; entities that intersect the boundary. `footprint-area` stays unscoped | shipped | — | A global "scope" selector: import area or one boundary. 404 `boundary_not_found` if the boundary was deleted meanwhile |
 | Export a scope in filter mode: `map-data?boundary_id=…` (whole entities intersecting it, plus every endpoint node of its segments, so still routable). The response states `scope` (`{type: import_area|boundary, id}`) and `mode` | shipped | — | |
-| Export a scope in clip mode (cut at the edge, render-only) | planned (#51) | — | Label clip mode as "not routable" |
+| Export a scope in clip mode: `map-data?mode=clip` (with or without `boundary_id`). Geometry and blocks' `buildable_area` are cut at the scope; multi-part cuts are `Multi*` geometries; entities only touching the edge are omitted; no extra end nodes; distances and areas describe the whole entity | shipped | — | Label clip mode as "not routable". Handle `MultiLineString`/`MultiPolygon` |
 | Local projection metadata on every `map-data` response: `projection.origin` (the scope's centroid) and `meters_per_degree_latitude` / `_longitude`, on the same sphere as `distance_meters` | shipped | — | For a Cartesian or 3D renderer (Three.js) |
 
 ### Later milestones (planned)

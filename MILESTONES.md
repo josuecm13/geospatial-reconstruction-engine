@@ -421,7 +421,7 @@ Completion:
 
 ## Milestone 8 — Custom traced import-area boundaries
 
-Status: **planned**
+Status: **complete**
 
 An import area is a rectangle today: `import_areas` stores min/max longitude/latitude and a `bbox`
 polygon, and everything imported is bounded by it. This milestone adds user-traced, arbitrarily
@@ -496,6 +496,34 @@ Notes:
   and level of detail are rendering decisions that belong in the client — a Three.js consumer can
   extrude footprints itself, and baking meshes server-side would freeze those choices in the
   backend and add a heavyweight dependency for one consumer.
+
+Completion:
+
+1. Change: `openspec/changes/archive/2026-09-27-add-traced-import-boundaries/`, which adds the
+   `traced-boundaries` spec and extends `spatial-queries`, `spatial-query-api`, and
+   `import-area-api`. Issues #47–#51 shipped in PRs #53, #56, #57, #58, and #59, tracked by
+   #21. It is the first change on the project's `milestone-driven` OpenSpec schema (#54, PR #55).
+2. Verification: `pytest -q` from `server/` against live PostGIS (257 passed, up from 190),
+   `openspec validate --all --strict` (valid), the new migration round-tripped, and mutation
+   checks on every new guard: the validity CHECK, the containment trigger, the unique name, each
+   domain validation rule, non-destructive create/delete and re-import, the cross-area 404s, the
+   error mappings, the endpoints' commits, each scoped query and export layer, the endpoint
+   nodes, the projection's centroid, factors, and rounding, and each clip-mode rule.
+3. Decisions: recorded in the change's `design.md` and in each PR. They cover these points:
+   - Validity is checked in the application first, so an error names the failed rule, and the
+     database backs it up with a CHECK and a containment trigger. Containment is covered-by, so a
+     boundary may equal the whole rectangle.
+   - A boundary is a single ring with a name unique per area. There's no in-place edit.
+   - Scope means "intersects the boundary". Filter mode also returns every endpoint of a returned
+     segment, so the export stays routable.
+   - The projection is spherical on the project's own radius, so projected lengths match
+     `distance_meters`. Its origin is the scope's centroid, rounded to 1e-9°.
+   - Clip mode cuts every geometry, including the buildable area, keeps only parts of the
+     entity's own dimension, adds no end nodes, and leaves distances and areas describing the
+     whole entity.
+4. Deferred: building heights (Milestone 10's ingestion change); mesh formats stay out of scope.
+   The client's tracing tool and scope selector are Milestone 9 deliverables, listed in
+   `docs/client-features.md`.
 
 ## Milestone 9 — Minimal visualization and end-to-end demonstration
 
