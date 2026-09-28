@@ -88,11 +88,37 @@ class ImportAreaOut(BaseModel):
     imported_at: datetime | None
 
 
+class ExportMode(str, Enum):
+    FILTER = "filter"
+
+
+class ScopeType(str, Enum):
+    IMPORT_AREA = "import_area"
+    BOUNDARY = "boundary"
+
+
+class ScopeOut(BaseModel):
+    type: ScopeType
+    id: uuid.UUID
+
+
+class ProjectionOut(BaseModel):
+    """A local projection a Cartesian renderer can place the export with, in meters:
+    x = (lon - origin.lon) * meters_per_degree_longitude, y = (lat - origin.lat) * meters_per_degree_latitude."""
+
+    origin: CoordinateIn
+    meters_per_degree_latitude: float
+    meters_per_degree_longitude: float
+
+
 OSM_ATTRIBUTION = "© OpenStreetMap contributors"
 
 
 class MapDataOut(BaseModel):
     attribution: str = OSM_ATTRIBUTION
+    scope: ScopeOut
+    mode: ExportMode
+    projection: ProjectionOut
     road_segments: FeatureCollection
     navigable_nodes: FeatureCollection
     blocks: FeatureCollection

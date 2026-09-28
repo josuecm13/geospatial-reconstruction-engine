@@ -10,9 +10,11 @@ from typing import Any
 
 from app.api.schemas import (
     BoundingBoxIn,
+    CoordinateIn,
     Feature,
     FeatureCollection,
     ImportAreaOut,
+    ProjectionOut,
     RouteOut,
 )
 from app.domain.area_feature import AreaFeature
@@ -20,8 +22,9 @@ from app.domain.block import Block
 from app.domain.bounding_box import BoundingBox, Coordinate
 from app.domain.building import Building
 from app.domain.cross_section import SegmentCrossSection
-from app.domain.geometry import LineString, Polygon
+from app.domain.geometry import LineString, MultiPolygon, Polygon
 from app.domain.import_area import ImportArea
+from app.domain.local_projection import LocalProjection
 from app.domain.poi import PointOfInterest
 from app.domain.road_graph import NavigableNode, RoadSegment, RoadSegmentWithStreet
 from app.domain.routing import RouteResult
@@ -38,6 +41,18 @@ def linestring_geometry(line: LineString) -> dict[str, Any]:
 
 def polygon_geometry(ring: Polygon) -> dict[str, Any]:
     return {"type": "Polygon", "coordinates": [[[p.longitude, p.latitude] for p in ring]]}
+
+
+def multipolygon_geometry(parts: MultiPolygon) -> dict[str, Any]:
+    return {"type": "MultiPolygon", "coordinates": [[[[p.longitude, p.latitude] for p in ring]] for ring in parts]}
+
+
+def projection_out(projection: LocalProjection) -> ProjectionOut:
+    return ProjectionOut(
+        origin=CoordinateIn(latitude=projection.origin.latitude, longitude=projection.origin.longitude),
+        meters_per_degree_latitude=projection.meters_per_degree_latitude,
+        meters_per_degree_longitude=projection.meters_per_degree_longitude,
+    )
 
 
 def bbox_out(bbox: BoundingBox) -> BoundingBoxIn:
@@ -90,7 +105,13 @@ def block_feature(block: Block) -> Feature:
     return Feature(
         id=block.id,
         geometry=polygon_geometry(block.boundary),
-        properties={"area_square_meters": block.area_square_meters},
+        properties={
+            "area_square_meters": block.area_square_meters,
+            "buildable_area": multipolygon_geometry(block.buildable_area) if block.buildable_area else None,
+            "buildable_area_square_meters": block.buildable_area_square_meters,
+            "is_median": block.is_median,
+            "is_clipped": block.is_clipped,
+        },
     )
 
 

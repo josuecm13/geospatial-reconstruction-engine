@@ -72,3 +72,11 @@ class BoundingBox:
 
     def area_square_meters(self) -> float:
         return self.width_meters() * self.height_meters()
+
+    def ring(self) -> tuple[Coordinate, ...]:
+        """The box as a closed counter-clockwise ring from its south-west corner, in the
+        same vertex order `app.persistence.geometry.bbox_to_geom` stores."""
+        sw, ne = self.min_corner, self.max_corner
+        se = Coordinate(sw.latitude, ne.longitude)
+        nw = Coordinate(ne.latitude, sw.longitude)
+        return (sw, se, ne, nw, sw)
