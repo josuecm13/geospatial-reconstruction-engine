@@ -1,3 +1,7 @@
+## Purpose
+
+Lets a user trace named, non-rectangular shapes over an imported area that narrow it for queries and exports, without changing anything that was imported.
+
 ## ADDED Requirements
 
 ### Requirement: An import area SHALL hold any number of named traced boundaries
