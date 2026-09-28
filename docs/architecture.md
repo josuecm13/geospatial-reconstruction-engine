@@ -86,6 +86,8 @@ Implemented HTTP endpoints (Milestone 7):
   square meters.
 - `POST /import-areas/{id}/routes` — origin, destination, an optional named strategy; returns a
   `Route` or a meaningful no-route/no-navigable-node response.
+- `POST`/`GET /import-areas/{id}/boundaries`, `GET`/`DELETE /import-areas/{id}/boundaries/{boundary_id}`
+  (Milestone 8) — create, list, fetch, and delete named traced boundaries, as GeoJSON features.
 
 Every error response uses one JSON shape with a machine-readable `code` (`app/api/errors.py`).
 `../HOW_TO_RUN.md` has worked curl examples.

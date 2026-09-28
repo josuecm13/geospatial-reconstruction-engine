@@ -22,7 +22,9 @@ from app.api.errors import ApiError
 from app.config.settings import load_settings
 from app.domain.enums import ImportStatus
 from app.domain.import_area import ImportArea
+from app.domain.traced_boundary import TracedBoundary
 from app.persistence.repositories.import_area import ImportAreaRepository
+from app.persistence.repositories.traced_boundary import TracedBoundaryRepository
 
 _engine: Engine | None = None
 _session_factory: sessionmaker | None = None
@@ -61,3 +63,13 @@ def completed_import_area(area: ImportArea = Depends(import_area)) -> ImportArea
             f"import area {area.id} is not ready (status={area.status.value})",
         )
     return area
+
+
+def traced_boundary(
+    boundary_id: uuid.UUID, area: ImportArea = Depends(import_area), session: Session = Depends(get_session)
+) -> TracedBoundary:
+    """A boundary of another import area is reported as not found, not as a mismatch."""
+    boundary = TracedBoundaryRepository(session).get(boundary_id)
+    if boundary is None or boundary.import_area_id != area.id:
+        raise ApiError(404, "boundary_not_found", f"boundary {boundary_id} not found in import area {area.id}")
+    return boundary

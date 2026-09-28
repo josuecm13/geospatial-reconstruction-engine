@@ -101,6 +101,13 @@ class MapDataOut(BaseModel):
     area_features: FeatureCollection
 
 
+class TracedBoundaryCreate(BaseModel):
+    name: str
+    # A GeoJSON Polygon, parsed and validated in the router so a bad shape is an
+    # `invalid_boundary` with the rule that failed, not a generic `invalid_request`.
+    geometry: dict[str, Any]
+
+
 class NearbyOut(BaseModel):
     results: list[Feature]
 
