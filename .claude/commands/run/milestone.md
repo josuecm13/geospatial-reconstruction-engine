@@ -15,10 +15,11 @@ Prefix every `gh` call with `GH_TOKEN=$(gh auth token --user josuecm13)`.
 1. **Issues.** Read the milestone's section of `MILESTONES.md` and the tracking issue's
    sub-issues. For any deliverable without an issue, draft one with `/issues:new`. Create it only
    if the run authorizes filing; otherwise put the draft under the ledger's `Tangents`.
-2. **One OpenSpec change** for the whole milestone via `openspec-propose` — not one per issue. The
-   design records the decisions the issues leave open; tasks are grouped under a heading per issue
-   number so `/run:ship` can tick one issue's tasks at a time. Comment the change path on the
-   tracking issue.
+2. **One OpenSpec change** for the whole milestone via `openspec-propose` — not one per issue. It
+   uses the project schema (`openspec/schemas/milestone-driven/`): the proposal links to the
+   milestone section and tracking issue, the design records the decisions the issues leave open,
+   and `tasks.md` has one checkbox per issue number, so `/run:ship` ticks one issue at a time.
+   Comment the change path on the tracking issue.
 3. **Branch layout.** One branch per issue, `<type>/<n>-<slug>`.
    - From `main` by default.
    - Stacked on another issue's branch **only** when GitHub records a "blocked by" between them;

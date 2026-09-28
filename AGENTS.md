@@ -70,7 +70,11 @@ GitHub Issues are the backlog, and they are part of every change — not bookkee
   cross-sections`, `9 Visualization and live OSM`, …), are every actionable item: milestone
   deliverables, bugs, chores, docs. Housekeeping that belongs to no milestone has none.
 - **OpenSpec changes** are created only when a milestone or large issue actually starts, and are
-  linked from that issue. Small fixes need an issue, not a proposal.
+  linked from that issue. They use the project schema `openspec/schemas/milestone-driven/`: the
+  proposal links to `MILESTONES.md` and the tracking issue instead of restating them, and
+  `tasks.md` is one checkbox per issue. The value is in the spec deltas (the contract) and
+  `design.md` (the decisions). Small fixes need an issue, not a proposal; if a small fix changes
+  observable behavior, its PR edits the living spec in `openspec/specs/` directly.
 
 `gh` must run as the personal account: prefix every call with
 `GH_TOKEN=$(gh auth token --user josuecm13)` (see `../AGENTS.md`). The `/issues:next`,
