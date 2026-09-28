@@ -210,6 +210,38 @@ Key decisions:
   partially-captured block whose enclosing loop wasn't fully imported — that is a legitimate
   "unknown," not an error.
 
+## Traced boundaries (Milestone 8)
+
+```mermaid
+erDiagram
+    IMPORT_AREAS ||--o{ TRACED_BOUNDARIES : "narrowed by"
+
+    TRACED_BOUNDARIES {
+        uuid id PK
+        uuid import_area_id FK
+        text name "unique per import area"
+        geometry geom "Polygon,4326, valid, simple, covered by the area's bbox"
+        timestamptz created_at
+        timestamptz updated_at
+    }
+```
+
+Key decisions:
+
+- **A traced boundary is a view, not a deletion.** It narrows an import area for queries and
+  exports, and nothing else references it. Ingestion never touches the table, so creating or
+  deleting a boundary leaves every imported and derived row alone, and a re-import keeps the
+  area's boundaries (the `import_areas` row, and therefore its id and `bbox`, is reused).
+- **Validity is enforced twice.** `validate_traced_boundary` (`app/domain/traced_boundary.py`)
+  rejects a bad shape at write time and names the rule that failed. The database backs it up, so a
+  write that skips the repository can't store one: a CHECK constraint
+  `ST_IsValid(geom) AND ST_IsSimple(geom)`, and a trigger requiring
+  `ST_CoveredBy(geom, import_areas.bbox)`. Both raise `check_violation`.
+- **Covered-by, not strictly within.** A boundary may touch or equal its import area's rectangle,
+  so "the whole area" can also be expressed as a boundary.
+- **Single ring, no holes**, matching the domain `Polygon` type. There is no in-place edit: a
+  boundary is deleted and created again.
+
 ## Constraints and indexes
 
 - `UNIQUE (import_area_id, source_id)` on `streets`, `roads`, `navigable_nodes`, `buildings`,
@@ -226,6 +258,7 @@ Key decisions:
 - `UNIQUE (road_id, from_node_id, to_node_id)` on `road_segments`.
 - `UNIQUE (incoming_segment_id, outgoing_segment_id)` on `turn_movements`.
 - `UNIQUE (block_id, road_segment_id)` on `block_boundary_segments`.
+- `UNIQUE (import_area_id, name)` on `traced_boundaries`.
 - GiST index on every `geometry` column.
 - btree index on every FK column — Postgres does not auto-create these, and graph/derivation
   queries hit `from_node_id`/`to_node_id`/`incoming_segment_id`/`outgoing_segment_id`/`block_id`
@@ -234,6 +267,9 @@ Key decisions:
   outgoing_segment.from_node_id = intersection_node_id` — this can't be a plain `CHECK` since it
   reads other tables, and `MILESTONES.md`'s Milestone 2 acceptance criteria explicitly calls for
   turn movements to enforce valid segment-to-intersection relationships at the schema level.
+- A `CHECK (ST_IsValid(geom) AND ST_IsSimple(geom))` and a containment trigger on
+  `traced_boundaries`. The containment check reads `import_areas.bbox`, so, like the
+  `turn_movements` check, it can't be a plain `CHECK`.
 - Standard `created_at`/`updated_at` on every table.
 
 ## Derivation timing (resolved, Milestone 7)
