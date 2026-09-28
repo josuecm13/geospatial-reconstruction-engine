@@ -81,7 +81,8 @@ Implemented HTTP endpoints (Milestone 7):
   `FeatureCollection` per layer (road segments, navigable nodes, blocks, buildings, POIs, area
   features). An optional `boundary_id` exports one traced boundary instead (Milestone 8); every
   response states its scope and mode and carries a local projection (origin plus meters per
-  degree) for Cartesian renderers.
+  degree) for Cartesian renderers. `mode=filter` (default) returns whole, routable entities;
+  `mode=clip` cuts geometry at the scope for rendering.
 - `GET /import-areas/{id}/nearby`, `/within-bbox`, `/nearest` — spatially query supported object
   types by coordinate/radius, bounding-box intersection/containment, or nearest node/segment;
   an optional `boundary_id` narrows any of them to one traced boundary (Milestone 8).
