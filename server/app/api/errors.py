@@ -21,7 +21,9 @@ from starlette.responses import JSONResponse
 
 from app.config.settings import MissingEnvironmentVariable
 from app.domain.bounding_box import InvalidBoundingBox
+from app.domain.traced_boundary import InvalidTracedBoundary
 from app.ingestion.osm_adapter import OSMIngestionError, PayloadOutsideBoundingBox
+from app.persistence.repositories.traced_boundary import DuplicateTracedBoundaryName
 from app.persistence.spatial_queries import InvalidSpatialQuery
 from app.routing.engine import NoNavigableNodeError, NoRouteFoundError
 
@@ -78,6 +80,14 @@ def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(InvalidBoundingBox)
     async def handle_invalid_bounding_box(request: Request, exc: InvalidBoundingBox) -> JSONResponse:
         return _response(422, "invalid_bounding_box", str(exc))
+
+    @app.exception_handler(InvalidTracedBoundary)
+    async def handle_invalid_traced_boundary(request: Request, exc: InvalidTracedBoundary) -> JSONResponse:
+        return _response(422, "invalid_boundary", str(exc), {"rule": exc.rule})
+
+    @app.exception_handler(DuplicateTracedBoundaryName)
+    async def handle_duplicate_boundary_name(request: Request, exc: DuplicateTracedBoundaryName) -> JSONResponse:
+        return _response(409, "boundary_name_conflict", str(exc))
 
     @app.exception_handler(InvalidSpatialQuery)
     async def handle_invalid_spatial_query(request: Request, exc: InvalidSpatialQuery) -> JSONResponse:

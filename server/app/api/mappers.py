@@ -25,6 +25,7 @@ from app.domain.import_area import ImportArea
 from app.domain.poi import PointOfInterest
 from app.domain.road_graph import NavigableNode, RoadSegment, RoadSegmentWithStreet
 from app.domain.routing import RouteResult
+from app.domain.traced_boundary import TracedBoundary
 
 
 def point_geometry(point: Coordinate) -> dict[str, Any]:
@@ -127,6 +128,18 @@ def segment_feature_plain(segment: RoadSegment) -> Feature:
             "distance_meters": segment.distance_meters,
             "lane_count": segment.lane_count,
             "is_vehicle_accessible": segment.is_vehicle_accessible,
+        },
+    )
+
+
+def boundary_feature(boundary: TracedBoundary) -> Feature:
+    return Feature(
+        id=boundary.id,
+        geometry=polygon_geometry(boundary.polygon),
+        properties={
+            "name": boundary.name,
+            "import_area_id": boundary.import_area_id,
+            "created_at": boundary.created_at,
         },
     )
 

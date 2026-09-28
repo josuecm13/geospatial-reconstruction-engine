@@ -62,7 +62,7 @@ beyond parity.
 
 | Capability | API status | Client | Client notes |
 |---|---|---|---|
-| Create / list / fetch / delete named traced boundaries within the import rectangle | planned (#47, #48) | — | Tracing tool (by vertices or freehand). Show the validation reason on rejection |
+| Create / list / fetch / delete named traced boundaries within the import rectangle: `POST`/`GET …/boundaries`, `GET`/`DELETE …/boundaries/{id}`. Returned as GeoJSON `Feature`s (list as a `FeatureCollection`) with `name`, `import_area_id`, `created_at` | shipped | — | Tracing tool (by vertices or freehand). On 422 `invalid_boundary`, show `details.rule` (`self_intersecting`, `outside_import_area`, `holes_not_supported`, `not_closed`, …). A single ring, no holes |
 | Scope `nearby` / `within-bbox` / `nearest` to a boundary | planned (#49) | — | A global "scope" selector: import area or one boundary |
 | Export a scope in filter mode (whole entities, routable) | planned (#50) | — | |
 | Export a scope in clip mode (cut at the edge, render-only) | planned (#51) | — | Label clip mode as "not routable" |
@@ -82,7 +82,8 @@ beyond parity.
 Every non-2xx response is `{"error": {"code", "message", "details"}}`. The client should switch on
 `code`, not on the HTTP status: `invalid_request`, `invalid_bounding_box`, `invalid_coordinate`,
 `payload_outside_bounding_box`, `ingestion_failed`, `import_area_not_found`,
-`import_area_not_ready`, `import_conflict`, `building_not_found`, `invalid_spatial_query`,
+`import_area_not_ready`, `import_conflict`, `building_not_found`, `invalid_boundary` (with
+`details.rule`), `boundary_name_conflict`, `boundary_not_found`, `invalid_spatial_query`,
 `no_navigable_node`, `no_route_found`, `unknown_routing_strategy`, `not_found`,
 `method_not_allowed`, `database_unavailable`, `configuration_error`, `internal_error`.
 
