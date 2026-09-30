@@ -273,7 +273,11 @@ class OSMFixtureAdapter:
                 node_ids = tuple(str(node_id) for node_id in element.get("nodes", []))
                 if len(node_ids) < 2:
                     raise IngestionError(f"road way {source_id} needs at least two nodes")
-                one_way_direction = _one_way_direction(tags.get("oneway"), source_id)
+                oneway = tags.get("oneway")
+                if oneway is None and tags.get("junction") == "roundabout":
+                    # OSM implies oneway=yes, in the drawn direction, on a roundabout.
+                    oneway = "yes"
+                one_way_direction = _one_way_direction(oneway, source_id)
                 forward_lanes, backward_lanes = _split_lanes(tags, source_id, one_way_direction != 0)
                 roads.append(
                     ImportRoad(

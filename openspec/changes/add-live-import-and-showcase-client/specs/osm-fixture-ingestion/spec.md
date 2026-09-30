@@ -24,3 +24,14 @@ A `motorway_link`, `trunk_link`, `primary_link`, `secondary_link`, or `tertiary_
 #### Scenario: Routing across a slip road
 - **WHEN** two primary roads connected only by a `primary_link` way are imported
 - **THEN** a route from one road to the other is found across the link
+
+### Requirement: A roundabout SHALL be one-way in its drawn direction unless tagged otherwise
+A road way tagged `junction=roundabout` without a `oneway` tag SHALL be imported as one-way in the direction its nodes are drawn. An explicit `oneway` tag on the way SHALL take precedence.
+
+#### Scenario: An untagged roundabout
+- **WHEN** a road way tagged `junction=roundabout` and no `oneway` tag is imported
+- **THEN** it produces only the segment in its drawn direction
+
+#### Scenario: An explicit oneway wins
+- **WHEN** a road way tagged `junction=roundabout` and `oneway=no` is imported
+- **THEN** it is imported as two-way
