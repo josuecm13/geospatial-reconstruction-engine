@@ -27,12 +27,16 @@ class BuildingRepository:
                 category=building.category,
                 geom=geom,
                 block_id=building.block_id,
+                height_meters=building.height_meters,
+                levels=building.levels,
             )
             self.session.add(model)
         else:
             model.category = building.category
             model.geom = geom
             model.block_id = building.block_id
+            model.height_meters = building.height_meters
+            model.levels = building.levels
 
         self.session.flush()
         return self._to_domain(model)
@@ -73,4 +77,6 @@ class BuildingRepository:
             category=BuildingCategory(model.category),
             geom=geom_to_polygon(model.geom),
             block_id=model.block_id,
+            height_meters=model.height_meters,
+            levels=model.levels,
         )

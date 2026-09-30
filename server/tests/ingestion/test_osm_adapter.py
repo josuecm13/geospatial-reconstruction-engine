@@ -123,3 +123,56 @@ def test_adapter_raises_ingestion_error_for_poi_way_with_missing_node():
 
     with pytest.raises(OSMIngestionError, match="missing node 99"):
         OSMFixtureAdapter().parse(payload)
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (None, None),
+        ("12", 12.0),
+        ("12.5", 12.5),
+        ("12 m", 12.0),
+        ("12m", 12.0),
+        (" 12 M ", 12.0),
+        ("12,5", 12.5),
+        (12, 12.0),
+        ("40'", 40 * 0.3048),
+        ("40 ft", 40 * 0.3048),
+        ("40 feet", 40 * 0.3048),
+        ("tall", None),
+        ("12;15", None),
+        ("10-12", None),
+        ("0", None),
+        ("-3", None),
+        ("", None),
+        ("nan", None),
+        ("40'6\"", None),
+    ],
+)
+def test_building_height_parsing_keeps_unknown_as_none(value, expected):
+    payload = _building_payload({"building": "yes", **({} if value is None else {"height": value})})
+
+    height = OSMFixtureAdapter().parse(payload).buildings[0].height_meters
+
+    assert height == pytest.approx(expected) if expected is not None else height is None
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [(None, None), ("3", 3), ("3.0", 3), (4, 4), ("0", 0), ("2.5", None), ("-1", None), ("three", None), ("inf", None)],
+)
+def test_building_levels_parsing_keeps_unknown_as_none(value, expected):
+    payload = _building_payload({"building": "yes", **({} if value is None else {"building:levels": value})})
+
+    assert OSMFixtureAdapter().parse(payload).buildings[0].levels == expected
+
+
+def _building_payload(tags):
+    return {
+        "elements": [
+            {"type": "node", "id": 1, "lat": 9.934, "lon": -84.080},
+            {"type": "node", "id": 2, "lat": 9.934, "lon": -84.0799},
+            {"type": "node", "id": 3, "lat": 9.9341, "lon": -84.0799},
+            {"type": "way", "id": 10, "nodes": [1, 2, 3, 1], "tags": tags},
+        ]
+    }

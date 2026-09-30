@@ -164,6 +164,8 @@ erDiagram
         text source_id
         building_category category
         geometry geom "Polygon,4326"
+        double height_meters "nullable, source height (8.1)"
+        integer levels "nullable, source building:levels (8.1)"
     }
     POINTS_OF_INTEREST {
         uuid id PK
@@ -205,6 +207,10 @@ Key decisions:
   area — a plain array on `blocks` can't answer "which blocks touch this segment?" without a full
   scan. The join table gets its own `(block_id, road_segment_id)` uniqueness and an
   FK-enforced `sequence_order` for walking the loop in order.
+- **`buildings.height_meters` and `buildings.levels` record only what the source stated
+  (Milestone 8.1).** `NULL` means unknown, never zero or a default: an unparseable tag is stored
+  as `NULL` and never fails an import. CHECKs keep `height_meters > 0` and `levels >= 0`.
+  Estimating a height from levels is inference and belongs to generated content (Milestone 11).
 - **`buildings.block_id` is nullable and denormalized.** Set via `ST_Contains(block.boundary,
   building.geom)` at derivation time. A building near the 1 km bbox edge may sit in a
   partially-captured block whose enclosing loop wasn't fully imported — that is a legitimate

@@ -527,7 +527,7 @@ Completion:
 
 ## Milestone 8.1 — Building attributes from source
 
-Status: **planned**
+Status: **completed**
 
 This completes the *raw* layer rather than starting the generated one, and comes before Milestone 9
 because the showcase scene extrudes buildings to these heights: `height` and
@@ -542,6 +542,8 @@ Deliverables:
   substituted default — the same discipline already applied to `lane_count`.
 - Tolerant parsing of the values OSM actually contains (bare metres, `"12 m"`, and unit-suffixed
   forms), treating unparseable values as unknown rather than failing the import.
+- Both values carried on building features in map data and spatial query results, null when
+  unknown, so the Milestone 9 scene can extrude to them.
 
 Acceptance checks:
 
@@ -552,6 +554,20 @@ Acceptance checks:
 
 Note: converting levels into an estimated height is *inference*, not observation, and belongs to
 Milestone 11. This milestone only records what the source stated.
+
+Completion note:
+
+1. PR: #72's PR, under OpenSpec change `add-building-attributes-from-source` (archived), tracking
+   issue #22.
+2. Verification: `pytest -q` from `server/` against live PostGIS (288 passed, up from 257),
+   `openspec validate --all --strict`, the migration round-tripped, and mutation checks on every
+   new guard: the non-positive height rule, the feet conversion, the whole-number level rule, the
+   ingestion hand-off, the in-place update on re-import, and the API property.
+3. Decisions: in the change's `design.md`. Buildings get their own import record. Heights are
+   accepted as meters or feet, with a comma decimal tolerated. `0` levels is a valid observation.
+   There is no provenance field: null means unknown.
+4. Deferred: `min_height`, `building:min_level`, and roof tags stay out of scope. Estimating heights
+   is Milestone 11.
 
 ## Milestone 9 — Live import and the showcase client
 

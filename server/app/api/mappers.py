@@ -93,7 +93,12 @@ def building_feature(building: Building) -> Feature:
     return Feature(
         id=building.id,
         geometry=polygon_geometry(building.geom),
-        properties={"category": building.category.value, "block_id": building.block_id},
+        properties={
+            "category": building.category.value,
+            "block_id": building.block_id,
+            "height_meters": building.height_meters,
+            "levels": building.levels,
+        },
     )
 
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -40,6 +42,15 @@ class ImportPolygonFeature:
 
 
 @dataclass(frozen=True)
+class ImportBuilding:
+    source_id: str
+    node_ids: tuple[str, ...]
+    category: BuildingCategory
+    height_meters: float | None
+    levels: int | None
+
+
+@dataclass(frozen=True)
 class ImportPoi:
     source_id: str
     point: Coordinate
@@ -60,7 +71,7 @@ class ImportTurnRestriction:
 class ImportRecords:
     nodes: dict[str, Coordinate]
     roads: tuple[ImportRoad, ...]
-    buildings: tuple[ImportPolygonFeature, ...]
+    buildings: tuple[ImportBuilding, ...]
     pois: tuple[ImportPoi, ...]
     areas: tuple[ImportPolygonFeature, ...]
     restrictions: tuple[ImportTurnRestriction, ...]
@@ -71,6 +82,7 @@ class ImportRecords:
 OSMIngestionError = IngestionError
 OSMRoad = ImportRoad
 OSMPolygonFeature = ImportPolygonFeature
+OSMBuilding = ImportBuilding
 OSMPoi = ImportPoi
 OSMTurnRestriction = ImportTurnRestriction
 OSMImportRecords = ImportRecords
@@ -97,6 +109,40 @@ def _lane_count(value: Any, element_id: str, key: str) -> int | None:
     if count < 1:
         raise IngestionError(f"way {element_id} has invalid {key} lane count")
     return count
+
+
+_METERS_PER_FOOT = 0.3048
+_HEIGHT_METERS = re.compile(r"(\d+(?:\.\d+)?)\s*(?:m)?")
+_HEIGHT_FEET = re.compile(r"(\d+(?:\.\d+)?)\s*(?:'|ft|feet)")
+
+
+def _height_meters(value: Any) -> float | None:
+    """A source height in meters, or None when it is missing or not a usable number.
+
+    Unknown stays unknown: this never raises and never substitutes a default."""
+    if value is None:
+        return None
+    text = str(value).strip().lower().replace(",", ".")
+    if match := _HEIGHT_METERS.fullmatch(text):
+        height = float(match.group(1))
+    elif match := _HEIGHT_FEET.fullmatch(text):
+        height = float(match.group(1)) * _METERS_PER_FOOT
+    else:
+        return None
+    return height if math.isfinite(height) and height > 0 else None
+
+
+def _levels(value: Any) -> int | None:
+    """A source level count, or None unless it is a whole non-negative number."""
+    if value is None:
+        return None
+    try:
+        levels = float(str(value).strip())
+    except ValueError:
+        return None
+    if not math.isfinite(levels) or levels < 0 or not levels.is_integer():
+        return None
+    return int(levels)
 
 
 def _polygon_nodes(element: dict[str, Any]) -> tuple[str, ...]:
@@ -200,7 +246,7 @@ class OSMFixtureAdapter:
                 relations.append(element)
 
         roads: list[ImportRoad] = []
-        buildings: list[ImportPolygonFeature] = []
+        buildings: list[ImportBuilding] = []
         areas: list[ImportPolygonFeature] = []
         pois: list[ImportPoi] = []
 
@@ -229,7 +275,15 @@ class OSMFixtureAdapter:
                 )
                 continue
             if "building" in tags:
-                buildings.append(ImportPolygonFeature(source_id, _polygon_nodes(element), _building_category(tags["building"])))
+                buildings.append(
+                    ImportBuilding(
+                        source_id,
+                        _polygon_nodes(element),
+                        _building_category(tags["building"]),
+                        _height_meters(tags.get("height")),
+                        _levels(tags.get("building:levels")),
+                    )
+                )
                 continue
             poi_category = _poi_category(tags)
             if poi_category is not None:

@@ -331,3 +331,46 @@ def test_ways_are_grouped_into_logical_streets_with_ids_stable_across_reimport(d
 
     assert set(db_session.scalars(select(StreetModel.id)).all()) == set(streets_before)
     assert dict(db_session.execute(select(RoadModel.source_id, RoadModel.street_id)).all()) == street_by_road
+
+
+def _with_extra_buildings(payload, extra_tags):
+    """Adds one building per tag set, reusing fixture building 200's footprint nodes."""
+    changed = copy.deepcopy(payload)
+    for offset, tags in enumerate(extra_tags, start=1):
+        changed["elements"].append({"type": "way", "id": 900 + offset, "nodes": [11, 12, 13, 14, 11], "tags": tags})
+    return changed
+
+
+def test_import_records_source_height_and_levels_and_keeps_unknown_null(db_session):
+    payload = _with_extra_buildings(
+        json.loads(FIXTURE.read_text()),
+        [
+            {"building": "yes", "height": "12 m"},
+            {"building": "yes", "building:levels": "3"},
+            {"building": "yes", "height": "tall", "building:levels": "2.5"},
+        ],
+    )
+
+    result = OSMIngestionService(db_session).import_fixture(_bbox(), payload)
+
+    assert result.import_area.status is ImportStatus.COMPLETED
+    stored = {
+        model.source_id: (model.height_meters, model.levels)
+        for model in db_session.scalars(select(BuildingModel)).all()
+    }
+    assert stored == {"200": (None, None), "901": (12.0, None), "902": (None, 3), "903": (None, None)}
+
+
+def test_reimport_updates_a_changed_height_in_place(db_session):
+    fixture = json.loads(FIXTURE.read_text())
+    service = OSMIngestionService(db_session)
+    service.import_fixture(_bbox(), _with_extra_buildings(fixture, [{"building": "yes", "height": "12", "building:levels": "4"}]))
+    before = db_session.scalar(select(BuildingModel).where(BuildingModel.source_id == "901"))
+    building_id = before.id
+
+    service.import_fixture(_bbox(), _with_extra_buildings(fixture, [{"building": "yes", "height": "15"}]))
+    db_session.expire_all()
+    after = db_session.scalar(select(BuildingModel).where(BuildingModel.source_id == "901"))
+
+    assert after.id == building_id
+    assert (after.height_meters, after.levels) == (15.0, None)

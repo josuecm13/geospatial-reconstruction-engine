@@ -373,7 +373,15 @@ class OSMIngestionService:
         touched_area_feature_ids: set = set()
         for feature in records.buildings:
             persisted = buildings.upsert(
-                Building(None, area_id, feature.source_id, feature.category, tuple(records.nodes[node_id] for node_id in feature.node_ids))
+                Building(
+                    None,
+                    area_id,
+                    feature.source_id,
+                    feature.category,
+                    tuple(records.nodes[node_id] for node_id in feature.node_ids),
+                    height_meters=feature.height_meters,
+                    levels=feature.levels,
+                )
             )
             touched_building_ids.add(persisted.id)
         for poi in records.pois:

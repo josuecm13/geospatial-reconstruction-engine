@@ -13,3 +13,6 @@ class Building:
     category: BuildingCategory
     geom: Polygon
     block_id: uuid.UUID | None = None
+    # As the source stated them; None means unknown, never a default.
+    height_meters: float | None = None
+    levels: int | None = None
