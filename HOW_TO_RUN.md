@@ -98,6 +98,27 @@ curl -s -X POST localhost:$APP_PORT/import-areas/$AREA_ID/routes \
 features); the spatial-query endpoints (`/nearby`, `/within-bbox`, `/nearest`,
 `/buildings/{id}/footprint-area`) are scoped the same way, to one completed import area.
 
+## Running the client
+
+The client lives in `client/` (Node 22+). Its dev server forwards `/api/*` to the API on
+`APP_PORT` from `server/.env`, so start the API first, in its own terminal:
+
+```bash
+cd server && source .venv/bin/activate && set -a && source .env && set +a
+uvicorn app.main:app --port "$APP_PORT"
+```
+
+Then, in another terminal:
+
+```bash
+cd client
+npm install        # first time only
+npm run dev        # http://localhost:55173 (CLIENT_PORT in client/.env to change it)
+```
+
+The header shows whether the API is reachable. `npm test` runs the client's unit tests, and
+`npm run build` type-checks and bundles it into `client/dist/`.
+
 ## Stopping everything
 
 ```bash

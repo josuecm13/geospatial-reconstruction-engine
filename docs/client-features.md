@@ -37,7 +37,7 @@ beyond parity.
 | Buildings: footprint, `category`, `block_id`, `height_meters`, `levels` | shipped | — | `height_meters` / `levels` are as the source stated, null when unknown (M8.1) |
 | POIs: point, `category`, `name` | shipped | — | |
 | Area features: polygon, `kind` | shipped | — | |
-| `attribution` ("© OpenStreetMap contributors") | shipped | — | **Required**: must always be visible |
+| `attribution` ("© OpenStreetMap contributors") | shipped | partial | **Required**: must always be visible |
 
 ### Spatial queries (whole import area)
 
