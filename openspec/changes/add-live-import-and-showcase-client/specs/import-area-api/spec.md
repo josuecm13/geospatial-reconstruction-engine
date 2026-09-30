@@ -1,5 +1,12 @@
 ## ADDED Requirements
 
+### Requirement: The API SHALL list import areas
+The API SHALL expose `GET /import-areas` returning import areas most recently imported first (an area that never completed an import is ordered by its creation time), each with the same fields as `GET /import-areas/{id}`. It SHALL accept an optional `status` filter and a `limit` from 1 to 200, defaulting to 50. An invalid `status` or `limit` SHALL be a 422 error with code `invalid_request`.
+
+#### Scenario: Listing completed areas
+- **WHEN** a client lists import areas with `status=completed` after importing two areas and failing a third
+- **THEN** the response holds the two completed areas, the most recently imported first, each equal to its `GET /import-areas/{id}` response
+
 ### Requirement: The API SHALL report an incomplete source response distinctly
 `POST /import-areas` SHALL respond to a payload rejected as incomplete with status 422 and code `source_incomplete`, distinct from `ingestion_failed`, and the area SHALL remain readable exactly as before the request.
 

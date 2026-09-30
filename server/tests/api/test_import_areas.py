@@ -244,3 +244,38 @@ def test_import_response_reports_skipped_restrictions(client):
 
     assert (body["status"], body["skipped_restriction_count"]) == ("completed", 1)
     assert client.get(f"/import-areas/{body['id']}").json()["skipped_restriction_count"] is None
+
+
+def test_list_import_areas_newest_first_with_counts(client):
+    neighborhood = _import(client).json()
+    loop = _import(client, LOOP_BBOX, LOOP_FIXTURE).json()
+
+    listed = client.get("/import-areas").json()["import_areas"]
+
+    assert [area["id"] for area in listed] == [loop["id"], neighborhood["id"]]
+    assert listed[0] == client.get(f"/import-areas/{loop['id']}").json()
+    assert listed[0]["block_count"] == loop["block_count"] > 0
+
+
+def test_list_import_areas_filters_by_status_and_limits(client):
+    completed = _import(client).json()
+    failed = client.post(
+        "/import-areas",
+        json={"bbox": LOOP_BBOX, "payload": {"elements": [{"type": "way", "id": 1, "nodes": [10, 20], "tags": {"highway": "residential"}}]}},
+    )
+    assert failed.status_code == 422
+
+    only_completed = client.get("/import-areas", params={"status": "completed"}).json()["import_areas"]
+    all_areas = client.get("/import-areas").json()["import_areas"]
+    limited = client.get("/import-areas", params={"limit": 1}).json()["import_areas"]
+
+    assert [area["id"] for area in only_completed] == [completed["id"]]
+    assert {area["status"] for area in all_areas} == {"completed", "failed"}
+    assert len(limited) == 1
+
+
+def test_list_import_areas_rejects_bad_parameters(client):
+    for params in ({"limit": 0}, {"limit": 201}, {"status": "done"}):
+        response = client.get("/import-areas", params=params)
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "invalid_request"

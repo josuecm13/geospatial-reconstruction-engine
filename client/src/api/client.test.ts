@@ -69,3 +69,16 @@ describe("ApiClient", () => {
     expect(calls[0].init?.method).toBe("DELETE");
   });
 });
+
+describe("listImportAreas", () => {
+  it("asks for completed areas and unwraps the list", async () => {
+    const calls: string[] = [];
+    const client = new ApiClient("/api", async (url) => {
+      calls.push(url);
+      return json(200, { import_areas: [{ id: "a1" }] });
+    });
+
+    expect(await client.listImportAreas({ status: "completed", limit: 20 })).toEqual([{ id: "a1" }]);
+    expect(calls).toEqual(["/api/import-areas?status=completed&limit=20"]);
+  });
+});

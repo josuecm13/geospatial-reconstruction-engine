@@ -19,6 +19,26 @@ class ImportAreaRepository:
         model = self.session.get(ImportAreaModel, import_area_id)
         return self._to_domain(model) if model is not None else None
 
+    def list_recent(self, status: ImportStatus | None = None, limit: int = 50) -> list[tuple[ImportArea, int]]:
+        """Import areas, most recently imported first (an area that never completed an import
+        sorts by when it was created), each with its block count."""
+        block_counts = (
+            select(BlockModel.import_area_id, func.count().label("block_count"))
+            .group_by(BlockModel.import_area_id)
+            .subquery()
+        )
+        query = (
+            select(ImportAreaModel, func.coalesce(block_counts.c.block_count, 0))
+            .outerjoin(block_counts, block_counts.c.import_area_id == ImportAreaModel.id)
+            .order_by(
+                func.coalesce(ImportAreaModel.imported_at, ImportAreaModel.created_at).desc(), ImportAreaModel.id
+            )
+            .limit(limit)
+        )
+        if status is not None:
+            query = query.where(ImportAreaModel.status == status)
+        return [(self._to_domain(model), count) for model, count in self.session.execute(query).all()]
+
     def block_count(self, import_area_id: uuid.UUID) -> int:
         return self.session.scalar(
             select(func.count()).select_from(BlockModel).where(BlockModel.import_area_id == import_area_id)

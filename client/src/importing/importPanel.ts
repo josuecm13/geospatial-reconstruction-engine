@@ -5,7 +5,10 @@ import { areaSquareMeters, bboxProblem, formatSquareKilometers, MAX_AREA_SQUARE_
 import type { MapDataLayers } from "../views/mapDataLayers";
 import { importErrorMessage } from "./errorMessages";
 import { RectangleTool } from "./rectangleTool";
-import { RecentImports } from "./recentImports";
+import { CurrentArea, describeArea, findByBbox } from "./recentImports";
+
+/** How many completed areas the panel lists. */
+const LISTED_AREAS = 50;
 
 export const REIMPORT_WARNING =
   "This rectangle was imported before. Importing it again reconciles it with OpenStreetMap as it is " +
@@ -15,7 +18,9 @@ export const REIMPORT_WARNING =
 /** The 2D picker: draw a rectangle up to 1 km², import it live, and see what the engine built. */
 export class ImportPanel {
   private readonly tool: RectangleTool;
-  private readonly recent = new RecentImports(localStorage);
+  private readonly current = new CurrentArea(localStorage);
+  /** Completed import areas from the API, most recent first. */
+  private areas: ImportArea[] = [];
   private readonly el: {
     draw: HTMLButtonElement;
     area: HTMLElement;
@@ -38,8 +43,8 @@ export class ImportPanel {
       <p class="area-readout" data-role="area">No rectangle yet</p>
       <button type="button" class="primary" data-role="import" disabled>Import from OpenStreetMap</button>
       <p class="status" data-role="status" role="status" aria-live="polite"></p>
-      <h3>Recent imports</h3>
-      <ul class="recent" data-role="recent"></ul>`;
+      <h3>Imported areas</h3>
+      <ul class="recent" data-role="recent"><li class="hint">Loading…</li></ul>`;
     const pick = <T extends HTMLElement>(role: string) => container.querySelector<T>(`[data-role="${role}"]`)!;
     this.el = {
       draw: pick("draw"),
@@ -54,8 +59,8 @@ export class ImportPanel {
       this.tool.startDrawing();
     });
     this.el.importButton.addEventListener("click", () => void this.importSelection());
-    this.renderRecent();
-    const current = this.recent.current;
+    void this.refreshAreas();
+    const current = this.current.id;
     if (current) void this.open(current, { quiet: true });
   }
 
@@ -70,14 +75,14 @@ export class ImportPanel {
         : `${formatSquareKilometers(area)} of ${formatSquareKilometers(MAX_AREA_SQUARE_METERS)}`;
     this.el.area.dataset.state = problem ? "invalid" : "ok";
     this.el.importButton.disabled = this.busy || problem !== null;
-    this.el.importButton.textContent = this.recent.findByBbox(roundBbox(bbox)) ? "Re-import from OpenStreetMap" : "Import from OpenStreetMap";
+    this.el.importButton.textContent = findByBbox(this.areas, roundBbox(bbox)) ? "Re-import from OpenStreetMap" : "Import from OpenStreetMap";
   }
 
   private async importSelection(): Promise<void> {
     const drawn = this.tool.bbox;
     if (!drawn || bboxProblem(drawn) !== null || this.busy) return;
     const bbox = roundBbox(drawn);
-    if (this.recent.findByBbox(bbox) && !window.confirm(REIMPORT_WARNING)) return;
+    if (findByBbox(this.areas, bbox) && !window.confirm(REIMPORT_WARNING)) return;
 
     this.busy = true;
     this.el.importButton.disabled = true;
@@ -87,9 +92,8 @@ export class ImportPanel {
     const timer = window.setInterval(tick, 1000);
     try {
       const area = await this.api.importArea(bbox);
-      this.recent.record(area);
-      this.renderRecent();
       await this.open(area.id, { area });
+      void this.refreshAreas();
     } catch (error) {
       this.setStatus(importErrorMessage(error), "error");
     } finally {
@@ -113,26 +117,37 @@ export class ImportPanel {
         ],
         { padding: 60, duration: options.quiet ? 0 : 800 },
       );
-      this.recent.current = areaId;
+      this.current.id = areaId;
       this.setStatus(summary(area), "ok");
       this.selectionChanged(area.bbox);
+      this.renderAreas();
     } catch (error) {
       if (!options.quiet) this.setStatus(importErrorMessage(error), "error");
     }
   }
 
-  private renderRecent(): void {
-    const items = this.recent.list();
+  /** Reloads the list of completed areas from the API, so any earlier import can be reopened. */
+  private async refreshAreas(): Promise<void> {
+    try {
+      this.areas = await this.api.listImportAreas({ status: "completed", limit: LISTED_AREAS });
+      this.renderAreas();
+    } catch (error) {
+      this.el.recent.replaceChildren(Object.assign(document.createElement("li"), { textContent: importErrorMessage(error), className: "hint" }));
+    }
+  }
+
+  private renderAreas(): void {
+    const selected = this.current.id;
     this.el.recent.replaceChildren(
-      ...(items.length
-        ? items.map((item) => {
+      ...(this.areas.length
+        ? this.areas.map((area) => {
             const li = document.createElement("li");
             const button = document.createElement("button");
             button.type = "button";
             button.className = "link";
-            const when = item.importedAt ? new Date(item.importedAt).toLocaleString() : "not completed";
-            button.textContent = `${when}: ${item.buildingCount ?? 0} buildings, ${item.roadCount ?? 0} roads`;
-            button.addEventListener("click", () => void this.open(item.id));
+            if (area.id === selected) button.setAttribute("aria-current", "true");
+            button.textContent = describeArea(area);
+            button.addEventListener("click", () => void this.open(area.id));
             li.appendChild(button);
             return li;
           })

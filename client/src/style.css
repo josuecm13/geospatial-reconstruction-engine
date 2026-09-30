@@ -83,3 +83,4 @@ body:has(#map-view[hidden]) .panel { display: none; }
 .feature-popup table { border-collapse: collapse; margin-top: 4px; }
 .feature-popup td { padding: 2px 8px 2px 0; vertical-align: top; }
 .feature-popup td:first-child { opacity: 0.65; }
+.panel button.link[aria-current="true"] { font-weight: 600; }

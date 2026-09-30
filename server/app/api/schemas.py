@@ -74,6 +74,10 @@ class ImportAreaCreate(BaseModel):
     payload: dict[str, Any] | None = None
 
 
+class ImportAreaListOut(BaseModel):
+    import_areas: list["ImportAreaOut"]
+
+
 class ImportAreaOut(BaseModel):
     id: uuid.UUID
     provider: str

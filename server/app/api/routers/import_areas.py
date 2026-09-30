@@ -26,9 +26,10 @@ from app.api.mappers import (
     projection_out,
     segment_feature,
 )
-from app.api.schemas import ExportMode, Feature, ImportAreaCreate, ImportAreaOut, MapDataOut, ScopeOut, ScopeType
+from app.api.schemas import ExportMode, Feature, ImportAreaCreate, ImportAreaListOut, ImportAreaOut, MapDataOut, ScopeOut, ScopeType
 from app.domain.bounding_box import BoundingBox, Coordinate
 from app.domain.cross_section import cross_sections_by_segment
+from app.domain.enums import ImportStatus
 from app.domain.import_area import ImportArea
 from app.domain.local_projection import local_projection_for
 from app.domain.traced_boundary import TracedBoundary
@@ -75,6 +76,17 @@ def create_import_area(
     return import_area_out(
         result.import_area, result.block_count, result.linked_building_count, result.skipped_restriction_count
     )
+
+
+@router.get("/import-areas", response_model=ImportAreaListOut)
+def list_import_areas(
+    status: ImportStatus | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    session: Session = Depends(get_session),
+) -> ImportAreaListOut:
+    """Import areas, most recently imported first, so a client can reopen any of them."""
+    rows = ImportAreaRepository(session).list_recent(status=status, limit=limit)
+    return ImportAreaListOut(import_areas=[import_area_out(area, block_count) for area, block_count in rows])
 
 
 @router.get("/import-areas/{import_area_id}", response_model=ImportAreaOut)
