@@ -10,6 +10,7 @@ like every other endpoint rather than building its own engine.
 
 from __future__ import annotations
 
+import os
 import uuid
 from collections.abc import Generator
 
@@ -23,6 +24,7 @@ from app.config.settings import load_settings
 from app.domain.enums import ImportStatus
 from app.domain.import_area import ImportArea
 from app.domain.traced_boundary import TracedBoundary
+from app.ingestion.overpass import DEFAULT_OVERPASS_URL, OverpassClient
 from app.persistence.repositories.import_area import ImportAreaRepository
 from app.persistence.repositories.traced_boundary import TracedBoundaryRepository
 
@@ -84,3 +86,9 @@ def scope_boundary(
     if boundary_id is None:
         return None
     return traced_boundary(boundary_id, area, session)
+
+
+def get_overpass_client() -> OverpassClient:
+    """The live source for an import without a payload. `OVERPASS_URL` points it at another
+    instance; tests override this dependency so they never reach the network."""
+    return OverpassClient(url=os.environ.get("OVERPASS_URL") or DEFAULT_OVERPASS_URL)
