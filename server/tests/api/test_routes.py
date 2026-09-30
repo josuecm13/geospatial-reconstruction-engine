@@ -183,3 +183,25 @@ def test_reported_endpoint_nodes_match_the_route(client, monkeypatch):
     body = response.json()
     assert body["origin_node_id"] == body["node_ids"][0]
     assert body["destination_node_id"] == body["node_ids"][-1]
+
+
+def test_route_crosses_a_primary_link_between_two_roads(client):
+    # Two primary roads meet only through a slip road; dropping the link would split the graph.
+    payload = {
+        "elements": [
+            {"type": "node", "id": 1, "lat": 10.0000, "lon": -84.0020},
+            {"type": "node", "id": 2, "lat": 10.0000, "lon": -84.0010},
+            {"type": "node", "id": 3, "lat": 10.0010, "lon": -84.0005},
+            {"type": "node", "id": 4, "lat": 10.0010, "lon": -84.0000},
+            {"type": "way", "id": 100, "nodes": [1, 2], "tags": {"highway": "primary"}},
+            {"type": "way", "id": 101, "nodes": [2, 3], "tags": {"highway": "primary_link"}},
+            {"type": "way", "id": 102, "nodes": [3, 4], "tags": {"highway": "primary"}},
+        ]
+    }
+    bbox = {"min_latitude": 9.9995, "min_longitude": -84.003, "max_latitude": 10.002, "max_longitude": -83.999}
+    area = client.post("/import-areas", json={"bbox": bbox, "payload": payload}).json()
+
+    response = client.post(f"/import-areas/{area['id']}/routes", json=_route_body((10.0, -84.002), (10.001, -84.000)))
+
+    assert response.status_code == 200
+    assert len(response.json()["segment_ids"]) == 3

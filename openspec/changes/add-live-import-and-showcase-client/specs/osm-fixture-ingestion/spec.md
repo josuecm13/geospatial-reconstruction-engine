@@ -17,3 +17,10 @@ When a way references a node that has no node element but the way carries an inl
 #### Scenario: A recorded live response
 - **WHEN** a recorded Overpass response in which ways reference nodes outside the bounding box is imported
 - **THEN** the import completes, and those ways are imported with their full geometry
+
+### Requirement: Link and living-street ways SHALL join the road network
+A `motorway_link`, `trunk_link`, `primary_link`, `secondary_link`, or `tertiary_link` way SHALL be imported as a road of its parent class (motorway, trunk, primary, secondary, or tertiary), and a `living_street` way SHALL be imported as a residential road, so that none of them is dropped and they receive that class's generated cross-section.
+
+#### Scenario: Routing across a slip road
+- **WHEN** two primary roads connected only by a `primary_link` way are imported
+- **THEN** a route from one road to the other is found across the link

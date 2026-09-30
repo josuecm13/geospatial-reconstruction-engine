@@ -88,7 +88,20 @@ OSMTurnRestriction = ImportTurnRestriction
 OSMImportRecords = ImportRecords
 
 
-_ROAD_CLASSES = {item.value: item for item in RoadClassification}
+_ROAD_CLASSES = {
+    **{item.value: item for item in RoadClassification},
+    # A link (ramp or slip road) takes its parent road's class, so it keeps the network connected
+    # and gets that class's generated cross-section.
+    **{f"{item.value}_link": item for item in (
+        RoadClassification.MOTORWAY,
+        RoadClassification.TRUNK,
+        RoadClassification.PRIMARY,
+        RoadClassification.SECONDARY,
+        RoadClassification.TERTIARY,
+    )},
+    # A shared street is drivable and residential in character.
+    "living_street": RoadClassification.RESIDENTIAL,
+}
 _RESTRICTIONS = {item.value: item for item in RestrictionKind if item is not RestrictionKind.NONE}
 
 
