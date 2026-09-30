@@ -204,3 +204,30 @@ def test_posting_a_timed_out_overpass_response_is_source_incomplete_and_keeps_th
     assert response.json()["error"]["code"] == "source_incomplete"
     assert client.get(f"/import-areas/{created['id']}").json()["status"] == "completed"
     assert client.get(f"/import-areas/{created['id']}/map-data").json() == before
+
+
+GROUPED_FIXTURE = Path(__file__).parents[1] / "fixtures" / "osm_grouped_streets.json"
+GROUPED_BBOX = {"min_latitude": 9.9488, "min_longitude": -84.1002, "max_latitude": 9.9513, "max_longitude": -84.0983}
+
+
+def _street_ids_by_name(client):
+    created = _import(client, GROUPED_BBOX, GROUPED_FIXTURE).json()
+    segments = client.get(f"/import-areas/{created['id']}/map-data").json()["road_segments"]["features"]
+    by_name: dict[str | None, set[str]] = {}
+    for feature in segments:
+        street = feature["properties"]["street"]
+        by_name.setdefault(street["name"], set()).add(street["id"])
+    return by_name
+
+
+def test_map_data_segments_carry_their_logical_street_id_stably(client):
+    first = _street_ids_by_name(client)
+    second = _street_ids_by_name(client)
+
+    # Main Street's three connected ways and Central Avenue's two carriageways are one street
+    # each; the two connected unnamed ways stay separate streets.
+    assert len(first["Main Street"]) == 1
+    assert len(first["Central Avenue"]) == 1
+    assert len(first[None]) == 2
+    assert all(street_id is not None for ids in first.values() for street_id in ids)
+    assert second == first

@@ -137,7 +137,11 @@ def segment_feature(entry: RoadSegmentWithStreet, cross_section: SegmentCrossSec
             "lane_type": cross_section.lane_type.value,
             "width_meters": cross_section.width_meters,
             "is_vehicle_accessible": segment.is_vehicle_accessible,
-            "street": {"name": entry.street_name, "classification": entry.street_classification.value},
+            "street": {
+                "id": entry.street_id,
+                "name": entry.street_name,
+                "classification": entry.street_classification.value,
+            },
         },
     )
 

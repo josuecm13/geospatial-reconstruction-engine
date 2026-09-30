@@ -181,7 +181,7 @@ class RoadSegmentRepository:
 
     def list_for_import_area_with_street(self, import_area_id) -> list[RoadSegmentWithStreet]:
         rows = self.session.execute(
-            select(RoadSegmentModel, StreetModel.name, StreetModel.classification, RoadModel.classification)
+            select(RoadSegmentModel, StreetModel.id, StreetModel.name, StreetModel.classification, RoadModel.classification)
             .join(RoadModel, RoadSegmentModel.road_id == RoadModel.id)
             .join(StreetModel, RoadModel.street_id == StreetModel.id)
             .where(RoadModel.import_area_id == import_area_id)
@@ -192,8 +192,9 @@ class RoadSegmentRepository:
                 street_name=street_name,
                 street_classification=RoadClassification(street_classification),
                 road_classification=RoadClassification(road_classification),
+                street_id=street_id,
             )
-            for segment_model, street_name, street_classification, road_classification in rows
+            for segment_model, street_id, street_name, street_classification, road_classification in rows
         ]
 
     def list_for_import_area_with_road_classification(
