@@ -34,7 +34,7 @@ beyond parity.
 | Navigable nodes | shipped | — | Usually hidden. Useful in a debug layer |
 | Blocks: boundary polygon, `area_square_meters` | shipped | — | |
 | Blocks: `buildable_area` (MultiPolygon or null), `buildable_area_square_meters`, `is_median`, `is_clipped` | shipped | — | Computed and persisted since M7.2, but `block_feature` exposes only `area_square_meters` |
-| Buildings: footprint, `category`, `block_id` | shipped | — | Footprints only, with no height until M8.1 |
+| Buildings: footprint, `category`, `block_id`, `height_meters`, `levels` | shipped | — | `height_meters` / `levels` are as the source stated, null when unknown (M8.1) |
 | POIs: point, `category`, `name` | shipped | — | |
 | Area features: polygon, `kind` | shipped | — | |
 | `attribution` ("© OpenStreetMap contributors") | shipped | — | **Required**: must always be visible |
@@ -72,7 +72,6 @@ beyond parity.
 
 | Capability | Milestone | Client notes |
 |---|---|---|
-| Building height and levels from source (unknown stays null) | M8.1 | Extrude in 3D. Unknown heights look different from measured ones |
 | Generated block content: seeded, reproducible, with provenance | M11 | Toggle between raw, generated, and both. Seed control. Marker for stale runs |
 | Export layer selection: raw / generated / both | M11 | |
 | Asset identifiers for POIs and generated buildings, with a fallback chain | M12 | The client maps identifiers to models and materials |

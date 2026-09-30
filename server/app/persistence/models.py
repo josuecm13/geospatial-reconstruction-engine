@@ -1,10 +1,12 @@
 from geoalchemy2 import Geometry
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Column,
     DateTime,
     Float,
     ForeignKey,
+    Integer,
     SmallInteger,
     String,
     UniqueConstraint,
@@ -240,6 +242,8 @@ class BuildingModel(Base):
     source_id = Column(String, nullable=False)
     category = Column(enum_type(BuildingCategory, "building_category"), nullable=False)
     geom = Column(Geometry(geometry_type="POLYGON", srid=4326), nullable=False)
+    height_meters = Column(Float, nullable=True)
+    levels = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at = Column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
@@ -247,6 +251,8 @@ class BuildingModel(Base):
 
     __table_args__ = (
         UniqueConstraint("import_area_id", "source_id", name="uq_buildings_import_area_source"),
+        CheckConstraint("height_meters > 0", name="ck_buildings_height_positive"),
+        CheckConstraint("levels >= 0", name="ck_buildings_levels_non_negative"),
     )
 
 

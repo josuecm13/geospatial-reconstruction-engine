@@ -179,3 +179,15 @@ def test_map_data_segments_carry_the_generated_cross_section_and_its_provenance(
     # The unnamed one-way is tagged lanes=1, in its travel direction only.
     (one_way,) = by_street[None]
     assert (one_way["lane_count"], one_way["lane_count_provenance"], one_way["width_meters"]) == (1, "tagged", 3.25)
+
+
+def test_map_data_buildings_carry_source_height_and_levels(client):
+    payload = json.loads(FIXTURE.read_text())
+    payload["elements"].append(
+        {"type": "way", "id": 901, "nodes": [11, 12, 13, 14, 11], "tags": {"building": "yes", "height": "9.5", "building:levels": "3"}}
+    )
+    created = client.post("/import-areas", json={"bbox": NEIGHBORHOOD_BBOX, "payload": payload}).json()
+
+    buildings = client.get(f"/import-areas/{created['id']}/map-data").json()["buildings"]["features"]
+
+    assert {(f["properties"]["height_meters"], f["properties"]["levels"]) for f in buildings} == {(None, None), (9.5, 3)}
