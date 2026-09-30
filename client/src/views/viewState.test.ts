@@ -12,3 +12,10 @@ describe("viewFromHash", () => {
     expect(viewFromHash(hash)).toBe(expected);
   });
 });
+
+describe("INITIAL_VIEW", () => {
+  it("is the map, so the scene is never built on load", async () => {
+    const { INITIAL_VIEW } = await import("./viewState");
+    expect(INITIAL_VIEW).toBe("map");
+  });
+});
