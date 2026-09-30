@@ -246,3 +246,28 @@ def test_unknown_oneway_value_still_fails_the_import():
 
     with pytest.raises(OSMIngestionError, match="unsupported oneway"):
         OSMFixtureAdapter().parse(payload)
+
+
+def _restriction_payload(tags):
+    payload = json.loads(FIXTURE.read_text())
+    for element in payload["elements"]:
+        if element["type"] == "relation":
+            element["tags"] = {"type": "restriction", **tags}
+    return payload
+
+
+@pytest.mark.parametrize(
+    ("tags", "expected"),
+    [
+        ({"restriction": "no_left_turn", "restriction:bus": "only_straight_on"}, [RestrictionKind.NO_LEFT_TURN]),
+        ({"restriction:motorcar": "no_u_turn", "restriction:vehicle": "no_left_turn"}, [RestrictionKind.NO_U_TURN]),
+        ({"restriction:hgv": "no_left_turn", "restriction:bicycle": "no_right_turn"}, []),
+    ],
+)
+def test_vehicle_scoped_restrictions_apply_only_when_they_bind_a_car(tags, expected):
+    assert [r.kind for r in OSMFixtureAdapter().parse(_restriction_payload(tags)).restrictions] == expected
+
+
+def test_restriction_without_any_restriction_tag_still_fails():
+    with pytest.raises(OSMIngestionError, match="unsupported restriction"):
+        OSMFixtureAdapter().parse(_restriction_payload({}))

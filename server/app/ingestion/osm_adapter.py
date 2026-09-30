@@ -103,6 +103,9 @@ _ROAD_CLASSES = {
     "living_street": RoadClassification.RESIDENTIAL,
 }
 _RESTRICTIONS = {item.value: item for item in RestrictionKind if item is not RestrictionKind.NONE}
+# Vehicle-scoped restriction keys that bind a car, most specific first. Any other
+# `restriction:<vehicle>` (bus, hgv, bicycle, …) doesn't apply to car routing and is skipped.
+_CAR_RESTRICTION_KEYS = ("restriction:motorcar", "restriction:motor_vehicle", "restriction:vehicle")
 
 
 def _source_id(element: dict[str, Any]) -> str:
@@ -325,7 +328,12 @@ class OSMFixtureAdapter:
                     raise IngestionError(f"POI node {source_id} is missing coordinates")
                 pois.append(ImportPoi(source_id, point, category, tags.get("name")))
 
-        restrictions = tuple(self._restriction(relation) for relation in relations if self._is_restriction(relation))
+        restrictions = tuple(
+            restriction
+            for relation in relations
+            if self._is_restriction(relation)
+            if (restriction := self._restriction(relation)) is not None
+        )
         self._validate_references(nodes, roads, buildings, areas, restrictions)
         return ImportRecords(nodes, tuple(roads), tuple(buildings), tuple(pois), tuple(areas), restrictions)
 
@@ -334,10 +342,18 @@ class OSMFixtureAdapter:
         tags = relation.get("tags", {})
         return isinstance(tags, dict) and tags.get("type") == "restriction"
 
-    def _restriction(self, relation: dict[str, Any]) -> ImportTurnRestriction:
+    def _restriction(self, relation: dict[str, Any]) -> ImportTurnRestriction | None:
+        """The relation as a car-routing restriction, or None when it applies only to other vehicles."""
         source_id = _source_id(relation)
         tags = relation.get("tags", {})
-        kind = _RESTRICTIONS.get(tags.get("restriction"))
+        value = tags.get("restriction")
+        if value is None:
+            value = next((tags[key] for key in _CAR_RESTRICTION_KEYS if key in tags), None)
+            if value is None:
+                if any(str(key).startswith("restriction:") for key in tags):
+                    return None
+                raise IngestionError(f"restriction relation {source_id} has unsupported restriction")
+        kind = _RESTRICTIONS.get(value)
         if kind is None:
             raise IngestionError(f"restriction relation {source_id} has unsupported restriction")
         members = relation.get("members", [])

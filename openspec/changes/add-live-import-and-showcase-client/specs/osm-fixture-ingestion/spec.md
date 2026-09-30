@@ -42,3 +42,14 @@ A road way tagged `oneway=reversible` or `oneway=alternating` SHALL be imported 
 #### Scenario: A reversible road
 - **WHEN** an import contains a road way tagged `oneway=reversible`
 - **THEN** the import completes and the road has segments in both directions
+
+### Requirement: Vehicle-scoped restrictions SHALL apply only when they bind a car
+A restriction relation's plain `restriction` tag SHALL take precedence. Without one, the system SHALL use `restriction:motorcar`, then `restriction:motor_vehicle`, then `restriction:vehicle`, the most specific first. A restriction relation tagged only with other vehicle-scoped keys (for example `restriction:bus` or `restriction:hgv`) SHALL be skipped without failing the import. A restriction relation with no restriction tag at all SHALL still fail it.
+
+#### Scenario: A bus-only restriction
+- **WHEN** an import contains a restriction relation tagged only `restriction:bus=no_left_turn`
+- **THEN** the import completes and no movement is prohibited by it
+
+#### Scenario: A car-scoped restriction
+- **WHEN** an import contains a restriction relation tagged only `restriction:motorcar=no_left_turn`
+- **THEN** the corresponding movement is prohibited
