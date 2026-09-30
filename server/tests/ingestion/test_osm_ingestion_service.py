@@ -411,3 +411,19 @@ def test_remark_on_a_first_import_creates_no_area(db_session):
         OSMIngestionService(db_session).import_fixture(_bbox(), payload)
 
     assert db_session.scalar(select(func.count()).select_from(ImportAreaModel)) == 0
+
+
+LIVE_FIXTURE = Path(__file__).parents[1] / "fixtures" / "overpass" / "rosenthaler_platz_small.json"
+LIVE_BBOX = BoundingBox(Coordinate(52.5292, 13.4005), Coordinate(52.5302, 13.4021))
+
+
+def test_recorded_live_response_imports(db_session):
+    payload = json.loads(LIVE_FIXTURE.read_text())
+    # A bus-shelter area straddling the box edge has its center outside the box, which the
+    # bounding-box rule rejects until #74; everything else in the recorded response is kept.
+    payload["elements"] = [element for element in payload["elements"] if element["id"] != 521511481]
+
+    result = OSMIngestionService(db_session).import_fixture(LIVE_BBOX, payload)
+
+    assert result.import_area.status is ImportStatus.COMPLETED
+    assert result.road_count > 0 and result.building_count > 0 and result.block_count > 0

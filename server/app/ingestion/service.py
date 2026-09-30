@@ -15,7 +15,7 @@ from app.domain.road_graph import NavigableNode, Road, RoadSegment, Street
 from app.domain.street_grouping import GroupableWay, group_ways_into_streets, street_id_for
 from app.domain.turn_movement import TurnMovement
 from app.ingestion.osm_adapter import ImportRecords, OSMFixtureAdapter, OSMIngestionError, PayloadOutsideBoundingBox
-from app.ingestion.overpass import ensure_complete
+from app.ingestion.overpass import ensure_complete, with_way_nodes_from_geometry
 from app.persistence.block_derivation import BlockDerivationService
 from app.persistence.models import (
     AreaFeatureModel,
@@ -66,7 +66,7 @@ class OSMIngestionService:
         self.session.commit()
         try:
             area_repo.mark_importing(import_area.id)
-            records = self.adapter.parse(payload)
+            records = self.adapter.parse(with_way_nodes_from_geometry(payload))
             self._validate_within_bounding_box(bbox, records)
             result = self._persist(import_area, records)
             self.session.commit()
