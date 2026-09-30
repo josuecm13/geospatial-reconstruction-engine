@@ -15,6 +15,10 @@ class IngestionError(ValueError):
     """A supported OSM feature cannot safely be translated."""
 
 
+class MalformedRestriction(IngestionError):
+    """A restriction relation that can't be read as one car turn; skipped, never fatal."""
+
+
 class PayloadOutsideBoundingBox(IngestionError):
     """A supported feature in the payload does not belong to the declared bounding box."""
 
@@ -78,6 +82,9 @@ class ImportRecords:
     pois: tuple[ImportPoi, ...]
     areas: tuple[ImportPolygonFeature, ...]
     restrictions: tuple[ImportTurnRestriction, ...]
+    # Source ids of restriction relations that are malformed or reference what the payload
+    # doesn't hold; they're skipped rather than failing the import.
+    skipped_restrictions: tuple[str, ...] = ()
 
 
 # Kept as aliases for callers which adopted the initial adapter module before
@@ -337,14 +344,21 @@ class OSMFixtureAdapter:
         for relation in relations:
             self._multipolygon_features(relation, ways_by_id, nodes, buildings, areas)
 
-        restrictions = tuple(
-            restriction
-            for relation in relations
-            if self._is_restriction(relation)
-            if (restriction := self._restriction(relation)) is not None
-        )
-        self._validate_references(nodes, roads, buildings, areas, restrictions)
-        return ImportRecords(nodes, tuple(roads), tuple(buildings), tuple(pois), tuple(areas), restrictions)
+        skipped: list[str] = []
+        parsed = []
+        for relation in relations:
+            if not self._is_restriction(relation):
+                continue
+            try:
+                restriction = self._restriction(relation)
+            except MalformedRestriction:
+                skipped.append(_source_id(relation))
+                continue
+            if restriction is not None:
+                parsed.append(restriction)
+        self._validate_references(nodes, roads, buildings, areas)
+        restrictions = self._resolvable_restrictions(parsed, nodes, roads, skipped)
+        return ImportRecords(nodes, tuple(roads), tuple(buildings), tuple(pois), tuple(areas), restrictions, tuple(skipped))
 
     @staticmethod
     def _multipolygon_features(relation, ways_by_id, nodes, buildings, areas) -> None:
@@ -398,10 +412,10 @@ class OSMFixtureAdapter:
             if value is None:
                 if any(str(key).startswith("restriction:") for key in tags):
                     return None
-                raise IngestionError(f"restriction relation {source_id} has unsupported restriction")
+                raise MalformedRestriction(f"restriction relation {source_id} has unsupported restriction")
         kind = _RESTRICTIONS.get(value)
         if kind is None:
-            raise IngestionError(f"restriction relation {source_id} has unsupported restriction")
+            raise MalformedRestriction(f"restriction relation {source_id} has unsupported restriction")
         members = relation.get("members", [])
         expected_types = {"from": "way", "via": "node", "to": "way"}
         found = {
@@ -412,21 +426,28 @@ class OSMFixtureAdapter:
             if member.get("role") == role and member.get("type") == expected_type and member.get("ref") is not None
         }
         if set(found) != set(expected_types):
-            raise IngestionError(f"restriction relation {source_id} needs from, via, and to members")
+            raise MalformedRestriction(f"restriction relation {source_id} needs from, via, and to members")
         return ImportTurnRestriction(source_id, found["from"], found["via"], found["to"], kind)
 
     @staticmethod
-    def _validate_references(nodes, roads, buildings, areas, restrictions) -> None:
-        road_ids = {road.source_id for road in roads}
+    def _validate_references(nodes, roads, buildings, areas) -> None:
         for feature in [*roads, *buildings, *areas]:
             for node_id in feature.node_ids:
                 if node_id not in nodes:
                     raise IngestionError(f"feature {feature.source_id} references missing node {node_id}")
+
+    @staticmethod
+    def _resolvable_restrictions(restrictions, nodes, roads, skipped: list[str]) -> tuple[ImportTurnRestriction, ...]:
+        """Keeps restrictions whose from and to are supported roads in the payload and whose via
+        node is present; the rest are added to `skipped`."""
+        road_ids = {road.source_id for road in roads}
+        kept = []
         for restriction in restrictions:
-            if restriction.from_way_id not in road_ids or restriction.to_way_id not in road_ids:
-                raise IngestionError(f"restriction {restriction.source_id} references an unsupported or missing road way")
-            if restriction.via_node_id not in nodes:
-                raise IngestionError(f"restriction {restriction.source_id} references missing via node {restriction.via_node_id}")
+            if restriction.from_way_id in road_ids and restriction.to_way_id in road_ids and restriction.via_node_id in nodes:
+                kept.append(restriction)
+            else:
+                skipped.append(restriction.source_id)
+        return tuple(kept)
 
 
 def _member_points(member: dict[str, Any], ways_by_id, nodes: dict[str, Coordinate]) -> list[Coordinate] | None:

@@ -21,6 +21,7 @@ beyond parity.
 | Import a bounded area (≤ 1 km × 1 km) from an OSM payload. Re-import reconciles and deletes what the payload omits | `POST /import-areas` | shipped | — | Draw or enter the rectangle. Show the 1 km² limit while drawing. Warn that re-import is destructive |
 | Import status and entity counts (roads, nodes, buildings, POIs, area features, blocks, linked buildings) | `GET /import-areas/{id}` | shipped | — | Handle `pending` / `importing` / `failed`. `map-data` returns 409 `import_area_not_ready` until the import completes |
 | Created / updated / removed counts on import | `POST /import-areas` | planned (#6) | — | Show a diff summary after a re-import |
+| Skipped turn restrictions on import (`skipped_restriction_count`: malformed or unresolvable in OSM) | `POST /import-areas` | shipped | — | Mention it in the import summary when it isn't zero |
 | Live Overpass import: omit `payload` and the box is fetched live | `POST /import-areas` | shipped | — | The main entry point. Takes seconds, so show progress. `upstream_unavailable` (503) means retry later |
 
 ### Map data (`GET /import-areas/{id}/map-data`)

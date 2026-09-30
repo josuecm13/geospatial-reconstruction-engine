@@ -67,6 +67,21 @@ A `type=multipolygon` relation carrying a building tag or a supported area-featu
 
 ## MODIFIED Requirements
 
+### Requirement: The system SHALL apply supported source turn restrictions to intersection movements
+The system SHALL generate candidate turn movements for imported road segments and SHALL apply supported no-turn and only-turn source restrictions to the matching movements. A source restriction that is malformed (missing its from, via-node, or to member, or carrying an unsupported restriction value), that references a way or via node the payload doesn't hold as a supported road or node, or that doesn't resolve to exactly one legal turn at its via node SHALL be skipped without failing the import. The import result SHALL report the number of skipped restrictions, and the system SHALL log their source ids.
+
+#### Scenario: Prohibited right turn
+- **WHEN** a fixture contains a supported no-right-turn relation for an imported intersection
+- **THEN** the matching right-turn movement is persisted as prohibited with its restriction kind
+
+#### Scenario: Only-turn restriction
+- **WHEN** a fixture contains a supported only-turn relation for an imported intersection
+- **THEN** the specified movement remains allowed and competing applicable movements from the same incoming segment are persisted as prohibited
+
+#### Scenario: A restriction missing its to way
+- **WHEN** a fixture contains a valid no-left-turn relation and a no-right-turn relation with only from and via members
+- **THEN** the import completes, the left turn is persisted as prohibited, and the result reports one skipped restriction
+
 ### Requirement: Imported features SHALL belong to the import area's bounding box
 The system SHALL reject a payload containing a supported road, building, area feature, or POI mapped as an area whose coordinate envelope does not intersect the import area's bounding box, or a supported POI mapped as a node located outside it. The rejection SHALL fail the import with an actionable error naming offending source ids, and SHALL record the import area as failed. A feature that crosses the bounding-box edge SHALL be accepted, including a POI area whose representative point falls outside the box.
 

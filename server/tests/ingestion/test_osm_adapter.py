@@ -268,9 +268,10 @@ def test_vehicle_scoped_restrictions_apply_only_when_they_bind_a_car(tags, expec
     assert [r.kind for r in OSMFixtureAdapter().parse(_restriction_payload(tags)).restrictions] == expected
 
 
-def test_restriction_without_any_restriction_tag_still_fails():
-    with pytest.raises(OSMIngestionError, match="unsupported restriction"):
-        OSMFixtureAdapter().parse(_restriction_payload({}))
+def test_restriction_without_any_restriction_tag_is_skipped():
+    records = OSMFixtureAdapter().parse(_restriction_payload({}))
+
+    assert (records.restrictions, records.skipped_restrictions) == ((), ("400",))
 
 
 def _geom(*points):
@@ -347,3 +348,24 @@ def test_multipolygon_members_resolve_from_way_elements_without_inline_geometry(
 
 def test_multipolygon_without_supported_tags_is_ignored():
     assert OSMFixtureAdapter().parse(_multipolygon({"landuse": "residential"}, [_member("outer", A, B, C, A)])).areas == ()
+
+
+@pytest.mark.parametrize(
+    ("members", "tags"),
+    [
+        ([{"type": "way", "ref": 100, "role": "from"}, {"type": "node", "ref": 2, "role": "via"}], {"restriction": "no_right_turn"}),
+        ([{"type": "way", "ref": 100, "role": "from"}, {"type": "way", "ref": 101, "role": "via"}, {"type": "way", "ref": 102, "role": "to"}], {"restriction": "no_left_turn"}),
+        ([{"type": "way", "ref": 100, "role": "from"}, {"type": "node", "ref": 2, "role": "via"}, {"type": "way", "ref": 102, "role": "to"}], {"restriction": "no_entry"}),
+        ([{"type": "way", "ref": 999, "role": "from"}, {"type": "node", "ref": 2, "role": "via"}, {"type": "way", "ref": 102, "role": "to"}], {"restriction": "no_left_turn"}),
+        ([{"type": "way", "ref": 100, "role": "from"}, {"type": "node", "ref": 12345, "role": "via"}, {"type": "way", "ref": 102, "role": "to"}], {"restriction": "no_left_turn"}),
+    ],
+    ids=["missing to", "via way", "unsupported value", "from way not in payload", "via node not in payload"],
+)
+def test_malformed_or_unreferenced_restriction_is_skipped_and_the_valid_one_kept(members, tags):
+    payload = json.loads(FIXTURE.read_text())
+    payload["elements"].append({"type": "relation", "id": 401, "members": members, "tags": {"type": "restriction", **tags}})
+
+    records = OSMFixtureAdapter().parse(payload)
+
+    assert [r.source_id for r in records.restrictions] == ["400"]
+    assert records.skipped_restrictions == ("401",)

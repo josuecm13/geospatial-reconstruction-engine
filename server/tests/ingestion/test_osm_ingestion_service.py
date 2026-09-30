@@ -539,3 +539,43 @@ def test_poi_node_outside_the_box_is_still_rejected(db_session):
 
     with pytest.raises(PayloadOutsideBoundingBox):
         OSMIngestionService(db_session).import_fixture(_bbox(), payload)
+
+
+def _with_extra_restriction(members, tags):
+    payload = json.loads(FIXTURE.read_text())
+    payload["elements"].append({"type": "relation", "id": 401, "members": members, "tags": {"type": "restriction", **tags}})
+    return payload
+
+
+def test_restriction_missing_its_to_way_is_skipped_and_the_valid_one_still_enforced(db_session, caplog):
+    payload = _with_extra_restriction(
+        [{"type": "way", "ref": 100, "role": "from"}, {"type": "node", "ref": 2, "role": "via"}], {"restriction": "no_right_turn"}
+    )
+
+    with caplog.at_level("WARNING", logger="app.ingestion.service"):
+        result = OSMIngestionService(db_session).import_fixture(_bbox(), payload)
+
+    assert result.import_area.status is ImportStatus.COMPLETED
+    assert result.skipped_restriction_count == 1
+    assert _prohibited_movements(db_session) == 1
+    assert "401" in caplog.text
+
+
+def test_restriction_that_does_not_resolve_to_one_turn_is_skipped(db_session):
+    # Way 101 runs 2 → 3, so it never arrives at node 1: no incoming segment to restrict.
+    payload = _with_extra_restriction(
+        [{"type": "way", "ref": 101, "role": "from"}, {"type": "node", "ref": 1, "role": "via"}, {"type": "way", "ref": 100, "role": "to"}],
+        {"restriction": "no_u_turn"},
+    )
+
+    result = OSMIngestionService(db_session).import_fixture(_bbox(), payload)
+
+    assert result.import_area.status is ImportStatus.COMPLETED
+    assert result.skipped_restriction_count == 1
+    assert _prohibited_movements(db_session) == 1
+
+
+def test_an_import_with_only_valid_restrictions_skips_none(db_session):
+    result = OSMIngestionService(db_session).import_fixture(_bbox(), json.loads(FIXTURE.read_text()))
+
+    assert result.skipped_restriction_count == 0

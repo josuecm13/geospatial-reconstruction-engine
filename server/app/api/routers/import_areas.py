@@ -72,7 +72,9 @@ def create_import_area(
         raise ApiError(
             409, "import_conflict", "a concurrent request already created this import area"
         ) from exc
-    return import_area_out(result.import_area, result.block_count, result.linked_building_count)
+    return import_area_out(
+        result.import_area, result.block_count, result.linked_building_count, result.skipped_restriction_count
+    )
 
 
 @router.get("/import-areas/{import_area_id}", response_model=ImportAreaOut)

@@ -64,7 +64,12 @@ def bbox_out(bbox: BoundingBox) -> BoundingBoxIn:
     )
 
 
-def import_area_out(area: ImportArea, block_count: int, linked_building_count: int | None = None) -> ImportAreaOut:
+def import_area_out(
+    area: ImportArea,
+    block_count: int,
+    linked_building_count: int | None = None,
+    skipped_restriction_count: int | None = None,
+) -> ImportAreaOut:
     return ImportAreaOut(
         id=area.id,
         provider=area.provider,
@@ -77,6 +82,7 @@ def import_area_out(area: ImportArea, block_count: int, linked_building_count: i
         area_feature_count=area.area_feature_count,
         block_count=block_count,
         linked_building_count=linked_building_count,
+        skipped_restriction_count=skipped_restriction_count,
         imported_at=area.imported_at,
     )
 

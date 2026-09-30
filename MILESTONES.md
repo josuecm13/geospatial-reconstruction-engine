@@ -602,11 +602,12 @@ deferred — fixtures alone can't demonstrate it. Confirmed against the Overpass
 - Fair-use limits apply: the public instance expects sequential (not parallel) queries per IP and
   returns HTTP 429 if a query waits >15s in its execution queue — a live fetch needs a timeout and
   backoff, unlike the fixture path.
-- Real data will include turn restrictions where `via` is a way, not a node (multi-segment
-  intersections) — `OSMIngestionService` only resolves a single via-*node* today, so a real import
-  is more likely than the fixture to hit the "restriction cannot resolve" error path. That's
-  correct, existing behavior (Milestone 3's spec requires failing unresolvable restrictions), not a
-  bug to fix reactively — just don't be surprised by it when picking a real bounding box to demo.
+- Real data includes turn restrictions this project can't apply: `via` is a way, not a node
+  (multi-segment intersections), members are missing (a live San José import held a
+  `no_right_turn` with no `to` way), or the restriction doesn't resolve to one turn at its via
+  node. Milestone 3 failed the whole import on these. Milestone 9 skips them instead (#86): the
+  import completes, well-formed restrictions are still enforced, and the response reports how many
+  were skipped.
 - Real data also carries values the adapter does not handle yet. Each either drops roads (which
   breaks the topology generation depends on) or fails the whole import:
   - `highway=*_link` and `living_street` are not in `RoadClassification` and are dropped, which
