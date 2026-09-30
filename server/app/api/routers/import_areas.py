@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.api.dependencies import (
     completed_import_area,
+    get_overpass_client,
     get_session,
     import_area as import_area_dependency,
     scope_boundary,
@@ -31,6 +32,7 @@ from app.domain.cross_section import cross_sections_by_segment
 from app.domain.import_area import ImportArea
 from app.domain.local_projection import local_projection_for
 from app.domain.traced_boundary import TracedBoundary
+from app.ingestion.overpass import IncompleteSourceResponse, OverpassClient
 from app.ingestion.service import OSMIngestionService
 from app.persistence.map_scope import ClippedGeometries, clip_to_scope, ids_intersecting_boundary
 from app.persistence.repositories.area_feature import AreaFeatureRepository
@@ -44,16 +46,27 @@ router = APIRouter(tags=["import-areas"])
 
 
 @router.post("/import-areas", response_model=ImportAreaOut)
-def create_import_area(body: ImportAreaCreate, session: Session = Depends(get_session)) -> ImportAreaOut:
+def create_import_area(
+    body: ImportAreaCreate,
+    session: Session = Depends(get_session),
+    overpass: OverpassClient = Depends(get_overpass_client),
+) -> ImportAreaOut:
     bbox = BoundingBox(
         min_corner=Coordinate(body.bbox.min_latitude, body.bbox.min_longitude),
         max_corner=Coordinate(body.bbox.max_latitude, body.bbox.max_longitude),
     )
+    payload = body.payload
+    if payload is None:
+        try:
+            payload = overpass.fetch(bbox)
+        except IncompleteSourceResponse as exc:
+            # The source's fault, not the caller's: nothing was changed, and retrying may succeed.
+            raise ApiError(502, "source_incomplete", str(exc)) from exc
     try:
         # Provider is always "osm": only the OSM adapter exists, and a
         # free-form provider string from the client would silently fork
         # import-area identity (design.md Decision 3).
-        result = OSMIngestionService(session).import_fixture(bbox, body.payload, provider="osm")
+        result = OSMIngestionService(session).import_fixture(bbox, payload, provider="osm")
     except IntegrityError as exc:
         session.rollback()
         raise ApiError(

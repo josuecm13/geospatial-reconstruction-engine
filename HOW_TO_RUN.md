@@ -70,6 +70,18 @@ curl -s -X POST localhost:$APP_PORT/import-areas \
 # {"id": "...", "provider": "osm", "status": "completed", "road_count": 5, ...}
 ```
 
+To import a real place instead, omit `payload`: the box is fetched live from Overpass
+(`https://overpass-api.de` by default; set `OVERPASS_URL` to use another instance). Keep boxes
+small while trying it out, since the public instance is shared and sometimes busy, which shows
+up as a 503 `upstream_unavailable`.
+
+```bash
+curl -s -X POST localhost:$APP_PORT/import-areas \
+  -H 'Content-Type: application/json' \
+  -d '{"bbox": {"min_latitude": 52.5285, "min_longitude": 13.3995, "max_latitude": 52.5310, "max_longitude": 13.4035}}'
+# {"id": "...", "status": "completed", "road_count": 61, "building_count": 147, "block_count": 15, ...}
+```
+
 Every response uses the same envelope: `{"error": {"code", "message", "details"}}` on failure, or
 the resource's own shape on success. Save the returned `id` as `AREA_ID`, then:
 

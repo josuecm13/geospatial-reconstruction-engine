@@ -21,7 +21,7 @@ beyond parity.
 | Import a bounded area (≤ 1 km × 1 km) from an OSM payload. Re-import reconciles and deletes what the payload omits | `POST /import-areas` | shipped | — | Draw or enter the rectangle. Show the 1 km² limit while drawing. Warn that re-import is destructive |
 | Import status and entity counts (roads, nodes, buildings, POIs, area features, blocks, linked buildings) | `GET /import-areas/{id}` | shipped | — | Handle `pending` / `importing` / `failed`. `map-data` returns 409 `import_area_not_ready` until the import completes |
 | Created / updated / removed counts on import | `POST /import-areas` | planned (#6) | — | Show a diff summary after a re-import |
-| Live Overpass import (no payload upload) | — | planned (M9, #14–#20) | — | The main entry point once it exists |
+| Live Overpass import: omit `payload` and the box is fetched live | `POST /import-areas` | shipped | — | The main entry point. Takes seconds, so show progress. `upstream_unavailable` (503) means retry later |
 
 ### Map data (`GET /import-areas/{id}/map-data`)
 
@@ -81,7 +81,7 @@ beyond parity.
 Every non-2xx response is `{"error": {"code", "message", "details"}}`. The client should switch on
 `code`, not on the HTTP status: `invalid_request`, `invalid_bounding_box`, `invalid_coordinate`,
 `payload_outside_bounding_box`, `ingestion_failed`, `source_incomplete` (the source response was
-truncated and nothing was changed), `import_area_not_found`, `import_area_not_ready`, `import_conflict`, `building_not_found`, `invalid_boundary` (with
+truncated and nothing was changed), `upstream_unavailable` (Overpass unreachable or busy), `import_area_not_found`, `import_area_not_ready`, `import_conflict`, `building_not_found`, `invalid_boundary` (with
 `details.rule`), `boundary_name_conflict`, `boundary_not_found`, `invalid_spatial_query`,
 `no_navigable_node`, `no_route_found`, `unknown_routing_strategy`, `not_found`,
 `method_not_allowed`, `database_unavailable`, `configuration_error`, `internal_error`.

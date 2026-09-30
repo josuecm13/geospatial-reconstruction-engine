@@ -70,7 +70,8 @@ class FeatureCollection(BaseModel):
 
 class ImportAreaCreate(BaseModel):
     bbox: BoundingBoxIn
-    payload: dict[str, Any]
+    # Omitted: the box is fetched live from Overpass.
+    payload: dict[str, Any] | None = None
 
 
 class ImportAreaOut(BaseModel):

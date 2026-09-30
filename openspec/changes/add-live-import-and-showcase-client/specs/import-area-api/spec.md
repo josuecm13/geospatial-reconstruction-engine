@@ -9,6 +9,49 @@
 
 ## MODIFIED Requirements
 
+### Requirement: The API SHALL import fixture data for a bounding box
+The API SHALL accept `POST /import-areas` with a bounding box (min/max latitude and longitude) and an optional payload, SHALL import it under the `osm` provider, and SHALL run the import synchronously. Without a payload, the API SHALL fetch the bounding box live from Overpass, after validating the box, and import the response. If Overpass is unavailable the response SHALL be a 503 error with code `upstream_unavailable`, and if its response is incomplete a 502 error with code `source_incomplete`. In both cases no import area SHALL be created or changed. A re-import of the same bounding box SHALL reconcile the area with the new payload. A successful response SHALL return the import area's id, provider, bounding box, status, and the counts of imported roads, navigable nodes, buildings, POIs, area features, derived blocks, and buildings linked to a block.
+
+#### Scenario: Valid fixture is imported
+- **WHEN** a client posts a valid bounding box and a valid supported fixture payload
+- **THEN** the response has status 200, the import area status is `completed`, and the reported counts match the fixture's supported entities and the blocks derived from its roads
+
+#### Scenario: Same fixture is imported twice
+- **WHEN** a client posts the same bounding box and payload twice
+- **THEN** both responses report the same import area id and the same counts, including the same block count
+
+#### Scenario: Re-import with a changed payload
+- **WHEN** a client re-imports a bounding box with a payload that omits a building the previous payload contained
+- **THEN** the response reports the lower building count and the area's map data no longer contains that building
+
+#### Scenario: Invalid bounding box
+- **WHEN** a client posts a bounding box whose minimum is not strictly below its maximum, whose coordinates are out of range, or whose area exceeds 1 km²
+- **THEN** the response is a 422 error with code `invalid_bounding_box` and no import area is created
+
+#### Scenario: Malformed fixture payload
+- **WHEN** a client posts a valid bounding box with a payload containing a malformed supported feature
+- **THEN** the response is a 422 error with code `ingestion_failed` and the import area is recorded as `failed`
+
+#### Scenario: Payload outside the bounding box
+- **WHEN** a client posts a payload containing a supported feature that does not intersect the posted bounding box
+- **THEN** the response is a 422 error with code `payload_outside_bounding_box` whose details name the offending source ids, and the import area is recorded as `failed`
+
+#### Scenario: Oversized request body
+- **WHEN** a client posts a request body larger than the configured size limit
+- **THEN** the response is a 413 error with code `payload_too_large` and no import area is created
+
+#### Scenario: Concurrent creation of the same import area
+- **WHEN** creating the import area fails because a concurrent request created the same provider and bounding box first
+- **THEN** the response is a 409 error with code `import_conflict`
+
+#### Scenario: Live import without a payload
+- **WHEN** a client posts a valid bounding box and no payload
+- **THEN** the API fetches that box from Overpass, imports it, and responds as for a posted payload
+
+#### Scenario: Overpass unavailable
+- **WHEN** a client posts a bounding box without a payload and Overpass is unavailable
+- **THEN** the response is a 503 error with code `upstream_unavailable` and no import area is created
+
 ### Requirement: The API SHALL return an import area's full map data as normalized models
 The API SHALL expose `GET /import-areas/{id}/map-data` returning every road segment, navigable node, block, building, POI, and area feature persisted for that import area, as one GeoJSON `FeatureCollection` per entity type with `[longitude, latitude]` positions. Each feature SHALL carry its entity id and geometry. Road segments SHALL carry their endpoint node ids, distance, vehicle accessibility, and their logical street's id, name, and classification. Segments of one logical street SHALL share its id, and an unchanged re-import SHALL return the same ids. Road segments SHALL also carry their generated cross-section: the lane count for the segment's direction, the lane type, the road's carriageway width in meters, and a lane-count provenance of `tagged` or `defaulted`. The lane count the source stated (or null) SHALL be carried separately as the source lane count. Buildings SHALL carry their category and linked block id (or null); blocks SHALL carry their area in square meters, their buildable area as a GeoJSON `MultiPolygon` (or null when nothing is buildable) and its area in square meters, and whether they are a median and whether they are clipped by the bounding box; POIs SHALL carry their category and name; area features SHALL carry their kind. The response SHALL carry an OpenStreetMap attribution string. No provider-specific tags or persistence-layer fields SHALL appear in the response.
 

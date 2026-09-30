@@ -43,3 +43,108 @@ def test_recorded_live_response_parses_only_with_geometry_nodes():
     records = OSMFixtureAdapter().parse(with_way_nodes_from_geometry(payload))
 
     assert len(records.roads) > 0 and len(records.buildings) > 0
+
+
+import httpx
+
+from app.domain.bounding_box import BoundingBox, Coordinate
+from app.ingestion.overpass import (
+    USER_AGENT,
+    IncompleteSourceResponse,
+    OverpassClient,
+    UpstreamUnavailable,
+    build_query,
+)
+
+BBOX = BoundingBox(Coordinate(52.5292, 13.4005), Coordinate(52.5302, 13.4021))
+OK_BODY = {"version": 0.6, "osm3s": {}, "elements": []}
+
+
+def _client(responses, sleeps=None):
+    """An OverpassClient whose transport answers with `responses` in order and records requests."""
+    requests = []
+    queue = list(responses)
+
+    def handler(request):
+        requests.append(request)
+        answer = queue.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    recorded = sleeps if sleeps is not None else []
+    return OverpassClient(url="https://overpass.test/api/interpreter", transport=httpx.MockTransport(handler), sleep=recorded.append), requests
+
+
+def test_query_is_south_west_north_east_and_asks_only_for_used_relations():
+    query = build_query(BBOX)
+
+    box = "52.5292,13.4005,52.5302,13.4021"
+    assert query.startswith("[out:json][timeout:60];")
+    assert f"node({box})->.inside;" in query and f"way({box})" in query
+    assert f"rel({box})[type=multipolygon]" in query and "rel(bn.inside)[type=restriction]" in query
+    assert "nwr(" not in query and query.endswith("out geom;")
+
+
+def test_fetch_posts_the_query_with_an_identifying_user_agent():
+    client, requests = _client([httpx.Response(200, json=OK_BODY)])
+
+    assert client.fetch(BBOX) == OK_BODY
+    (request,) = requests
+    assert request.headers["User-Agent"] == USER_AGENT
+    assert httpx.QueryParams(request.content.decode())["data"] == build_query(BBOX)
+
+
+def test_queue_full_is_retried_after_retry_after():
+    sleeps = []
+    client, requests = _client([httpx.Response(429, headers={"Retry-After": "2"}), httpx.Response(200, json=OK_BODY)], sleeps)
+
+    assert client.fetch(BBOX) == OK_BODY
+    assert (len(requests), sleeps) == (2, [2.0])
+
+
+def test_busy_on_every_attempt_is_upstream_unavailable_after_backing_off():
+    sleeps = []
+    client, requests = _client([httpx.Response(504, text="<html>too busy</html>")] * 3, sleeps)
+
+    with pytest.raises(UpstreamUnavailable) as error:
+        client.fetch(BBOX)
+
+    assert (len(requests), sleeps, error.value.status) == (3, [5.0, 15.0], 504)
+
+
+def test_a_non_retryable_error_is_not_retried():
+    client, requests = _client([httpx.Response(400, text="parse error")] * 3)
+
+    with pytest.raises(UpstreamUnavailable) as error:
+        client.fetch(BBOX)
+
+    assert (len(requests), error.value.status) == (1, 400)
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [httpx.ConnectError("refused"), httpx.ReadTimeout("slow")],
+    ids=["unreachable", "timed out"],
+)
+def test_transport_failures_are_upstream_unavailable(answer):
+    client, _ = _client([answer])
+
+    with pytest.raises(UpstreamUnavailable):
+        client.fetch(BBOX)
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        httpx.Response(200, content=b'{"version":0.6,"elements":[{"type":"node","id":1,'),
+        httpx.Response(200, json={**OK_BODY, "remark": "runtime error: Query timed out in \"query\" at line 1 after 3 seconds."}),
+        httpx.Response(200, json=[]),
+    ],
+    ids=["truncated body", "remark", "not an object"],
+)
+def test_incomplete_answers_are_rejected(response):
+    client, _ = _client([response])
+
+    with pytest.raises(IncompleteSourceResponse):
+        client.fetch(BBOX)
