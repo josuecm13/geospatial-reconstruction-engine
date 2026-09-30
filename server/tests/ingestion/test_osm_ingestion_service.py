@@ -489,3 +489,22 @@ def test_car_scoped_restriction_is_honored(db_session, key):
     OSMIngestionService(db_session).import_fixture(_bbox(), _with_restriction_tags({key: "no_left_turn"}))
 
     assert _prohibited_movements(db_session) == 1
+
+
+def test_multipolygon_building_imports_and_keeps_its_id_on_reimport(db_session):
+    payload = json.loads(FIXTURE.read_text())
+    ring = [{"lat": 9.9340, "lon": -84.0800}, {"lat": 9.9340, "lon": -84.0795}, {"lat": 9.9345, "lon": -84.0795}, {"lat": 9.9340, "lon": -84.0800}]
+    payload["elements"].append(
+        {"type": "relation", "id": 900, "members": [{"type": "way", "ref": 1, "role": "outer", "geometry": ring}],
+         "tags": {"type": "multipolygon", "building": "yes", "building:levels": "5"}}
+    )
+    service = OSMIngestionService(db_session)
+
+    first = service.import_fixture(_bbox(), payload)
+    building = db_session.scalar(select(BuildingModel).where(BuildingModel.source_id == "relation/900"))
+    service.import_fixture(_bbox(), payload)
+    db_session.expire_all()
+
+    assert first.building_count == 2
+    assert building.levels == 5
+    assert db_session.scalar(select(BuildingModel.id).where(BuildingModel.source_id == "relation/900")) == building.id

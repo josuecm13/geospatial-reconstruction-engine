@@ -328,6 +328,10 @@ class OSMFixtureAdapter:
                     raise IngestionError(f"POI node {source_id} is missing coordinates")
                 pois.append(ImportPoi(source_id, point, category, tags.get("name")))
 
+        ways_by_id = {_source_id(way): way for way in ways}
+        for relation in relations:
+            self._multipolygon_features(relation, ways_by_id, nodes, buildings, areas)
+
         restrictions = tuple(
             restriction
             for relation in relations
@@ -336,6 +340,43 @@ class OSMFixtureAdapter:
         )
         self._validate_references(nodes, roads, buildings, areas, restrictions)
         return ImportRecords(nodes, tuple(roads), tuple(buildings), tuple(pois), tuple(areas), restrictions)
+
+    @staticmethod
+    def _multipolygon_features(relation, ways_by_id, nodes, buildings, areas) -> None:
+        """Adds one building or area feature per closed outer ring of a multipolygon relation.
+
+        The domain polygon has no holes, so inner rings are ignored. A ring's vertices get
+        synthetic node ids (`relation/<id>[/<ring>]#<i>`), since Overpass gives a member's
+        geometry without its node ids. They're never navigable. Rings that can't be closed
+        (an incomplete relation) are skipped rather than failing the import."""
+        tags = relation.get("tags", {})
+        if not isinstance(tags, dict) or tags.get("type") != "multipolygon":
+            return
+        kind = None if "building" in tags else _area_kind(tags)
+        if "building" not in tags and kind is None:
+            return
+        rings = _outer_rings(relation, ways_by_id, nodes)
+        relation_id = _source_id(relation)
+        for index, ring in enumerate(rings):
+            source_id = f"relation/{relation_id}" if len(rings) == 1 else f"relation/{relation_id}/{index}"
+            node_ids = []
+            for vertex_index, point in enumerate(ring[:-1]):
+                node_id = f"{source_id}#{vertex_index}"
+                nodes[node_id] = point
+                node_ids.append(node_id)
+            node_ids.append(node_ids[0])
+            if kind is None:
+                buildings.append(
+                    ImportBuilding(
+                        source_id,
+                        tuple(node_ids),
+                        _building_category(tags["building"]),
+                        _height_meters(tags.get("height")),
+                        _levels(tags.get("building:levels")),
+                    )
+                )
+            else:
+                areas.append(ImportPolygonFeature(source_id, tuple(node_ids), kind))
 
     @staticmethod
     def _is_restriction(relation: dict[str, Any]) -> bool:
@@ -381,6 +422,51 @@ class OSMFixtureAdapter:
                 raise IngestionError(f"restriction {restriction.source_id} references an unsupported or missing road way")
             if restriction.via_node_id not in nodes:
                 raise IngestionError(f"restriction {restriction.source_id} references missing via node {restriction.via_node_id}")
+
+
+def _member_points(member: dict[str, Any], ways_by_id, nodes: dict[str, Coordinate]) -> list[Coordinate] | None:
+    """A way member's points: its inline geometry (`out geom`), else its way element's nodes."""
+    geometry = member.get("geometry")
+    if isinstance(geometry, list) and geometry:
+        if not all(isinstance(point, dict) and "lat" in point and "lon" in point for point in geometry):
+            return None
+        return [Coordinate(float(point["lat"]), float(point["lon"])) for point in geometry]
+    way = ways_by_id.get(str(member.get("ref")))
+    if way is None:
+        return None
+    node_ids = [str(node_id) for node_id in way.get("nodes", [])]
+    if not node_ids or any(node_id not in nodes for node_id in node_ids):
+        return None
+    return [nodes[node_id] for node_id in node_ids]
+
+
+def _outer_rings(relation: dict[str, Any], ways_by_id, nodes: dict[str, Coordinate]) -> list[list[Coordinate]]:
+    """Joins a multipolygon's outer members end to end into closed rings of ≥ 3 distinct points."""
+    pieces = []
+    for member in relation.get("members", []):
+        if not isinstance(member, dict) or member.get("type") != "way" or member.get("role") not in ("outer", ""):
+            continue
+        points = _member_points(member, ways_by_id, nodes)
+        if points is not None and len(points) >= 2:
+            pieces.append(points)
+    rings = []
+    while pieces:
+        ring = list(pieces.pop(0))
+        while ring[0] != ring[-1]:
+            for index, piece in enumerate(pieces):
+                if piece[0] == ring[-1]:
+                    ring.extend(piece[1:])
+                elif piece[-1] == ring[-1]:
+                    ring.extend(reversed(piece[:-1]))
+                else:
+                    continue
+                pieces.pop(index)
+                break
+            else:
+                break
+        if ring[0] == ring[-1] and len(set(ring[:-1])) >= 3:
+            rings.append(ring)
+    return rings
 
 
 def _building_category(value: str) -> BuildingCategory:

@@ -53,3 +53,14 @@ A restriction relation's plain `restriction` tag SHALL take precedence. Without 
 #### Scenario: A car-scoped restriction
 - **WHEN** an import contains a restriction relation tagged only `restriction:motorcar=no_left_turn`
 - **THEN** the corresponding movement is prohibited
+
+### Requirement: Multipolygon buildings and areas SHALL import as their outer rings
+A `type=multipolygon` relation carrying a building tag or a supported area-feature tag SHALL be imported as one building or area feature per closed outer ring. Outer members SHALL be joined end to end in either drawing direction, taking their points from the member's inline geometry or else from the member way's nodes. Inner rings SHALL be ignored. A multipolygon whose outer rings can't be closed from the payload SHALL be skipped without failing the import. Each feature's source identity SHALL be distinct from any way's, and stable across re-imports.
+
+#### Scenario: A building mapped as a multipolygon
+- **WHEN** an import contains a multipolygon relation tagged `building=yes` whose outer ring is split across two member ways
+- **THEN** one building is imported with the joined ring as its footprint, and a re-import keeps its identifier
+
+#### Scenario: An incomplete multipolygon
+- **WHEN** an import contains a multipolygon building whose outer member is missing from the payload
+- **THEN** the import completes without that building
