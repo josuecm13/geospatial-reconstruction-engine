@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Geospatial Reconstruction Engine</title>
+  </head>
+  <body>
+    <header class="app-header">
+      <h1>Geospatial Reconstruction Engine</h1>
+      <nav class="view-tabs" aria-label="View">
+        <a href="#map" data-view="map">Map</a>
+        <a href="#scene" data-view="scene">Scene</a>
+      </nav>
+      <span class="api-status" id="api-status" title="API status">API …</span>
+    </header>
+    <main>
+      <section id="map-view" class="view" aria-label="2D map"></section>
+      <section id="scene-view" class="view" aria-label="3D scene" hidden></section>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

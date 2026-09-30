@@ -4,9 +4,10 @@ Conventions for anyone — human or agent — working in this repository.
 
 ## Project shape
 
-This is a monorepo: `server/` (Python backend) and, eventually, `client/` (web map viewer) live
-as siblings at the repo root. `docker-compose.yml` at the root orchestrates shared services (the
-database today; possibly more once `client/` exists) rather than belonging to either side.
+This is a monorepo: `server/` (Python backend) and `client/` (the showcase client: TypeScript,
+Vite, MapLibre GL for the 2D map, Three.js for the 3D scene) live as siblings at the repo root.
+`docker-compose.yml` at the root orchestrates shared services (the database today) rather than
+belonging to either side.
 
 - `docs/architecture.md` — the domain model and system boundaries. Read this before adding
   anything that touches persistence, ingestion, the graph, or routing.
@@ -23,6 +24,9 @@ database today; possibly more once `client/` exists) rather than belonging to ei
 - `server/alembic/` — migrations. `server/alembic/env.py` reads `DATABASE_URL` from the
   environment; the connection string is never hardcoded in `alembic.ini`.
 - `server/tests/` — mirrors the `server/app/` layout.
+- `client/src/api/` — the typed API client. It surfaces errors by their contract `code`.
+  `client/src/views/` holds the map and scene views. Pure logic sits next to its `*.test.ts`
+  (vitest), and anything that needs WebGL stays out of tests.
 
 ## Runtime
 
@@ -52,7 +56,8 @@ and the generated-content milestones remain unbuilt. Don't pull those in prematu
 
 - Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/)
   (`feat:`, `fix:`, `docs:`, `chore:`, etc.).
-- Run tests before committing: `pytest -q` (see `HOW_TO_RUN.md` for environment setup).
+- Run tests before committing: `pytest -q` (see `HOW_TO_RUN.md` for environment setup), and
+  `npm test && npm run build` in `client/` when it changed.
   `.github/workflows/ci.yml` runs the same tests plus `openspec validate --all --strict` against a
   fresh PostGIS on every push/PR to `main` — it's a safety net, not a substitute for running tests
   locally first.
