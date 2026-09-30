@@ -35,3 +35,10 @@ A road way tagged `junction=roundabout` without a `oneway` tag SHALL be imported
 #### Scenario: An explicit oneway wins
 - **WHEN** a road way tagged `junction=roundabout` and `oneway=no` is imported
 - **THEN** it is imported as two-way
+
+### Requirement: Reversible and alternating one-way roads SHALL import as two-way
+A road way tagged `oneway=reversible` or `oneway=alternating` SHALL be imported as two-way, because each direction is legal at some time and the road graph holds no time-dependent access. Such a way SHALL NOT fail the import. Any other unsupported `oneway` value SHALL still fail it.
+
+#### Scenario: A reversible road
+- **WHEN** an import contains a road way tagged `oneway=reversible`
+- **THEN** the import completes and the road has segments in both directions

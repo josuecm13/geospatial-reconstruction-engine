@@ -169,7 +169,9 @@ def _polygon_nodes(element: dict[str, Any]) -> tuple[str, ...]:
 
 def _one_way_direction(value: Any, element_id: str) -> int:
     normalized = str(value or "").strip().lower()
-    if normalized in {"", "no", "0", "false"}:
+    # reversible (direction switches by time of day) and alternating (both directions share one
+    # lane in turns) are each legal in both directions at some time, so a static graph keeps both.
+    if normalized in {"", "no", "0", "false", "reversible", "alternating"}:
         return 0
     if normalized in {"yes", "1", "true"}:
         return 1

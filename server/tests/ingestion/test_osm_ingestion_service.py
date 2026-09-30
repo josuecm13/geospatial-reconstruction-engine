@@ -446,3 +446,18 @@ def test_roundabout_imports_one_way_in_its_drawn_direction(db_session):
     segments = db_session.scalars(select(RoadSegmentModel)).all()
     source_ids = {node.id: node.source_id for node in db_session.scalars(select(NavigableNodeModel)).all()}
     assert [(source_ids[s.from_node_id], source_ids[s.to_node_id]) for s in segments] == [("1", "3")]
+
+
+def test_reversible_way_imports_with_both_directions(db_session):
+    payload = {
+        "elements": [
+            {"type": "node", "id": 1, "lat": 9.9340, "lon": -84.0800},
+            {"type": "node", "id": 2, "lat": 9.9340, "lon": -84.0798},
+            {"type": "way", "id": 10, "nodes": [1, 2], "tags": {"highway": "primary", "oneway": "reversible"}},
+        ]
+    }
+
+    result = OSMIngestionService(db_session).import_fixture(_bbox(), payload)
+
+    assert result.import_area.status is ImportStatus.COMPLETED
+    assert db_session.scalar(select(func.count()).select_from(RoadSegmentModel)) == 2
