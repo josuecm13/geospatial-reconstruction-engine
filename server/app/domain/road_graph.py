@@ -47,12 +47,13 @@ class RoadSegment:
 
 @dataclass(frozen=True)
 class RoadSegmentWithStreet:
-    """A road segment paired with its street's name/classification, as values,
-    and its road's own classification (a logical street can group roads of
-    different classes). The street id is deterministic now that streets group
-    ways, but it is not part of the map-data contract yet."""
+    """A road segment paired with its street's id, name, and classification, and
+    its road's own classification (a logical street can group roads of
+    different classes). The street id is deterministic, so an unchanged
+    re-import keeps it."""
 
     segment: RoadSegment
     street_name: str | None
     street_classification: RoadClassification
     road_classification: RoadClassification
+    street_id: uuid.UUID | None = None
