@@ -207,6 +207,10 @@ Key decisions:
   area — a plain array on `blocks` can't answer "which blocks touch this segment?" without a full
   scan. The join table gets its own `(block_id, road_segment_id)` uniqueness and an
   FK-enforced `sequence_order` for walking the loop in order.
+- **A multipolygon's features are keyed `relation/<id>`** (`relation/<id>/<n>` when it has several
+  outer rings), so they can't collide with a way's numeric `source_id` under the per-area
+  uniqueness. Each outer ring is its own building or area feature. Inner rings are ignored,
+  because a domain polygon has no holes (Milestone 9).
 - **`buildings.height_meters` and `buildings.levels` record only what the source stated
   (Milestone 8.1).** `NULL` means unknown, never zero or a default: an unparseable tag is stored
   as `NULL` and never fails an import. CHECKs keep `height_meters > 0` and `levels >= 0`.

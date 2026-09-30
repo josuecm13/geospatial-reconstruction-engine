@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from app.domain.enums import BuildingCategory, PoiCategory, RestrictionKind, RoadClassification
+from app.domain.enums import AreaFeatureKind, BuildingCategory, PoiCategory, RestrictionKind, RoadClassification
 from app.ingestion.osm_adapter import OSMFixtureAdapter, OSMIngestionError
 
 
@@ -271,3 +271,79 @@ def test_vehicle_scoped_restrictions_apply_only_when_they_bind_a_car(tags, expec
 def test_restriction_without_any_restriction_tag_still_fails():
     with pytest.raises(OSMIngestionError, match="unsupported restriction"):
         OSMFixtureAdapter().parse(_restriction_payload({}))
+
+
+def _geom(*points):
+    return [{"lat": lat, "lon": lon} for lat, lon in points]
+
+
+A, B, C, D = (9.9340, -84.0800), (9.9340, -84.0795), (9.9345, -84.0795), (9.9345, -84.0800)
+E, F, G, H = (9.9346, -84.0800), (9.9346, -84.0795), (9.9349, -84.0795), (9.9349, -84.0800)
+
+
+def _multipolygon(tags, members):
+    return {"elements": [{"type": "relation", "id": 7, "members": members, "tags": {"type": "multipolygon", **tags}}]}
+
+
+def _member(role, *points, ref=1):
+    return {"type": "way", "ref": ref, "role": role, "geometry": _geom(*points)}
+
+
+def test_multipolygon_building_joins_split_outer_members_and_ignores_inner():
+    payload = _multipolygon(
+        {"building": "apartments", "height": "20"},
+        [
+            _member("outer", A, B, C, ref=1),
+            _member("outer", A, D, C, ref=2),  # drawn the other way round
+            _member("inner", (9.9342, -84.0798), (9.9342, -84.0797), (9.9343, -84.0797), (9.9342, -84.0798), ref=3),
+        ],
+    )
+
+    records = OSMFixtureAdapter().parse(payload)
+
+    assert [(b.source_id, b.category, b.height_meters) for b in records.buildings] == [("relation/7", BuildingCategory.RESIDENTIAL, 20.0)]
+    ring = [records.nodes[node_id] for node_id in records.buildings[0].node_ids]
+    assert [(p.latitude, p.longitude) for p in ring] == [A, B, C, D, A]
+
+
+def test_multipolygon_with_two_outer_rings_yields_two_features_and_skips_an_open_ring():
+    payload = _multipolygon(
+        {"leisure": "park"},
+        [_member("outer", A, B, C, D, A, ref=1), _member("outer", E, F, G, H, E, ref=2), _member("outer", A, E, ref=3)],
+    )
+
+    records = OSMFixtureAdapter().parse(payload)
+
+    assert [(a.source_id, a.category) for a in records.areas] == [
+        ("relation/7/0", AreaFeatureKind.PARK),
+        ("relation/7/1", AreaFeatureKind.PARK),
+    ]
+
+
+@pytest.mark.parametrize(
+    "members",
+    [[_member("outer", A, B, C, ref=1)], [{"type": "way", "ref": 99, "role": "outer"}], []],
+    ids=["open ring", "member not in payload", "no members"],
+)
+def test_incomplete_multipolygon_is_skipped_without_failing(members):
+    records = OSMFixtureAdapter().parse(_multipolygon({"building": "yes"}, members))
+
+    assert records.buildings == ()
+
+
+def test_multipolygon_members_resolve_from_way_elements_without_inline_geometry():
+    payload = {
+        "elements": [
+            {"type": "node", "id": 1, "lat": A[0], "lon": A[1]},
+            {"type": "node", "id": 2, "lat": B[0], "lon": B[1]},
+            {"type": "node", "id": 3, "lat": C[0], "lon": C[1]},
+            {"type": "way", "id": 50, "nodes": [1, 2, 3, 1]},
+            {"type": "relation", "id": 7, "members": [{"type": "way", "ref": 50, "role": "outer"}], "tags": {"type": "multipolygon", "natural": "water"}},
+        ]
+    }
+
+    assert [(a.source_id, a.category) for a in OSMFixtureAdapter().parse(payload).areas] == [("relation/7", AreaFeatureKind.WATER)]
+
+
+def test_multipolygon_without_supported_tags_is_ignored():
+    assert OSMFixtureAdapter().parse(_multipolygon({"landuse": "residential"}, [_member("outer", A, B, C, A)])).areas == ()
