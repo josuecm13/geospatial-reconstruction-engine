@@ -11,7 +11,9 @@
 - [x] 1.9 #35 [api] Expose the logical street id on map-data road segments
 - [x] 1.10 #61 [ingestion] Import a bounded area live from Overpass
 - [x] 1.11 #62 [client] Scaffold client/ with MapLibre GL, Three.js, and CI
+- [x] 1.10a #86 [ingestion] Skip malformed or unresolvable turn restrictions instead of failing the import
 - [ ] 1.12 #63 [client] Select a rectangle up to 1 km² on a 2D map and import it
+- [ ] 1.12a #88 [client] Show the server's reason for an import failure
 - [ ] 1.13 #64 [client] Trace a boundary over the selection and manage saved boundaries
 - [ ] 1.14 #65 [client] Build a low-poly 3D scene from map-data
 - [ ] 1.15 #66 [client] Explore the scene by flying and walking

@@ -231,3 +231,16 @@ def test_map_data_segments_carry_their_logical_street_id_stably(client):
     assert len(first[None]) == 2
     assert all(street_id is not None for ids in first.values() for street_id in ids)
     assert second == first
+
+
+def test_import_response_reports_skipped_restrictions(client):
+    payload = json.loads(FIXTURE.read_text())
+    payload["elements"].append(
+        {"type": "relation", "id": 401, "members": [{"type": "way", "ref": 100, "role": "from"}, {"type": "node", "ref": 2, "role": "via"}],
+         "tags": {"type": "restriction", "restriction": "no_right_turn"}}
+    )
+
+    body = client.post("/import-areas", json={"bbox": NEIGHBORHOOD_BBOX, "payload": payload}).json()
+
+    assert (body["status"], body["skipped_restriction_count"]) == ("completed", 1)
+    assert client.get(f"/import-areas/{body['id']}").json()["skipped_restriction_count"] is None

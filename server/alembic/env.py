@@ -13,7 +13,9 @@ config = context.config
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # Keep loggers that already exist: the tests run migrations in-process, and the default would
+    # silently disable every app logger imported before them.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 database_url = os.environ.get("DATABASE_URL")
 if not database_url:

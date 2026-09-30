@@ -86,6 +86,9 @@ class ImportAreaOut(BaseModel):
     area_feature_count: int | None
     block_count: int
     linked_building_count: int | None = None
+    # Only on an import's own response: restriction relations skipped as malformed or
+    # unresolvable inside the import.
+    skipped_restriction_count: int | None = None
     imported_at: datetime | None
 
 

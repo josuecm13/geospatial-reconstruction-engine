@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, replace
 
 from sqlalchemy import delete, func, or_, select
@@ -35,6 +36,8 @@ from app.persistence.repositories.road_graph import NavigableNodeRepository, Roa
 from app.persistence.repositories.turn_movement import TurnMovementRepository
 
 
+logger = logging.getLogger(__name__)
+
 @dataclass(frozen=True)
 class ImportResult:
     import_area: ImportArea
@@ -48,6 +51,7 @@ class ImportResult:
     created_count: int = 0
     updated_count: int = 0
     removed_count: int = 0
+    skipped_restriction_count: int = 0
 
 
 class OSMIngestionService:
@@ -169,7 +173,12 @@ class OSMIngestionService:
         )
 
         # 5. Turn candidates/restrictions, generated only over the now-reconciled segments.
-        self._persist_turns(records, segments_by_way, persisted_nodes)
+        skipped_restrictions = [*records.skipped_restrictions, *self._persist_turns(records, segments_by_way, persisted_nodes)]
+        if skipped_restrictions:
+            logger.warning(
+                "import area %s: skipped %d turn restriction(s) that are malformed or can't be resolved inside the import: %s",
+                area_id, len(skipped_restrictions), ", ".join(skipped_restrictions),
+            )
 
         # 6. Derive fresh blocks and link buildings over the reconciled network.
         blocks = block_service.derive_for_import_area(area_id)
@@ -201,6 +210,7 @@ class OSMIngestionService:
             created_count=created_count,
             updated_count=updated_count,
             removed_count=removed_count,
+            skipped_restriction_count=len(skipped_restrictions),
             **counts,
         )
 
@@ -403,8 +413,11 @@ class OSMIngestionService:
             touched_area_feature_ids.add(persisted.id)
         return touched_building_ids, touched_poi_ids, touched_area_feature_ids
 
-    def _persist_turns(self, records, segments_by_way, persisted_nodes) -> None:
+    def _persist_turns(self, records, segments_by_way, persisted_nodes) -> list[str]:
+        """Persists turn candidates and applies restrictions; returns the source ids of
+        restrictions that don't resolve to exactly one legal turn, which are skipped."""
         repository = TurnMovementRepository(self.session)
+        skipped: list[str] = []
         for node in persisted_nodes.values():
             candidates = repository.generate_candidates(node.id)
             if candidates:
@@ -414,14 +427,16 @@ class OSMIngestionService:
             incoming = [segment for segment in segments_by_way[restriction.from_way_id] if segment.to_node_id == via_id]
             outgoing = [segment for segment in segments_by_way[restriction.to_way_id] if segment.from_node_id == via_id]
             if len(incoming) != 1 or len(outgoing) != 1:
-                raise OSMIngestionError(f"restriction {restriction.source_id} cannot resolve exactly one incoming and outgoing segment")
+                skipped.append(restriction.source_id)
+                continue
             # Read the currently persisted state, not fresh defaults: a second
             # restriction at the same intersection must build on what an earlier
             # one already persisted, or it would reset it back to allowed.
             candidates = repository.list_for_intersection(via_id)
             target = (incoming[0].id, outgoing[0].id)
             if not any((item.incoming_segment_id, item.outgoing_segment_id) == target for item in candidates):
-                raise OSMIngestionError(f"restriction {restriction.source_id} does not match a legal intersection transition")
+                skipped.append(restriction.source_id)
+                continue
             adjusted = []
             for candidate in candidates:
                 matches = (candidate.incoming_segment_id, candidate.outgoing_segment_id) == target
@@ -435,3 +450,4 @@ class OSMIngestionService:
             if not restriction.kind.value.startswith("only_"):
                 adjusted = [replace(candidate, allowed=False, restriction_kind=restriction.kind) if (candidate.incoming_segment_id, candidate.outgoing_segment_id) == target else candidate for candidate in adjusted]
             repository.persist_candidates(adjusted)
+        return skipped
