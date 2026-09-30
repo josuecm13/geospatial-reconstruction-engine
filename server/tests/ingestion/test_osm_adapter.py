@@ -220,3 +220,29 @@ def test_roundabout_is_one_way_unless_oneway_says_otherwise(tags, expected):
     }
 
     assert OSMFixtureAdapter().parse(payload).roads[0].one_way_direction == expected
+
+
+@pytest.mark.parametrize("value", ["reversible", "alternating", "Reversible"])
+def test_reversible_and_alternating_oneway_import_as_two_way(value):
+    payload = {
+        "elements": [
+            {"type": "node", "id": 1, "lat": 9.934, "lon": -84.080},
+            {"type": "node", "id": 2, "lat": 9.934, "lon": -84.079},
+            {"type": "way", "id": 10, "nodes": [1, 2], "tags": {"highway": "primary", "oneway": value}},
+        ]
+    }
+
+    assert OSMFixtureAdapter().parse(payload).roads[0].one_way_direction == 0
+
+
+def test_unknown_oneway_value_still_fails_the_import():
+    payload = {
+        "elements": [
+            {"type": "node", "id": 1, "lat": 9.934, "lon": -84.080},
+            {"type": "node", "id": 2, "lat": 9.934, "lon": -84.079},
+            {"type": "way", "id": 10, "nodes": [1, 2], "tags": {"highway": "primary", "oneway": "sometimes"}},
+        ]
+    }
+
+    with pytest.raises(OSMIngestionError, match="unsupported oneway"):
+        OSMFixtureAdapter().parse(payload)
