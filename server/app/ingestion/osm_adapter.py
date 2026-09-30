@@ -56,6 +56,9 @@ class ImportPoi:
     point: Coordinate
     category: PoiCategory
     name: str | None
+    # The footprint a POI mapped as an area was reduced from, for the bounding-box check; empty
+    # for a POI mapped as a node.
+    footprint_node_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -310,7 +313,9 @@ class OSMFixtureAdapter:
             poi_category = _poi_category(tags)
             if poi_category is not None:
                 polygon_nodes = _polygon_nodes(element)
-                pois.append(ImportPoi(source_id, _polygon_center(polygon_nodes, nodes), poi_category, tags.get("name")))
+                pois.append(
+                    ImportPoi(source_id, _polygon_center(polygon_nodes, nodes), poi_category, tags.get("name"), polygon_nodes)
+                )
                 continue
             kind = _area_kind(tags)
             if kind is not None:

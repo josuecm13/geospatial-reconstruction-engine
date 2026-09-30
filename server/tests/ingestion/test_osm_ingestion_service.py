@@ -419,9 +419,6 @@ LIVE_BBOX = BoundingBox(Coordinate(52.5292, 13.4005), Coordinate(52.5302, 13.402
 
 def test_recorded_live_response_imports(db_session):
     payload = json.loads(LIVE_FIXTURE.read_text())
-    # A bus-shelter area straddling the box edge has its center outside the box, which the
-    # bounding-box rule rejects until #74; everything else in the recorded response is kept.
-    payload["elements"] = [element for element in payload["elements"] if element["id"] != 521511481]
 
     result = OSMIngestionService(db_session).import_fixture(LIVE_BBOX, payload)
 
@@ -508,3 +505,37 @@ def test_multipolygon_building_imports_and_keeps_its_id_on_reimport(db_session):
     assert first.building_count == 2
     assert building.levels == 5
     assert db_session.scalar(select(BuildingModel.id).where(BuildingModel.source_id == "relation/900")) == building.id
+
+
+def _poi_area_payload(lat_offset):
+    """A parking area around (9.9350 + offset, -84.0800), crossing the box's north edge at 9.935."""
+    base = 9.9350 + lat_offset
+    return {
+        "elements": [
+            {"type": "node", "id": 1, "lat": base - 0.0002, "lon": -84.0801},
+            {"type": "node", "id": 2, "lat": base - 0.0002, "lon": -84.0799},
+            {"type": "node", "id": 3, "lat": base + 0.0006, "lon": -84.0799},
+            {"type": "node", "id": 4, "lat": base + 0.0006, "lon": -84.0801},
+            {"type": "way", "id": 10, "nodes": [1, 2, 3, 4, 1], "tags": {"amenity": "parking"}},
+        ]
+    }
+
+
+def test_poi_area_crossing_the_edge_imports_even_with_its_center_outside(db_session):
+    result = OSMIngestionService(db_session).import_fixture(_bbox(), _poi_area_payload(0.0))
+
+    assert result.poi_count == 1
+
+
+def test_poi_area_entirely_outside_the_box_is_still_rejected(db_session):
+    with pytest.raises(PayloadOutsideBoundingBox) as error:
+        OSMIngestionService(db_session).import_fixture(_bbox(), _poi_area_payload(0.001))
+
+    assert error.value.source_ids == ["10"]
+
+
+def test_poi_node_outside_the_box_is_still_rejected(db_session):
+    payload = {"elements": [{"type": "node", "id": 1, "lat": 9.9351, "lon": -84.0800, "tags": {"amenity": "cafe"}}]}
+
+    with pytest.raises(PayloadOutsideBoundingBox):
+        OSMIngestionService(db_session).import_fixture(_bbox(), payload)

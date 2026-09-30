@@ -7,7 +7,7 @@
 - [x] 1.5 #18 [ingestion] Handle oneway=reversible/alternating instead of failing the import
 - [x] 1.6 #19 [ingestion] Handle restriction:<vehicle> relations instead of failing the import
 - [x] 1.7 #20 [ingestion] Import multipolygon buildings and areas
-- [ ] 1.8 #74 [ingestion] Accept POIs mapped as areas that cross the bounding-box edge
+- [x] 1.8 #74 [ingestion] Accept POIs mapped as areas that cross the bounding-box edge
 - [ ] 1.9 #35 [api] Expose the logical street id on map-data road segments
 - [ ] 1.10 #61 [ingestion] Import a bounded area live from Overpass
 - [ ] 1.11 #62 [client] Scaffold client/ with MapLibre GL, Three.js, and CI
