@@ -23,6 +23,7 @@ from app.config.settings import MissingEnvironmentVariable
 from app.domain.bounding_box import InvalidBoundingBox
 from app.domain.traced_boundary import InvalidTracedBoundary
 from app.ingestion.osm_adapter import OSMIngestionError, PayloadOutsideBoundingBox
+from app.ingestion.overpass import IncompleteSourceResponse
 from app.persistence.repositories.traced_boundary import DuplicateTracedBoundaryName
 from app.persistence.spatial_queries import InvalidSpatialQuery
 from app.routing.engine import NoNavigableNodeError, NoRouteFoundError
@@ -92,6 +93,10 @@ def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(InvalidSpatialQuery)
     async def handle_invalid_spatial_query(request: Request, exc: InvalidSpatialQuery) -> JSONResponse:
         return _response(422, "invalid_spatial_query", str(exc))
+
+    @app.exception_handler(IncompleteSourceResponse)
+    async def handle_incomplete_source(request: Request, exc: IncompleteSourceResponse) -> JSONResponse:
+        return _response(422, "source_incomplete", str(exc))
 
     @app.exception_handler(OSMIngestionError)
     async def handle_ingestion_error(request: Request, exc: OSMIngestionError) -> JSONResponse:

@@ -191,3 +191,16 @@ def test_map_data_buildings_carry_source_height_and_levels(client):
     buildings = client.get(f"/import-areas/{created['id']}/map-data").json()["buildings"]["features"]
 
     assert {(f["properties"]["height_meters"], f["properties"]["levels"]) for f in buildings} == {(None, None), (9.5, 3)}
+
+
+def test_posting_a_timed_out_overpass_response_is_source_incomplete_and_keeps_the_area(client):
+    created = _import(client).json()
+    before = client.get(f"/import-areas/{created['id']}/map-data").json()
+    timed_out = json.loads((Path(__file__).parents[1] / "fixtures" / "overpass" / "timeout_remark.json").read_text())
+
+    response = client.post("/import-areas", json={"bbox": NEIGHBORHOOD_BBOX, "payload": timed_out})
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "source_incomplete"
+    assert client.get(f"/import-areas/{created['id']}").json()["status"] == "completed"
+    assert client.get(f"/import-areas/{created['id']}/map-data").json() == before

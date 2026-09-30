@@ -9,6 +9,7 @@ from app.domain.bounding_box import BoundingBox, Coordinate
 from app.domain.enums import ImportStatus, RestrictionKind, RoadClassification
 from app.domain.street_grouping import street_id_for
 from app.ingestion.osm_adapter import OSMIngestionError, PayloadOutsideBoundingBox
+from app.ingestion.overpass import IncompleteSourceResponse
 from app.ingestion.service import OSMIngestionService
 from app.persistence.models import (
     BuildingModel,
@@ -374,3 +375,39 @@ def test_reimport_updates_a_changed_height_in_place(db_session):
 
     assert after.id == building_id
     assert (after.height_meters, after.levels) == (15.0, None)
+
+
+TIMEOUT_FIXTURE = Path(__file__).parents[1] / "fixtures" / "overpass" / "timeout_remark.json"
+
+
+def _stored_snapshot(db_session):
+    area = db_session.scalar(select(ImportAreaModel))
+    return (
+        area.id,
+        area.status,
+        (area.road_count, area.node_count, area.building_count, area.poi_count, area.area_feature_count),
+        set(db_session.scalars(select(RoadModel.id)).all()),
+        set(db_session.scalars(select(BuildingModel.id)).all()),
+    )
+
+
+def test_timed_out_response_leaves_an_imported_area_untouched(db_session):
+    service = OSMIngestionService(db_session)
+    service.import_fixture(_bbox(), json.loads(FIXTURE.read_text()))
+    before = _stored_snapshot(db_session)
+
+    with pytest.raises(IncompleteSourceResponse, match="timed out"):
+        service.import_fixture(_bbox(), json.loads(TIMEOUT_FIXTURE.read_text()))
+
+    db_session.expire_all()
+    assert _stored_snapshot(db_session) == before
+    assert before[1] == ImportStatus.COMPLETED.value
+
+
+def test_remark_on_a_first_import_creates_no_area(db_session):
+    payload = {**json.loads(FIXTURE.read_text()), "remark": "runtime error: Query run out of memory using about 2048 MB of RAM."}
+
+    with pytest.raises(IncompleteSourceResponse):
+        OSMIngestionService(db_session).import_fixture(_bbox(), payload)
+
+    assert db_session.scalar(select(func.count()).select_from(ImportAreaModel)) == 0

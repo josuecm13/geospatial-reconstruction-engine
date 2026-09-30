@@ -15,6 +15,7 @@ from app.domain.road_graph import NavigableNode, Road, RoadSegment, Street
 from app.domain.street_grouping import GroupableWay, group_ways_into_streets, street_id_for
 from app.domain.turn_movement import TurnMovement
 from app.ingestion.osm_adapter import ImportRecords, OSMFixtureAdapter, OSMIngestionError, PayloadOutsideBoundingBox
+from app.ingestion.overpass import ensure_complete
 from app.persistence.block_derivation import BlockDerivationService
 from app.persistence.models import (
     AreaFeatureModel,
@@ -55,6 +56,9 @@ class OSMIngestionService:
         self.adapter = adapter or OSMFixtureAdapter()
 
     def import_fixture(self, bbox: BoundingBox, payload: dict, provider: str = "osm") -> ImportResult:
+        # Before the area is created or marked importing: an incomplete response must leave the
+        # area exactly as it was, not even recorded as failed.
+        ensure_complete(payload)
         area_repo = ImportAreaRepository(self.session)
         import_area = area_repo.get_or_create(provider, bbox)
         # The area identity must survive a failed first import so its failed state

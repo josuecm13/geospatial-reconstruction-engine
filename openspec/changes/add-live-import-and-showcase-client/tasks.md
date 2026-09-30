@@ -1,0 +1,22 @@
+## 1. Issues
+
+- [x] 1.1 #15 [ingestion] Reject truncated or incomplete Overpass responses before reconcile
+- [ ] 1.2 #14 [ingestion] Import Overpass responses whose ways reference nodes outside the bbox
+- [ ] 1.3 #16 [ingestion] Map *_link and living_street road classes
+- [ ] 1.4 #17 [ingestion] Treat junction=roundabout as one-way
+- [ ] 1.5 #18 [ingestion] Handle oneway=reversible/alternating instead of failing the import
+- [ ] 1.6 #19 [ingestion] Handle restriction:<vehicle> relations instead of failing the import
+- [ ] 1.7 #20 [ingestion] Import multipolygon buildings and areas
+- [ ] 1.8 #74 [ingestion] Accept POIs mapped as areas that cross the bounding-box edge
+- [ ] 1.9 #35 [api] Expose the logical street id on map-data road segments
+- [ ] 1.10 #61 [ingestion] Import a bounded area live from Overpass
+- [ ] 1.11 #62 [client] Scaffold client/ with MapLibre GL, Three.js, and CI
+- [ ] 1.12 #63 [client] Select a rectangle up to 1 km² on a 2D map and import it
+- [ ] 1.13 #64 [client] Trace a boundary over the selection and manage saved boundaries
+- [ ] 1.14 #65 [client] Build a low-poly 3D scene from map-data
+- [ ] 1.15 #66 [client] Explore the scene by flying and walking
+- [ ] 1.16 #67 [client] Staged build animation on import
+- [ ] 1.17 #68 [client] Show a route between two points in the scene
+- [ ] 1.18 #69 [client] Export the scene as glTF
+- [ ] 1.19 #70 [docs] Walkthrough and runbook for a real import
+- [ ] 1.20 Close out: MILESTONES.md status, tracking issue, archive the change
