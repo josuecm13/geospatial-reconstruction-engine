@@ -64,3 +64,20 @@ A `type=multipolygon` relation carrying a building tag or a supported area-featu
 #### Scenario: An incomplete multipolygon
 - **WHEN** an import contains a multipolygon building whose outer member is missing from the payload
 - **THEN** the import completes without that building
+
+## MODIFIED Requirements
+
+### Requirement: Imported features SHALL belong to the import area's bounding box
+The system SHALL reject a payload containing a supported road, building, area feature, or POI mapped as an area whose coordinate envelope does not intersect the import area's bounding box, or a supported POI mapped as a node located outside it. The rejection SHALL fail the import with an actionable error naming offending source ids, and SHALL record the import area as failed. A feature that crosses the bounding-box edge SHALL be accepted, including a POI area whose representative point falls outside the box.
+
+#### Scenario: Road crossing the bounding-box edge
+- **WHEN** a payload contains a road way that starts inside the bounding box and ends outside it
+- **THEN** the import accepts the road
+
+#### Scenario: Feature entirely outside the bounding box
+- **WHEN** a payload contains a building whose footprint lies entirely outside the bounding box
+- **THEN** the import fails with an error naming that building's source id and the import area is recorded as failed
+
+#### Scenario: POI area crossing the bounding-box edge
+- **WHEN** a payload contains a POI mapped as an area whose footprint crosses the bounding-box edge and whose center lies outside the box
+- **THEN** the import accepts the POI

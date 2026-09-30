@@ -282,9 +282,10 @@ class OSMIngestionService:
     def _validate_within_bounding_box(bbox: BoundingBox, records: ImportRecords) -> None:
         """Reject a payload with features outside the declared bounding box.
 
-        A road, building, or area feature is accepted if its coordinate envelope
-        *intersects* the box (real ways legitimately cross the edge); a POI must
-        lie inside it, since a point has no edge to cross.
+        A road, building, area feature, or POI mapped as an area is accepted if its
+        coordinate envelope *intersects* the box (real ways legitimately cross the
+        edge, and an area POI's center may fall outside); a POI mapped as a node
+        must lie inside it, since a point has no edge to cross.
         """
         offending: list[str] = []
 
@@ -305,6 +306,10 @@ class OSMIngestionService:
             if not envelope_intersects(feature.node_ids):
                 offending.append(feature.source_id)
         for poi in records.pois:
+            if poi.footprint_node_ids:
+                if not envelope_intersects(poi.footprint_node_ids):
+                    offending.append(poi.source_id)
+                continue
             point = poi.point
             inside = (
                 bbox.min_corner.latitude <= point.latitude <= bbox.max_corner.latitude
