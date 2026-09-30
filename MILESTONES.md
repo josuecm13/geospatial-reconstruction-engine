@@ -521,15 +521,49 @@ Completion:
    - Clip mode cuts every geometry, including the buildable area, keeps only parts of the
      entity's own dimension, adds no end nodes, and leaves distances and areas describing the
      whole entity.
-4. Deferred: building heights (Milestone 10's ingestion change); mesh formats stay out of scope.
+4. Deferred: building heights (Milestone 8.1's ingestion change); mesh formats stay out of scope.
    The client's tracing tool and scope selector are Milestone 9 deliverables, listed in
    `docs/client-features.md`.
 
-## Milestone 9 — Minimal visualization and end-to-end demonstration
+## Milestone 8.1 — Building attributes from source
 
 Status: **planned**
 
-"A bounded real-world import" requires the live Overpass retrieval that Milestone 3 explicitly
+This completes the *raw* layer rather than starting the generated one, and comes before Milestone 9
+because the showcase scene extrudes buildings to these heights: `height` and
+`building:levels` are observations OSM carries and this project currently discards. `Building` has
+no height field and the adapter reads no height tags, so nothing downstream can render a skyline
+from real data.
+
+Deliverables:
+
+- Capture source building height and level count in the OSM adapter and persist them on buildings.
+- Unknown stays unknown: a building with no usable height tag stores null, never zero or a
+  substituted default — the same discipline already applied to `lane_count`.
+- Tolerant parsing of the values OSM actually contains (bare metres, `"12 m"`, and unit-suffixed
+  forms), treating unparseable values as unknown rather than failing the import.
+
+Acceptance checks:
+
+- A fixture building tagged with a height persists that height; one tagged only with levels
+  persists the level count; one tagged with neither persists nulls for both.
+- An unparseable height value leaves the height unknown and does not fail the import.
+- Existing imports remain valid: the migration adds nullable columns and changes no counts.
+
+Note: converting levels into an estimated height is *inference*, not observation, and belongs to
+Milestone 11. This milestone only records what the source stated.
+
+## Milestone 9 — Live import and the showcase client
+
+Status: **planned**
+
+The client is the engine's showcase, not a verification surface: choose a real place on a 2D map,
+trace the shape that matters, import it live, watch it being built, explore it as a stylized
+low-poly 3D scene, and export it as glTF for games, simulation, or art. MapLibre GL is the 2D
+surface for choosing; Three.js renders the built world. The client consumes the API's
+representation (`map-data` with its local projection); it never re-derives the domain.
+
+A live import requires the live Overpass retrieval that Milestone 3 explicitly
 deferred — fixtures alone can't demonstrate it. Confirmed against the Overpass API docs:
 
 - Public endpoint `https://overpass-api.de/api/interpreter`; query as
@@ -575,32 +609,50 @@ deferred — fixtures alone can't demonstrate it. Confirmed against the Overpass
 Deliverables:
 
 - A live Overpass adapter for a bounded (≤ 1 km × 1 km) area, reusing the existing OSM parsing
-  above the fetch boundary.
-- Lightweight web map client.
-- Rendering of roads, buildings, POIs, and route geometry.
-- A boundary tracing tool: draw an arbitrary, non-rectangular shape over the loaded import area by
-  placing vertices (and/or freehand tracing), close it, and save it through Milestone 8's
-  endpoints.
-- Simultaneous, visually distinct rendering of both references — the original rectangular import
-  area and any saved traced boundaries — with a control to switch what is queried and displayed
-  between the whole import area and a selected traced boundary.
-- Reloading, re-selecting, and deleting previously saved traced boundaries across sessions.
-- Documented walkthrough using a bounded real-world import.
-- Operational runbook for starting services, migrating, importing, querying, and routing.
+  above the fetch boundary, with the real-data gaps above resolved (each filed as an issue).
+  `POST /import-areas` without a payload fetches the box live; a posted payload still works.
+- `client/`: a TypeScript + Vite app with a typed API client, tests, and a build that CI runs.
+- A 2D picker on MapLibre GL: draw a rectangle up to 1 km², see its area live, import it, and see
+  errors by their contract `code`. The OpenStreetMap attribution is always visible.
+- A boundary tracing tool: draw an arbitrary, non-rectangular shape over the selection by placing
+  vertices (and/or freehand tracing), close it, and save it through Milestone 8's endpoints.
+  Saved boundaries can be listed, re-selected, and deleted across sessions, and a scope control
+  switches the client between the whole import area and one boundary.
+- A low-poly 3D scene built from `map-data`: a ground plane, area features as ground patches,
+  roads as surfaces at their generated width, and buildings extruded to their source height or
+  level count (Milestone 8.1), with defaulted heights visibly marked.
+- Exploration by flying and by walking at street level.
+- A staged build animation when an import completes: ground, then roads, then buildings.
+- A route between two points, shown in the scene.
+- glTF export of the scene.
+- A documented walkthrough using a bounded real-world import, and an operational runbook for
+  starting services, migrating, importing, querying, and routing.
+
+Out of scope:
+
+- Generated content (Milestone 11) and asset identities (Milestone 12). The scene renders only the
+  observed layer.
+- Server-side meshes. Geometry for the scene and for glTF is built in the client.
+- Areas larger than 1 km², and parallel or batched Overpass queries.
 
 Acceptance checks:
 
 - A developer can follow the runbook from a clean checkout.
-- The map visibly demonstrates that imported data is served from the custom representation.
+- A rectangle drawn on the 2D map imports live from Overpass. A truncated Overpass response never
+  deletes stored data. CI makes no live network call.
+- The scene visibly demonstrates that imported data is served from the custom representation:
+  roads have width and buildings have height.
+- The scene can be explored by flying and by walking.
 - A route from Point A to Point B can be selected and displayed.
 - A non-rectangular shape can be traced over an imported rectangle, saved, and still be present
   with the original rectangle after a page reload.
 - Switching the view to a traced boundary visibly narrows the rendered data, while switching back
   to the import area restores the full set — demonstrating the trim is a view, not a deletion.
+- The exported glTF opens in a standard viewer.
 
 ## The raw layer and the content layer
 
-Milestones 10–12 extend the project from reconstructing a map to *enhancing* one: filling
+Milestones 11 and 12 extend the project from reconstructing a map to *enhancing* one: filling
 under-mapped blocks with plausible buildings, inferring heights, and attaching renderable asset
 identities, so a real city segment can be exported as a populated, renderable map.
 
@@ -618,33 +670,6 @@ concrete reasons, not just tidiness:
 
 `blocks` is the existing precedent — `BlockDerivationService` already persists entities that have
 no source, because "a block only exists because the enclosing road segments do."
-
-## Milestone 10 — Building attributes from source
-
-Status: **planned**
-
-This completes the *raw* layer rather than starting the generated one: `height` and
-`building:levels` are observations OSM carries and this project currently discards. `Building` has
-no height field and the adapter reads no height tags, so nothing downstream can render a skyline
-from real data.
-
-Deliverables:
-
-- Capture source building height and level count in the OSM adapter and persist them on buildings.
-- Unknown stays unknown: a building with no usable height tag stores null, never zero or a
-  substituted default — the same discipline already applied to `lane_count`.
-- Tolerant parsing of the values OSM actually contains (bare metres, `"12 m"`, and unit-suffixed
-  forms), treating unparseable values as unknown rather than failing the import.
-
-Acceptance checks:
-
-- A fixture building tagged with a height persists that height; one tagged only with levels
-  persists the level count; one tagged with neither persists nulls for both.
-- An unparseable height value leaves the height unknown and does not fail the import.
-- Existing imports remain valid: the migration adds nullable columns and changes no counts.
-
-Note: converting levels into an estimated height is *inference*, not observation, and belongs to
-Milestone 11. This milestone only records what the source stated.
 
 ## Milestone 11 — Generated block content
 
@@ -665,7 +690,7 @@ Deliverables:
 - Block population from data already persisted: subdivide a block into lots along its **ordered**
   `block_boundary_segments` frontage, apply a setback, and place footprints in the buildable area.
 - Context-driven density and height inference, using the `RoadClassification` of the block's
-  bounding roads, its real neighbours' footprints where present, and level counts from Milestone 10.
+  bounding roads, its real neighbours' footprints where present, and level counts from Milestone 8.1.
 - Provenance on every inferred value, so measured, inferred, and defaulted heights stay
   distinguishable to consumers and to any later real-data import.
 - Respect for observed data: a generated footprint never overlaps a real building, and real

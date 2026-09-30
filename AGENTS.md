@@ -45,9 +45,8 @@ road graph traversal, routing, a full HTTP API in front of all of it, logical st
 generated cross-sections (lanes, lane type, width), buildable blocks (buildable area, median
 and edge-block flags, stable ids), and traced boundaries (named shapes over an import area,
 scoped queries, and GeoJSON export in filter and clip modes with local projection metadata).
-Milestones 9 onward — live OSM retrieval and visualization, and the generated-content
-milestones — remain unbuilt. Don't pull
-those in prematurely; see `MILESTONES.md` for current status and what's next.
+Milestone 8.1 (building heights from source), Milestone 9 (live import and the showcase client),
+and the generated-content milestones remain unbuilt. Don't pull those in prematurely; see `MILESTONES.md` for current status and what's next.
 
 ## Conventions
 
@@ -69,7 +68,7 @@ GitHub Issues are the backlog, and they are part of every change — not bookkee
 - **`MILESTONES.md`** is the roadmap: why each milestone exists, its deliverables, acceptance checks,
   and order. It does not track individual items.
 - **GitHub Issues**, each assigned to the GitHub milestone it belongs to (`7.1 Street
-  cross-sections`, `9 Visualization and live OSM`, …), are every actionable item: milestone
+  cross-sections`, `9 Live import and the showcase client`, …), are every actionable item: milestone
   deliverables, bugs, chores, docs. Housekeeping that belongs to no milestone has none.
 - **OpenSpec changes** are created only when a milestone or large issue actually starts, and are
   linked from that issue. They use the project schema `openspec/schemas/milestone-driven/`: the
@@ -89,7 +88,7 @@ issues, with its state in the gitignored `.claude/run/ledger.md`.
 The pick order lives in GitHub, not in anyone's head, so every agent picks the same issue:
 
 - **Milestone order**: GitHub milestone titles start with the roadmap number, compared as version
-  numbers (7.1 < 7.2 < 8 < 9 < 10 < 11). The current milestone is the lowest one with open issues.
+  numbers (7.1 < 7.2 < 8 < 8.1 < 9 < 11). The current milestone is the lowest one with open issues.
 - **Order within a milestone**: each milestone has one tracking issue (`[milestone] … (tracking)`).
   Its **sub-issues, in order, are the plan**. Reorder them in the GitHub UI to change the plan.
 - **Dependencies**: GitHub's native "blocked by" relationship, for real prerequisites only

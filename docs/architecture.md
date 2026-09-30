@@ -96,7 +96,7 @@ Implemented HTTP endpoints (Milestone 7):
 Every error response uses one JSON shape with a machine-readable `code` (`app/api/errors.py`).
 `../HOW_TO_RUN.md` has worked curl examples.
 
-A thin Leaflet/OpenLayers client can render GeoJSON emitted by the API. It remains a verification surface, not a second map-domain implementation.
+The client (`client/`, Milestone 9) is the engine's showcase: MapLibre GL is the 2D surface for choosing a place, tracing a boundary, and importing it; Three.js renders the built world as a stylized low-poly scene from `map-data` and its local projection, and exports it as glTF. It consumes the API's representation and never re-derives the domain; scene and mesh geometry are built client-side only.
 
 ## Incremental delivery
 
