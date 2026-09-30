@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from app.domain.enums import BuildingCategory, PoiCategory, RestrictionKind
+from app.domain.enums import BuildingCategory, PoiCategory, RestrictionKind, RoadClassification
 from app.ingestion.osm_adapter import OSMFixtureAdapter, OSMIngestionError
 
 
@@ -176,3 +176,26 @@ def _building_payload(tags):
             {"type": "way", "id": 10, "nodes": [1, 2, 3, 1], "tags": tags},
         ]
     }
+
+
+@pytest.mark.parametrize(
+    ("highway", "expected"),
+    [
+        ("motorway_link", RoadClassification.MOTORWAY),
+        ("trunk_link", RoadClassification.TRUNK),
+        ("primary_link", RoadClassification.PRIMARY),
+        ("secondary_link", RoadClassification.SECONDARY),
+        ("tertiary_link", RoadClassification.TERTIARY),
+        ("living_street", RoadClassification.RESIDENTIAL),
+    ],
+)
+def test_link_and_living_street_ways_map_to_existing_classes(highway, expected):
+    payload = {
+        "elements": [
+            {"type": "node", "id": 1, "lat": 9.934, "lon": -84.080},
+            {"type": "node", "id": 2, "lat": 9.934, "lon": -84.079},
+            {"type": "way", "id": 10, "nodes": [1, 2], "tags": {"highway": highway}},
+        ]
+    }
+
+    assert [road.classification for road in OSMFixtureAdapter().parse(payload).roads] == [expected]

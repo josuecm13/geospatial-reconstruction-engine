@@ -2,7 +2,7 @@
 
 - [x] 1.1 #15 [ingestion] Reject truncated or incomplete Overpass responses before reconcile
 - [x] 1.2 #14 [ingestion] Import Overpass responses whose ways reference nodes outside the bbox
-- [ ] 1.3 #16 [ingestion] Map *_link and living_street road classes
+- [x] 1.3 #16 [ingestion] Map *_link and living_street road classes
 - [ ] 1.4 #17 [ingestion] Treat junction=roundabout as one-way
 - [ ] 1.5 #18 [ingestion] Handle oneway=reversible/alternating instead of failing the import
 - [ ] 1.6 #19 [ingestion] Handle restriction:<vehicle> relations instead of failing the import
