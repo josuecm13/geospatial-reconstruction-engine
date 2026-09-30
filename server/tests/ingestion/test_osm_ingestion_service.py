@@ -461,3 +461,31 @@ def test_reversible_way_imports_with_both_directions(db_session):
 
     assert result.import_area.status is ImportStatus.COMPLETED
     assert db_session.scalar(select(func.count()).select_from(RoadSegmentModel)) == 2
+
+
+def _with_restriction_tags(tags):
+    payload = json.loads(FIXTURE.read_text())
+    for element in payload["elements"]:
+        if element["type"] == "relation" and element["id"] == 400:
+            element["tags"] = {"type": "restriction", **tags}
+    return payload
+
+
+def _prohibited_movements(db_session):
+    return db_session.scalar(
+        select(func.count()).select_from(TurnMovementModel).where(TurnMovementModel.restriction_kind == RestrictionKind.NO_LEFT_TURN)
+    )
+
+
+def test_bus_only_restriction_is_skipped_and_the_import_completes(db_session):
+    result = OSMIngestionService(db_session).import_fixture(_bbox(), _with_restriction_tags({"restriction:bus": "no_left_turn"}))
+
+    assert result.import_area.status is ImportStatus.COMPLETED
+    assert _prohibited_movements(db_session) == 0
+
+
+@pytest.mark.parametrize("key", ["restriction:motorcar", "restriction:motor_vehicle", "restriction:vehicle"])
+def test_car_scoped_restriction_is_honored(db_session, key):
+    OSMIngestionService(db_session).import_fixture(_bbox(), _with_restriction_tags({key: "no_left_turn"}))
+
+    assert _prohibited_movements(db_session) == 1

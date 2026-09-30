@@ -5,7 +5,7 @@
 - [x] 1.3 #16 [ingestion] Map *_link and living_street road classes
 - [x] 1.4 #17 [ingestion] Treat junction=roundabout as one-way
 - [x] 1.5 #18 [ingestion] Handle oneway=reversible/alternating instead of failing the import
-- [ ] 1.6 #19 [ingestion] Handle restriction:<vehicle> relations instead of failing the import
+- [x] 1.6 #19 [ingestion] Handle restriction:<vehicle> relations instead of failing the import
 - [ ] 1.7 #20 [ingestion] Import multipolygon buildings and areas
 - [ ] 1.8 #74 [ingestion] Accept POIs mapped as areas that cross the bounding-box edge
 - [ ] 1.9 #35 [api] Expose the logical street id on map-data road segments
