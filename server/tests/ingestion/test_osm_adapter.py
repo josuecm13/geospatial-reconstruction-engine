@@ -199,3 +199,24 @@ def test_link_and_living_street_ways_map_to_existing_classes(highway, expected):
     }
 
     assert [road.classification for road in OSMFixtureAdapter().parse(payload).roads] == [expected]
+
+
+@pytest.mark.parametrize(
+    ("tags", "expected"),
+    [
+        ({"highway": "primary", "junction": "roundabout"}, 1),
+        ({"highway": "primary", "junction": "roundabout", "oneway": "no"}, 0),
+        ({"highway": "primary", "junction": "roundabout", "oneway": "-1"}, -1),
+        ({"highway": "primary"}, 0),
+    ],
+)
+def test_roundabout_is_one_way_unless_oneway_says_otherwise(tags, expected):
+    payload = {
+        "elements": [
+            {"type": "node", "id": 1, "lat": 9.934, "lon": -84.080},
+            {"type": "node", "id": 2, "lat": 9.934, "lon": -84.079},
+            {"type": "way", "id": 10, "nodes": [1, 2], "tags": tags},
+        ]
+    }
+
+    assert OSMFixtureAdapter().parse(payload).roads[0].one_way_direction == expected

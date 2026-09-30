@@ -427,3 +427,22 @@ def test_recorded_live_response_imports(db_session):
 
     assert result.import_area.status is ImportStatus.COMPLETED
     assert result.road_count > 0 and result.building_count > 0 and result.block_count > 0
+
+
+def test_roundabout_imports_one_way_in_its_drawn_direction(db_session):
+    payload = {
+        "elements": [
+            {"type": "node", "id": 1, "lat": 9.9340, "lon": -84.0800},
+            {"type": "node", "id": 2, "lat": 9.9341, "lon": -84.0799},
+            {"type": "node", "id": 3, "lat": 9.9340, "lon": -84.0798},
+            {"type": "way", "id": 10, "nodes": [1, 2, 3], "tags": {"highway": "tertiary", "junction": "roundabout"}},
+        ]
+    }
+
+    OSMIngestionService(db_session).import_fixture(_bbox(), payload)
+
+    from app.persistence.models import NavigableNodeModel
+
+    segments = db_session.scalars(select(RoadSegmentModel)).all()
+    source_ids = {node.id: node.source_id for node in db_session.scalars(select(NavigableNodeModel)).all()}
+    assert [(source_ids[s.from_node_id], source_ids[s.to_node_id]) for s in segments] == [("1", "3")]
