@@ -4,7 +4,7 @@ import { ImportPanel } from "./importing/importPanel";
 import { MapDataLayers } from "./views/mapDataLayers";
 import { createMapView } from "./views/mapView";
 import type { SceneView } from "./views/sceneView";
-import { VIEWS, viewFromHash, type ViewName } from "./views/viewState";
+import { INITIAL_VIEW, VIEWS, viewFromHash, type ViewName } from "./views/viewState";
 
 const api = new ApiClient();
 const mapView = createMapView(document.getElementById("map-view")!);
@@ -12,8 +12,8 @@ mapView.map.on("load", () => {
   const layers = new MapDataLayers(mapView.map);
   new ImportPanel(document.getElementById("import-panel")!, mapView.map, api, layers);
 });
-// The 3D scene (and Three.js) loads on first visit, so a map-only session never downloads it or
-// creates a WebGL context for it.
+// The 3D scene (and Three.js) loads only when the Scene tab is first opened, so a map-only session
+// never downloads it or creates a WebGL context for it.
 let sceneView: Promise<SceneView> | undefined;
 
 function show(view: ViewName): void {
@@ -33,7 +33,9 @@ function show(view: ViewName): void {
 }
 
 window.addEventListener("hashchange", () => show(viewFromHash(location.hash)));
-show(viewFromHash(location.hash));
+// Every page load opens on the map, whatever the hash says: the scene is built only when asked for.
+if (viewFromHash(location.hash) !== INITIAL_VIEW) history.replaceState(null, "", `#${INITIAL_VIEW}`);
+show(INITIAL_VIEW);
 
 const status = document.getElementById("api-status")!;
 api.health().then(
