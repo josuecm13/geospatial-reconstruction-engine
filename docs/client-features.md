@@ -80,8 +80,8 @@ beyond parity.
 
 Every non-2xx response is `{"error": {"code", "message", "details"}}`. The client should switch on
 `code`, not on the HTTP status: `invalid_request`, `invalid_bounding_box`, `invalid_coordinate`,
-`payload_outside_bounding_box`, `ingestion_failed`, `import_area_not_found`,
-`import_area_not_ready`, `import_conflict`, `building_not_found`, `invalid_boundary` (with
+`payload_outside_bounding_box`, `ingestion_failed`, `source_incomplete` (the source response was
+truncated and nothing was changed), `import_area_not_found`, `import_area_not_ready`, `import_conflict`, `building_not_found`, `invalid_boundary` (with
 `details.rule`), `boundary_name_conflict`, `boundary_not_found`, `invalid_spatial_query`,
 `no_navigable_node`, `no_route_found`, `unknown_routing_strategy`, `not_found`,
 `method_not_allowed`, `database_unavailable`, `configuration_error`, `internal_error`.
