@@ -9,6 +9,7 @@ import type {
   FeatureCollection,
   Geometry,
   ImportArea,
+  ImportStatus,
   MapData,
   Route,
 } from "./types";
@@ -46,6 +47,16 @@ export class ApiClient {
   /** Without a payload the server fetches the box live from Overpass. */
   importArea(bbox: BoundingBox, payload?: unknown): Promise<ImportArea> {
     return this.request("POST", "/import-areas", payload === undefined ? { bbox } : { bbox, payload });
+  }
+
+  /** Import areas, most recently imported first. */
+  async listImportAreas(query: { status?: ImportStatus; limit?: number } = {}): Promise<ImportArea[]> {
+    const params = new URLSearchParams();
+    if (query.status) params.set("status", query.status);
+    if (query.limit) params.set("limit", String(query.limit));
+    const suffix = params.size ? `?${params}` : "";
+    const body = await this.request<{ import_areas: ImportArea[] }>("GET", `/import-areas${suffix}`);
+    return body.import_areas;
   }
 
   getImportArea(id: string): Promise<ImportArea> {
