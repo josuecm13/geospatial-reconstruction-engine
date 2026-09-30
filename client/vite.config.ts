@@ -13,6 +13,8 @@ export default defineConfig(({ mode }) => {
     preview: { port: clientPort, strictPort: true, proxy },
     // MapLibre alone is about 1 MB minified; Three.js is split into the scene's own chunk.
     build: { chunkSizeWarningLimit: 1200 },
+    // MapLibre's worker is an ES module (it imports a shared chunk).
+    worker: { format: "es" as const },
     test: { environment: "node" },
   };
 });
