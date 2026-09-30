@@ -29,5 +29,57 @@ body { display: flex; flex-direction: column; }
 .api-status[data-state="ok"]::before { content: "● "; color: #6fcf7f; }
 .api-status[data-state="down"]::before { content: "● "; color: #ef6f6f; }
 main { flex: 1; position: relative; }
-.view { position: absolute; inset: 0; }
-.view[hidden] { display: none; }
+/* `main > .view` outranks MapLibre's `.maplibregl-map { position: relative }`, which would
+   otherwise collapse the map container to zero height. */
+main > .view { position: absolute; inset: 0; }
+main > .view[hidden] { display: none; }
+
+.panel {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  width: 300px;
+  max-height: calc(100% - 24px);
+  overflow: auto;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.96);
+  border-radius: 10px;
+  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.18);
+  font-size: 14px;
+  z-index: 2;
+}
+body:has(#map-view[hidden]) .panel { display: none; }
+.panel h2 { font-size: 16px; margin: 0 0 4px; }
+.panel h3 { font-size: 13px; margin: 16px 0 4px; text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.7; }
+.panel .hint { margin: 0 0 10px; opacity: 0.7; font-size: 13px; }
+.panel button {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  margin: 6px 0;
+  border: 1px solid #b9c3cc;
+  border-radius: 6px;
+  background: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+.panel button.primary { background: #2f7dd1; color: #fff; border-color: #2f7dd1; }
+.panel button:disabled { opacity: 0.45; cursor: not-allowed; }
+.panel button.link { border: none; padding: 4px 0; margin: 0; text-align: left; color: #2f7dd1; background: none; }
+.area-readout { margin: 4px 0; font-variant-numeric: tabular-nums; }
+.area-readout[data-state="invalid"] { color: #c0392b; font-weight: 600; }
+.status { margin: 6px 0 0; min-height: 1.2em; }
+.status[data-state="error"] { color: #c0392b; }
+.status[data-state="busy"] { color: #2f7dd1; }
+.recent { list-style: none; margin: 0; padding: 0; }
+.corner-handle {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  border: 3px solid #2f7dd1;
+  cursor: grab;
+}
+.feature-popup table { border-collapse: collapse; margin-top: 4px; }
+.feature-popup td { padding: 2px 8px 2px 0; vertical-align: top; }
+.feature-popup td:first-child { opacity: 0.65; }

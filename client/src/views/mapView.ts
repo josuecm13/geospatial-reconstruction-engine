@@ -1,5 +1,10 @@
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+// MapLibre looks for its worker next to its own module, which Vite's bundling moves. Have Vite
+// bundle the worker itself and hand MapLibre that URL, in dev and in the build alike.
+import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
+
+maplibregl.setWorkerUrl(workerUrl);
 
 /** OpenFreeMap's keyless vector style, built from OpenStreetMap data; it carries its own attribution. */
 export const BASEMAP_STYLE = "https://tiles.openfreemap.org/styles/liberty";
