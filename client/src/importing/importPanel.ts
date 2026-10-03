@@ -5,7 +5,8 @@ import { areaSquareMeters, bboxProblem, formatSquareKilometers, MAX_AREA_SQUARE_
 import type { MapDataLayers } from "../views/mapDataLayers";
 import { importErrorMessage } from "./errorMessages";
 import { RectangleTool } from "./rectangleTool";
-import { CurrentArea, describeArea, findByBbox } from "./recentImports";
+import type { SelectionStore } from "../state/selection";
+import { describeArea, findByBbox } from "./recentImports";
 
 /** How many completed areas the panel lists. */
 const LISTED_AREAS = 50;
@@ -18,7 +19,6 @@ export const REIMPORT_WARNING =
 /** The 2D picker: draw a rectangle up to 1 km², import it live, and see what the engine built. */
 export class ImportPanel {
   private readonly tool: RectangleTool;
-  private readonly current = new CurrentArea(localStorage);
   /** Completed import areas from the API, most recent first. */
   private areas: ImportArea[] = [];
   private readonly el: {
@@ -35,6 +35,7 @@ export class ImportPanel {
     private readonly map: maplibregl.Map,
     private readonly api: ApiClient,
     private readonly layers: MapDataLayers,
+    private readonly selection: SelectionStore,
   ) {
     container.innerHTML = `
       <h2>Import a place</h2>
@@ -60,7 +61,7 @@ export class ImportPanel {
     });
     this.el.importButton.addEventListener("click", () => void this.importSelection());
     void this.refreshAreas();
-    const current = this.current.id;
+    const current = this.selection.get().areaId;
     if (current) void this.open(current, { quiet: true });
   }
 
@@ -117,7 +118,7 @@ export class ImportPanel {
         ],
         { padding: 60, duration: options.quiet ? 0 : 800 },
       );
-      this.current.id = areaId;
+      this.selection.setArea(areaId);
       this.setStatus(summary(area), "ok");
       this.selectionChanged(area.bbox);
       this.renderAreas();
@@ -137,7 +138,7 @@ export class ImportPanel {
   }
 
   private renderAreas(): void {
-    const selected = this.current.id;
+    const selected = this.selection.get().areaId;
     this.el.recent.replaceChildren(
       ...(this.areas.length
         ? this.areas.map((area) => {

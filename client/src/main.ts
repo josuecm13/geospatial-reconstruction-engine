@@ -1,16 +1,19 @@
 import "./style.css";
 import { ApiClient } from "./api/client";
 import { ImportPanel } from "./importing/importPanel";
+import { SelectionStore } from "./state/selection";
 import { MapDataLayers } from "./views/mapDataLayers";
 import { createMapView } from "./views/mapView";
 import type { SceneView } from "./views/sceneView";
 import { INITIAL_VIEW, VIEWS, viewFromHash, type ViewName } from "./views/viewState";
 
 const api = new ApiClient();
+/** The open area and scope, shared by every view. */
+const selection = new SelectionStore(localStorage);
 const mapView = createMapView(document.getElementById("map-view")!);
 mapView.map.on("load", () => {
   const layers = new MapDataLayers(mapView.map);
-  new ImportPanel(document.getElementById("import-panel")!, mapView.map, api, layers);
+  new ImportPanel(document.getElementById("import-panel")!, mapView.map, api, layers, selection);
 });
 // The 3D scene (and Three.js) loads only when the Scene tab is first opened, so a map-only session
 // never downloads it or creates a WebGL context for it.
