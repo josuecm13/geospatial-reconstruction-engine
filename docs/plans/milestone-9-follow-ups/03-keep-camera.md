@@ -104,4 +104,21 @@ build, and the view stays. Import again without touching, and it ends at the ove
 
 ## Outcome
 
+Done as designed. `scene/framing.ts` has `createFramingPolicy`, `overview(box)` and a
+`rectangleOverview(width, height)` helper (the "pick one" for `beginStaged`: it builds a flat box
+centred on the origin, so the diagonal equals `hypot(width, height)` as before). `sceneView.ts` calls
+`framing.stagedStarted()` in `beginStaged`, `framing.userMoved()` from the OrbitControls `start`
+event (shared with brief 02's rotate listener), `framing.reset()` in `showMessage` and in the wrapped
+`abandon()`. `setWorld` frames only when `shouldFrame()`; otherwise it only raises `camera.far`
+(`max(camera.far, overview.far)`) and refreshes the projection.
+
+Decisions: `stagedStarted()` clears an earlier `userMoved`, so a move made before the build does not
+count (tested). The line references held, shifted by a few lines from briefs 01, 08, 05 and 02.
+
+Verified: `npx tsc --noEmit -p client` is clean. Tests written, not run (CI is the gate); guard tests
+are not mutation-checked. The camera staying put in a real build is not checked by hand (no renderer).
+Spec requirement and scenario, and the `docs/client-features.md` staged-build bullet, updated.
+
 ## Tangents found
+
+None.

@@ -142,7 +142,8 @@ Ideas, not commitments. Once one is chosen, it becomes an issue in the milestone
   server streams it: a turning wireframe of the rectangle while Overpass answers, then the ground, the
   roads, buildings rising ring by ring from the centre out, and the blocks overlay last. Inner areas
   the server skipped are shown built at once. "Skip animation" jumps to the end, and the glTF button
-  waits for the build. The finished area then replaces the build, loaded from map-data. Reopening an
+  waits for the build. The finished area then replaces the build, loaded from map-data; a camera moved
+  during the build is kept (#112), otherwise the overview is shown. Reopening an
   area shows no animation (`scene/stagedBuild.ts`, `scene/stagedScene.ts`, `scene/buildAnimation.ts`).
 - **Re-import diff**: created / updated / removed shown in color on the map (depends on #6).
 - **Import history** per area, with when it happened, the counts, and what changed.

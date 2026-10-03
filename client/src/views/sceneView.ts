@@ -5,6 +5,7 @@ import { prefersReducedMotion } from "../locations/flyTo";
 import { buildWorld, LAYER_ORDER } from "../scene/buildWorld";
 import { createAutoRotate, ROTATE_SPEED } from "../scene/autoRotate";
 import { createCameraModes } from "../scene/cameraModes";
+import { createFramingPolicy, overview, rectangleOverview } from "../scene/framing";
 import { createExportButton } from "../scene/exportButton";
 import { createRoutePanel, type RoutingDeps } from "../scene/routePanel";
 import type { SceneTarget } from "../scene/sceneLoader";
@@ -76,7 +77,13 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps): 
   // Turntable rotation in fly mode; never during a staged build (the waiting wireframe spins).
   const rotate = createAutoRotate(!prefersReducedMotion());
   controls.autoRotateSpeed = ROTATE_SPEED;
-  controls.addEventListener("start", () => rotate.interactionStart());
+  // The user moving the camera (not auto-rotation, which fires no event) decides whether a finished
+  // staged build keeps their view.
+  const framing = createFramingPolicy();
+  controls.addEventListener("start", () => {
+    rotate.interactionStart();
+    framing.userMoved();
+  });
   controls.addEventListener("end", () => rotate.interactionEnd());
   let building = false;
   const clock = new THREE.Clock();
@@ -135,14 +142,18 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps): 
       overlay.hidden = true;
       toggle.hidden = false;
       rotateButton.hidden = false;
-      // Frame the whole world from a raised, angled viewpoint.
-      const box = new THREE.Box3().setFromObject(world);
-      const center = box.getCenter(new THREE.Vector3());
-      const size = Math.max(box.getSize(new THREE.Vector3()).length(), 50);
-      camera.far = Math.max(5000, size * 10);
+      // Frame the whole world from a raised, angled viewpoint, unless the user moved the camera
+      // during the staged build that this world finishes.
+      const view = overview(new THREE.Box3().setFromObject(world));
+      if (framing.shouldFrame()) {
+        camera.far = view.far;
+        controls.target.copy(view.target);
+        camera.position.copy(view.position);
+      } else {
+        // The finished world can be bigger than the rectangle that was built.
+        camera.far = Math.max(camera.far, view.far);
+      }
       camera.updateProjectionMatrix();
-      controls.target.copy(center);
-      camera.position.set(center.x, center.y + size * 0.6, center.z + size * 0.7);
       controls.update();
     },
     beginStaged(bbox) {
@@ -150,6 +161,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps): 
       modes.setWorld(undefined);
       routes?.setWorld(undefined);
       exporter.setWorld(undefined);
+      framing.stagedStarted();
       const build = staged.begin(bbox);
       world = build.world;
       world.getObjectByName("blocks")!.visible = buildable.checked;
@@ -166,15 +178,23 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps): 
       });
       // Frame the rectangle, whose centre is the projection origin, from the usual raised viewpoint.
       const { width, height } = bboxMeters(bbox);
-      const size = Math.max(Math.hypot(width, height), 50);
-      camera.far = Math.max(5000, size * 10);
+      const view = rectangleOverview(width, height);
+      camera.far = view.far;
       camera.updateProjectionMatrix();
-      controls.target.set(0, 0, 0);
-      camera.position.set(0, size * 0.6, size * 0.7);
+      controls.target.copy(view.target);
+      camera.position.copy(view.position);
       controls.update();
-      return build.handle;
+      // An abandoned build reloads the previous area, which gets the overview, not this view.
+      return {
+        ...build.handle,
+        abandon() {
+          framing.reset();
+          build.handle.abandon();
+        },
+      };
     },
     showMessage(message: string) {
+      framing.reset();
       removeWorld();
       modes.setWorld(undefined);
       routes?.setWorld(undefined);
