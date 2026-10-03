@@ -56,15 +56,16 @@ class BuildingRepository:
             {"import_area_id": str(import_area_id)},
         )
         self.session.flush()
+        # The raw UPDATE bypasses the identity map, so any building of this area the session has
+        # already loaded keeps its old block_id. Expire just that column so the next read reloads it.
+        for obj in list(self.session.identity_map.values()):
+            if isinstance(obj, BuildingModel) and obj.import_area_id == import_area_id:
+                self.session.expire(obj, ["block_id"])
         return result.rowcount
 
     def list_for_import_area(self, import_area_id) -> list[Building]:
-        # populate_existing: link_to_containing_block updates rows with raw SQL, which leaves
-        # already-loaded models in this session with their old block_id.
         models = self.session.execute(
-            select(BuildingModel)
-            .where(BuildingModel.import_area_id == import_area_id)
-            .execution_options(populate_existing=True)
+            select(BuildingModel).where(BuildingModel.import_area_id == import_area_id)
         ).scalars().all()
         return [self._to_domain(model) for model in models]
 

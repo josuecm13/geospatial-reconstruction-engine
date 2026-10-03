@@ -118,4 +118,24 @@ Decisions:
 
 ## Outcome
 
+Audit confirmed against the current code: the only raw SQL write in `server/app` is
+`BuildingRepository.link_to_containing_block`. The other writers in the brief's table
+(`clear_for_import_area`, `OSMIngestionService._sweep`, `TracedBoundaryRepository.delete`) are
+ORM-enabled `update`/`delete` with the default `synchronize_session="auto"`, so they keep the session
+coherent; every other `text()` is a read. No other repository needs a change.
+
+Done: `link_to_containing_block` now expires `block_id` on each loaded `BuildingModel` of the area
+after its raw UPDATE (kept the raw SQL; did not switch to an ORM-enabled update). Removed the
+`populate_existing` workaround and its comment from `list_for_import_area`. Three regression tests in
+`test_building_poi_area_feature_repository.py` hold a reference to the loaded model on purpose and
+check `get`, `list_for_import_area`, and `SpatialQueryService.buildings_within_radius` after a link.
+The brief's line references were still right for `building.py`; the spatial query service moved
+(composition, brief 07) but `buildings_within_radius` has the same shape plus `composed_area_ids`.
+
+Not run: no tests (CI is the gate). The guards are not mutation-checked; the local check would be to
+delete the expire loop and watch the three tests go red.
+
 ## Tangents found
+
+- `AGENTS.md` persistence conventions don't say that a raw SQL write must leave the session's loaded
+  objects coherent; worth one line there (left unedited per the brief).
