@@ -94,6 +94,11 @@ export class BoundaryPanel {
     void this.refresh();
   }
 
+  /** Ends a trace in progress and releases the tool's listeners, for when the page is left. Run it before the map is removed. */
+  dispose(): void {
+    this.tool.dispose();
+  }
+
   /**
    * Saves the traced shape (if there is one) to a freshly imported area and scopes to it. The area
    * import stands whatever happens here: a rejected boundary is shown and the shape is kept, so the

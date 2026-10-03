@@ -29,11 +29,16 @@ const CLOSED = 2;
  * Resolves with the completed area (the animation may still be playing; the target's handle knows
  * when it ends). Rejects with an `ApiError` carrying the `failed` event's code, or `network_error`
  * if the stream is lost. A failure to start (for example 409 `import_in_progress`) rejects before
- * the scene is touched.
+ * the scene is touched. Aborting `signal` closes the stream and rejects with an `AbortError`, without
+ * abandoning the build.
  */
-export async function runStagedImport(api: StagedImportApi, target: StagedTarget, bbox: BoundingBox): Promise<ImportArea> {
+export async function runStagedImport(api: StagedImportApi, target: StagedTarget, bbox: BoundingBox, signal?: AbortSignal): Promise<ImportArea> {
+  const aborted = () => new DOMException("aborted", "AbortError");
+  if (signal?.aborted) throw aborted();
   const started = await api.startImport(bbox);
+  if (signal?.aborted) throw aborted();
   const handle = await target.begin(bbox);
+  if (signal?.aborted) throw aborted();
   const stream = api.importEvents(started.import_area_id);
   const build = new StagedBuild();
 
@@ -73,6 +78,10 @@ export async function runStagedImport(api: StagedImportApi, target: StagedTarget
         });
       }
     };
+
+    // Aborting (the page is being left) only closes the stream: the server's import carries on, and the
+    // scene goes away with the page, so the build is not abandoned.
+    signal?.addEventListener("abort", () => settle(() => reject(aborted())), { once: true });
 
     for (const stage of IMPORT_STAGES) stream.addEventListener(stage, onEvent(stage));
     // While the browser is reconnecting there is nothing to do; once it has given up, the build is lost.

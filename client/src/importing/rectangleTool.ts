@@ -64,7 +64,7 @@ export class RectangleTool {
     const canvas = map.getCanvas();
     // Without this a touch drag is taken for a browser pan and cancelled before it can move a handle.
     canvas.style.touchAction = "none";
-    canvas.addEventListener("pointerdown",this.onPointerDown);
+    canvas.addEventListener("pointerdown", this.onPointerDown);
     canvas.addEventListener("pointermove", this.onPointerMove);
     canvas.addEventListener("pointerup", this.onPointerUp);
     canvas.addEventListener("pointercancel", this.onPointerCancel);
@@ -73,6 +73,17 @@ export class RectangleTool {
 
   get bbox(): BoundingBox | null {
     return this.box;
+  }
+
+  /** Ends any drag and removes every listener the tool added, for when the page is left. */
+  dispose(): void {
+    this.endDrag();
+    const canvas = this.map.getCanvas();
+    canvas.removeEventListener("pointerdown", this.onPointerDown);
+    canvas.removeEventListener("pointermove", this.onPointerMove);
+    canvas.removeEventListener("pointerup", this.onPointerUp);
+    canvas.removeEventListener("pointercancel", this.onPointerCancel);
+    document.removeEventListener("keydown", this.onKeyDown);
   }
 
   /** Arms drawing: the next drag on the map draws a new rectangle. */

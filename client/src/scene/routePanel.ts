@@ -15,6 +15,8 @@ export interface RoutingDeps {
 
 export interface RoutePanel {
   setWorld(world: THREE.Object3D | undefined): void;
+  /** Removes the `window` listener; call when the page is left. */
+  dispose(): void;
 }
 
 const CLICK_SLOP_PIXELS = 5;
@@ -139,11 +141,12 @@ export function createRoutePanel(
     render();
     if (state.phase === "requesting") void request(state);
   });
-  window.addEventListener("keydown", (event) => {
+  const onKeyDown = (event: KeyboardEvent) => {
     if (event.code !== "Escape" || !enabled.checked || panel.hidden) return;
     state = clear();
     render();
-  });
+  };
+  window.addEventListener("keydown", onKeyDown);
   enabled.addEventListener("change", () => {
     canvas.style.cursor = enabled.checked ? "crosshair" : "";
     if (enabled.checked) void loadStrategies();
@@ -156,6 +159,9 @@ export function createRoutePanel(
       state = IDLE;
       panel.hidden = !world;
       render();
+    },
+    dispose() {
+      window.removeEventListener("keydown", onKeyDown);
     },
   };
 }

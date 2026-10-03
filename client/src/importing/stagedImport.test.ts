@@ -27,7 +27,7 @@ class FakeStream implements EventStream {
   }
 }
 
-function setup(options: { startError?: Error } = {}) {
+function setup(options: { startError?: Error; signal?: AbortSignal } = {}) {
   const log: string[] = [];
   const stream = new FakeStream();
   const api = {
@@ -50,7 +50,7 @@ function setup(options: { startError?: Error } = {}) {
       };
     },
   };
-  return { log, stream, run: () => runStagedImport(api, target, bbox) };
+  return { log, stream, run: () => runStagedImport(api, target, bbox, options.signal) };
 }
 
 describe("runStagedImport", () => {
@@ -98,5 +98,37 @@ describe("runStagedImport", () => {
     stream.lose(2); // CLOSED
     await expect(result).rejects.toMatchObject({ code: "network_error" });
     expect(log).toEqual(["begin", "abandon"]);
+  });
+
+  it("closes the stream and rejects with an AbortError when aborted while streaming, without abandoning", async () => {
+    const controller = new AbortController();
+    const { log, stream, run } = setup({ signal: controller.signal });
+    const result = run();
+    await flush();
+    controller.abort();
+    await expect(result).rejects.toMatchObject({ name: "AbortError" });
+    expect(stream.closed).toBe(true);
+    expect(log).toEqual(["begin"]);
+  });
+
+  it("opens no stream when aborted before the scene is begun", async () => {
+    const controller = new AbortController();
+    const { log, stream, run } = setup({ signal: controller.signal });
+    const result = run();
+    controller.abort(); // startImport has not resolved yet
+    await expect(result).rejects.toMatchObject({ name: "AbortError" });
+    expect(log).toEqual([]);
+    expect(stream.closed).toBe(false);
+  });
+
+  it("changes nothing when aborted after completion", async () => {
+    const controller = new AbortController();
+    const { stream, run } = setup({ signal: controller.signal });
+    const result = run();
+    await flush();
+    stream.emit("completed", { id: "a1" });
+    await expect(result).resolves.toEqual({ id: "a1" });
+    controller.abort();
+    expect(stream.closed).toBe(true);
   });
 });

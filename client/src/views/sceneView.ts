@@ -225,6 +225,9 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps): 
       running = false;
       modes.setActive(false);
       observer.disconnect();
+      modes.dispose();
+      routes?.dispose();
+      controls.dispose();
       renderer.dispose();
       renderer.forceContextLoss();
       renderer.domElement.remove();

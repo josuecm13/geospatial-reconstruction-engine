@@ -125,4 +125,25 @@ scene. It toggles once, not four times.
 
 ## Outcome
 
+Done as designed. Added `dispose()` to `CameraModes` (named handlers; also `look.dispose()`),
+`RoutePanel`, `RectangleTool`, `BoundaryTool`, `BoundaryPanel` and `ImportPanel` (aborts an
+`AbortController` and disposes the tool). `sceneView.dispose` now disposes modes, routes and the
+orbit controls. `runStagedImport` takes an optional `AbortSignal`: it rejects with `AbortError` if
+aborted before or after `startImport` or `begin` (no stream is opened), and closes the stream
+(without `abandon()`) when aborted later. `ImportPanel.importSelection` returns silently on an
+`AbortError`. `explore.ts` hoists `boundaryPanel` and disposes both panels before `map.remove()`.
+
+The brief's code references held. Unmount order is panels, then the scene's
+async disposal (`sceneView.then`), then `map.remove()`; the scene still disposes after the map is gone,
+as before.
+
+Tests: abort cases in `stagedImport.test.ts`; jsdom listener-ledger tests for `cameraModes`,
+`routePanel`, `RectangleTool` and `BoundaryTool` (vertices and freehand), with helpers
+`src/testing/listenerLedger.ts` (self-tested) and `src/testing/fakeMap.ts`. Verified with
+`npx tsc --noEmit -p client` only. Not run (CI is the gate) and not mutation-checked. The manual check
+(visit, leave, return three times, then press `V` once) is not done. Spec requirement and scenario
+added; no `docs/client-features.md` row changes, as the brief said.
+
 ## Tangents found
+
+None.

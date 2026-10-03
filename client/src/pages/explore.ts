@@ -94,6 +94,7 @@ export const mount: Mount<ExploreRoute> = (el, ctx) => {
   // --- map and panels ---
   const mapView = createMapView(pick("map-view"));
   let importPanel: ImportPanel | undefined;
+  let boundaryPanel: BoundaryPanel | undefined;
   mapView.map.on("moveend", () => {
     if (disposed || view !== "map") return;
     const center = mapView.map.getCenter();
@@ -104,18 +105,17 @@ export const mount: Mount<ExploreRoute> = (el, ctx) => {
     const layers = new MapDataLayers(mapView.map);
     // The boundary panel needs the import panel's rectangle, and the import panel saves a traced shape
     // through the boundary panel once an import succeeds, so each is handed to the other as a callback.
-    let boundaries: BoundaryPanel | undefined;
     const panel = new ImportPanel(
       pick("import-section"),
       mapView.map,
       api,
       layers,
       selection,
-      (areaId) => boundaries?.saveTraced(areaId) ?? Promise.resolve(),
+      (areaId) => boundaryPanel?.saveTraced(areaId) ?? Promise.resolve(),
       stagedTarget,
     );
     importPanel = panel;
-    boundaries = new BoundaryPanel(pick("boundary-section"), mapView.map, api, selection, () => panel.bbox, (tracing) => layers.setPopupsEnabled(!tracing));
+    boundaryPanel = new BoundaryPanel(pick("boundary-section"), mapView.map, api, selection, () => panel.bbox, (tracing) => layers.setPopupsEnabled(!tracing));
     void applyRoute(routeNow(), true);
   });
 
@@ -241,6 +241,9 @@ export const mount: Mount<ExploreRoute> = (el, ctx) => {
     unsubscribeSelection();
     ctx.tabs.replaceChildren();
     ctx.tabs.hidden = true;
+    // Both panels touch the map (the import's stream, a trace's drag lock), so they go before it does.
+    importPanel?.dispose();
+    boundaryPanel?.dispose();
     void sceneView?.then((scene) => {
       sceneLoader?.hidden();
       scene.dispose();

@@ -25,6 +25,8 @@ export interface CameraModes {
   setWorld(world: THREE.Object3D | undefined): void;
   /** Keyboard shortcuts only act while the scene is the visible tab. */
   setActive(active: boolean): void;
+  /** Removes the `window` and `document` listeners; call when the page is left. */
+  dispose(): void;
 }
 
 /** Fly (the orbit controls) and walk (first person on the ground, stopped by building walls),
@@ -81,7 +83,7 @@ export function createCameraModes(
   canvas.addEventListener("click", () => {
     if (mode === "walk" && !look.isLocked) look.lock();
   });
-  window.addEventListener("keydown", (event) => {
+  const onKeyDown = (event: KeyboardEvent) => {
     if (!active || event.ctrlKey || event.metaKey || event.altKey) return;
     const target = event.target as HTMLElement | null;
     if (target && /^(input|textarea|select)$/i.test(target.tagName)) return;
@@ -90,9 +92,12 @@ export function createCameraModes(
       held.add(event.code);
       if (event.code.startsWith("Arrow")) event.preventDefault();
     }
-  });
-  window.addEventListener("keyup", (event) => held.delete(event.code));
-  window.addEventListener("blur", () => held.clear());
+  };
+  const onKeyUp = (event: KeyboardEvent) => held.delete(event.code);
+  const onBlur = () => held.clear();
+  window.addEventListener("keydown", onKeyDown);
+  window.addEventListener("keyup", onKeyUp);
+  window.addEventListener("blur", onBlur);
 
   const anyHeld = (codes: Set<string>) => [...codes].some((code) => held.has(code));
 
@@ -133,6 +138,13 @@ export function createCameraModes(
         held.clear();
         if (look.isLocked) look.unlock();
       }
+    },
+    dispose() {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onBlur);
+      look.dispose();
+      held.clear();
     },
   };
 }
