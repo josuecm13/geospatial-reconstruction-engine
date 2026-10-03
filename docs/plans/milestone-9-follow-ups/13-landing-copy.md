@@ -65,4 +65,6 @@ phone width (the requirement says the layout fits down to a phone).
 
 ## Outcome
 
+Changed the two strings as designed (`landing.ts` "What comes out", the client stage in `architectureModel.ts`) and the landing requirement's wording in `openspec/specs/showcase-client/spec.md`. No test change: the architecture model test checks structure, not copy. `tsc --noEmit` is clean. Not checked by eye at desktop or phone width.
+
 ## Tangents found
