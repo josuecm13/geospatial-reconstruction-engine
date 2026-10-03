@@ -189,6 +189,13 @@ Duplicate way source ids within one payload: the roads batch collapses them to o
 but the segments are built from the last such way only, where the old loop upserted both ways'
 segments. The adapter yields one record per way id, so this doesn't arise.
 
+Follow-up: batching changed the order segments are stored in, and block derivation took each ring's
+start vertex from polygonize's edge walk, so a re-import returned the same blocks with rings
+starting at a different vertex (`test_reimporting_an_outer_area_removes_its_copies_and_keeps_its_block_ids`).
+Derivation now rotates every ring to its lowest vertex before storing it and before walking the
+bounding segments. Ordering the `ST_Union` input by segment id was tried on PostGIS with shuffled
+inputs and made no difference there, so the fix is the rotation.
+
 ## Tangents found
 
 - Block derivation is now the largest step (8.8 s of 14.3 s on Mitte); it is the next speed-up

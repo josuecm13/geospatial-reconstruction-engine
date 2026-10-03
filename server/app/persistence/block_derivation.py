@@ -3,6 +3,7 @@ from dataclasses import dataclass
 
 from geoalchemy2.shape import from_shape
 from shapely import wkt as shapely_wkt
+from shapely.geometry import LinearRing, Polygon
 from sqlalchemy import delete, select, text, update
 from sqlalchemy.orm import Session
 
@@ -127,11 +128,17 @@ class BlockDerivationService:
             },
         ).fetchall()
 
-        segment_ids_by_face = self._bounding_segment_ids(import_area_id, [row.boundary_wkt for row in candidate_rows])
+        # Polygonize starts each ring wherever its edge walk happens to begin, which follows the
+        # order the segments were stored in. Rotating every ring to a fixed start keeps a block's
+        # shape (and the walk order of its bounding segments) the same across re-imports.
+        polygons = [_with_canonical_ring_starts(shapely_wkt.loads(row.boundary_wkt)) for row in candidate_rows]
+        boundary_wkts = [polygon.wkt for polygon in polygons]
+        segment_ids_by_face = self._bounding_segment_ids(import_area_id, boundary_wkts)
         faces = []
-        for row, segment_ids in zip(candidate_rows, segment_ids_by_face):
-            shapely_polygon = shapely_wkt.loads(row.boundary_wkt)
-            faces.append((row, shapely_polygon, from_shape(shapely_polygon, srid=SRID), segment_ids))
+        for row, shapely_polygon, boundary_wkt, segment_ids in zip(
+            candidate_rows, polygons, boundary_wkts, segment_ids_by_face
+        ):
+            faces.append((row, shapely_polygon, from_shape(shapely_polygon, srid=SRID), segment_ids, boundary_wkt))
 
         # Ids are assigned over every face, before the inner areas' faces are dropped, so a
         # surviving block keeps the id it has when no inner area exists (faces sharing a segment
@@ -140,7 +147,7 @@ class BlockDerivationService:
             import_area_id,
             [
                 BlockKeyInput(frozenset(segment_ids), shapely_polygon.representative_point().coords[0])
-                for _, shapely_polygon, _, segment_ids in faces
+                for _, shapely_polygon, _, segment_ids, _ in faces
             ],
         )
         inner_boxes = self._inner_boxes(import_area_id)
@@ -153,13 +160,13 @@ class BlockDerivationService:
         ]
 
         blocks: list[Block] = []
-        for block_id, (row, shapely_polygon, boundary_geom, segment_ids) in kept:
+        for block_id, (row, shapely_polygon, boundary_geom, segment_ids, boundary_wkt) in kept:
             area_square_meters = self.session.execute(
-                text("SELECT ST_Area(ST_GeogFromText(:wkt))"), {"wkt": row.boundary_wkt}
+                text("SELECT ST_Area(ST_GeogFromText(:wkt))"), {"wkt": boundary_wkt}
             ).scalar_one()
 
             buildable = self._buildable_area(
-                row.boundary_wkt, {segment_id: cross_sections[segment_id].width_meters / 2 for segment_id in segment_ids}
+                boundary_wkt, {segment_id: cross_sections[segment_id].width_meters / 2 for segment_id in segment_ids}
             )
 
             block_model = BlockModel(
@@ -301,3 +308,21 @@ class _Buildable:
     geom: object
     area_square_meters: float
     is_median: bool
+
+
+def _with_canonical_ring_starts(polygon: Polygon) -> Polygon:
+    """The same polygon with each ring rotated to start at its lowest (x, y) vertex.
+
+    Only the start moves: the vertices keep their order, so the orientation is unchanged.
+    """
+    return Polygon(
+        _rotated_to_lowest_vertex(polygon.exterior),
+        sorted((_rotated_to_lowest_vertex(ring) for ring in polygon.interiors), key=lambda ring: ring[0]),
+    )
+
+
+def _rotated_to_lowest_vertex(ring: LinearRing) -> list[tuple[float, ...]]:
+    vertices = list(ring.coords)[:-1]
+    start = vertices.index(min(vertices))
+    rotated = vertices[start:] + vertices[:start]
+    return rotated + [rotated[0]]
