@@ -41,8 +41,8 @@ function entity(layer: string, feature: Feature<object>, geometry: THREE.BufferG
 
 const group = (name: string) => Object.assign(new THREE.Group(), { name });
 
-/** Builds the low-poly world for a map-data response. See the World contract in
- * the World contract (openspec/specs/showcase-client, design.md of the archived change): meters from the projection origin, x east, z south, y up. */
+/** Builds the low-poly world for a map-data response. See the World contract
+ * (openspec/specs/showcase-client, and design.md of the archived change): meters from the projection origin, x east, z south, y up. */
 export function buildWorld(data: MapData): THREE.Group {
   const projection = data.projection;
   const world = group("world");
