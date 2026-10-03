@@ -9,6 +9,7 @@ import type {
   FeatureCollection,
   Geometry,
   ImportArea,
+  ImportStarted,
   ImportStatus,
   MapData,
   Route,
@@ -26,6 +27,9 @@ export class ApiError extends Error {
     this.name = "ApiError";
   }
 }
+
+/** A strategy name no server registers, sent to make it answer with the list of those it has. */
+export const PROBE_STRATEGY = "__list_strategies__";
 
 export type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -47,6 +51,19 @@ export class ApiClient {
   /** Without a payload the server fetches the box live from Overpass. */
   importArea(bbox: BoundingBox, payload?: unknown): Promise<ImportArea> {
     return this.request("POST", "/import-areas", payload === undefined ? { bbox } : { bbox, payload });
+  }
+
+  /**
+   * Starts an import in the server's background and answers at once with where its stages stream.
+   * The UI uses this; `importArea` stays for tests and scripts.
+   */
+  startImport(bbox: BoundingBox): Promise<ImportStarted> {
+    return this.request("POST", "/import-areas", { bbox, background: true });
+  }
+
+  /** The server-sent events of a background import: one per stage. The browser reconnects with `Last-Event-ID`. */
+  importEvents(areaId: string): EventSource {
+    return new EventSource(`${this.baseUrl}/import-areas/${encodeURIComponent(areaId)}/events`);
   }
 
   /** Import areas, most recently imported first. */
@@ -89,6 +106,32 @@ export class ApiClient {
       destination,
       ...(strategy ? { strategy } : {}),
     });
+  }
+
+  private strategies = new Map<string, string[]>();
+
+  /**
+   * The routing strategies the server has registered, for the route picker. There is no endpoint
+   * that lists them: the only source is `details.registered_strategies` on the 422
+   * `unknown_routing_strategy` error, so this sends a route request naming a strategy that can't
+   * exist (the strategy is resolved before any routing happens) and reads the list off the error.
+   * Cached per area for the session. If anything else goes wrong it returns `[]`, which the picker
+   * treats as "server default only" (no `strategy` field is sent).
+   */
+  async routingStrategies(areaId: string): Promise<string[]> {
+    const cached = this.strategies.get(areaId);
+    if (cached) return cached;
+    let names: string[] = [];
+    try {
+      const { bbox } = await this.getImportArea(areaId);
+      const centre = { latitude: (bbox.min_latitude + bbox.max_latitude) / 2, longitude: (bbox.min_longitude + bbox.max_longitude) / 2 };
+      await this.route(areaId, centre, centre, PROBE_STRATEGY);
+    } catch (error) {
+      const listed = error instanceof ApiError && error.code === "unknown_routing_strategy" ? error.details?.registered_strategies : null;
+      if (Array.isArray(listed)) names = listed.map(String);
+    }
+    if (names.length) this.strategies.set(areaId, names);
+    return names;
   }
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {

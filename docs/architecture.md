@@ -84,7 +84,8 @@ Implemented HTTP endpoints (Milestone 7):
   features). An optional `boundary_id` exports one traced boundary instead (Milestone 8); every
   response states its scope and mode and carries a local projection (origin plus meters per
   degree) for Cartesian renderers. `mode=filter` (default) returns whole, routable entities;
-  `mode=clip` cuts geometry at the scope for rendering.
+  `mode=clip` cuts geometry at the scope for rendering. It composes the completed import areas
+  inside the area's rectangle (see "Nested import areas" below).
 - `GET /import-areas/{id}/nearby`, `/within-bbox`, `/nearest` — spatially query supported object
   types by coordinate/radius, bounding-box intersection/containment, or nearest node/segment;
   an optional `boundary_id` narrows any of them to one traced boundary (Milestone 8).
@@ -99,6 +100,42 @@ Every error response uses one JSON shape with a machine-readable `code` (`app/ap
 `../HOW_TO_RUN.md` has worked curl examples.
 
 The client (`client/`, Milestone 9) is the engine's showcase: MapLibre GL is the 2D surface for choosing a place, tracing a boundary, and importing it; Three.js renders the built world as a stylized low-poly scene from `map-data` and its local projection, and exports it as glTF. It consumes the API's representation and never re-derives the domain; scene and mesh geometry are built client-side only.
+
+### Background imports
+
+`POST /import-areas` with `background: true` hands the import to an in-process job registry
+(`server/app/ingestion/jobs.py`): a small thread pool, one job per import area, no broker. A job
+keeps an append-only list of stage events that subscribers replay and follow over server-sent events
+(`GET /import-areas/{id}/events`); finished jobs stay for ten minutes. The registry holds nothing
+durable, which is safe because of one rule: **a job is one transaction**. `OSMIngestionService.import_staged`
+runs the same steps as the synchronous import and flushes after each stage, announcing it as it goes,
+but commits only at the very end. Until then every other reader (`map-data`, the area's status) sees
+the previous committed state, and a failure or a restart simply rolls everything back: the area is not
+marked failed, and its data and counts stay as they were. The stages are read back through the job's own
+session and mapped with the same mappers as `map-data`.
+
+### Nested import areas
+
+Import areas can nest. When a new import's rectangle fully covers a completed import area (an
+*inner* area; one that only partly overlaps doesn't count and is imported in full), the inner area
+keeps owning what it holds. The fetch is still one Overpass query for the whole rectangle, and
+skipping happens at persist time (`app/domain/covered_areas.py`, used by `OSMIngestionService`):
+
+- Buildings, POIs, and area features covered by an inner area's bounding box are not stored in the
+  new area. A feature that crosses an inner edge is stored by both, and the outer copy wins on read.
+- The road network is stored whole, so routing and block derivation see a connected graph and a
+  route can cross an inner area.
+- A block face covered by an inner area's box is not stored (the inner area holds it as a whole
+  block). A face straddling an inner edge is stored, because the inner area only has it clipped.
+  Block ids are assigned before those faces are dropped, so no surviving block's id changes.
+- Re-importing an outer area that already holds copies of an inner area's features sweeps them,
+  like any other feature the payload no longer produces.
+
+The outer area composes its inner areas on read: `map-data` appends their buildings, POIs, area
+features, and whole (unclipped) blocks that it doesn't hold itself, each feature naming its owner in
+`properties.import_area_id`, and lists them in `scope.composed_area_ids`. The background import's
+`fetched` event carries `inner_area_ids`, so a client can show those areas at once. An area's counts
+describe only the rows it stores. No table changes: nesting is derived from the stored `bbox`es.
 
 ## Incremental delivery
 

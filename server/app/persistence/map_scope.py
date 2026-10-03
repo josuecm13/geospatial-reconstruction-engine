@@ -1,4 +1,5 @@
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -33,18 +34,26 @@ class ScopedIds:
     area_features: frozenset[uuid.UUID]
 
 
-def ids_intersecting_boundary(session: Session, import_area_id: uuid.UUID, boundary_id: uuid.UUID) -> ScopedIds:
+def ids_intersecting_boundary(
+    session: Session,
+    import_area_id: uuid.UUID,
+    boundary_id: uuid.UUID,
+    composed_area_ids: Sequence[uuid.UUID] = (),
+) -> ScopedIds:
     """Uses the stored boundary geometry, so the test is the same one the spatial queries apply.
-    Callers check first that the boundary belongs to the import area."""
+    Callers check first that the boundary belongs to the import area. The feature layers (blocks,
+    buildings, POIs, area features) also cover `composed_area_ids`, the inner areas the import
+    area composes; the road network is always the import area's own."""
     boundary_geom = (
         select(TracedBoundaryModel.geom).where(TracedBoundaryModel.id == boundary_id).scalar_subquery()
     )
+    feature_owners = [import_area_id, *composed_area_ids]
 
-    def ids(model, geom_column):
+    def ids(model, geom_column, owners=(import_area_id,)):
         return frozenset(
             session.scalars(
                 select(model.id).where(
-                    model.import_area_id == import_area_id, func.ST_Intersects(geom_column, boundary_geom)
+                    model.import_area_id.in_(owners), func.ST_Intersects(geom_column, boundary_geom)
                 )
             ).all()
         )
@@ -59,10 +68,10 @@ def ids_intersecting_boundary(session: Session, import_area_id: uuid.UUID, bound
     return ScopedIds(
         road_segments=segment_ids,
         navigable_nodes=ids(NavigableNodeModel, NavigableNodeModel.geom),
-        blocks=ids(BlockModel, BlockModel.boundary),
-        buildings=ids(BuildingModel, BuildingModel.geom),
-        pois=ids(PointOfInterestModel, PointOfInterestModel.geom),
-        area_features=ids(AreaFeatureModel, AreaFeatureModel.geom),
+        blocks=ids(BlockModel, BlockModel.boundary, feature_owners),
+        buildings=ids(BuildingModel, BuildingModel.geom, feature_owners),
+        pois=ids(PointOfInterestModel, PointOfInterestModel.geom, feature_owners),
+        area_features=ids(AreaFeatureModel, AreaFeatureModel.geom, feature_owners),
     )
 
 
@@ -86,20 +95,28 @@ class ClippedGeometries:
     area_features: dict[uuid.UUID, dict[str, Any]]
 
 
-def clip_to_scope(session: Session, import_area_id: uuid.UUID, boundary_id: uuid.UUID | None) -> ClippedGeometries:
-    """Cuts every layer at the boundary, or at the import area's bounding box without one."""
+def clip_to_scope(
+    session: Session,
+    import_area_id: uuid.UUID,
+    boundary_id: uuid.UUID | None,
+    composed_area_ids: Sequence[uuid.UUID] = (),
+) -> ClippedGeometries:
+    """Cuts every layer at the boundary, or at the import area's bounding box without one. The
+    feature layers also cover `composed_area_ids`, as in `ids_intersecting_boundary`."""
     if boundary_id is None:
         scope_geom = select(ImportAreaModel.bbox).where(ImportAreaModel.id == import_area_id).scalar_subquery()
     else:
         scope_geom = select(TracedBoundaryModel.geom).where(TracedBoundaryModel.id == boundary_id).scalar_subquery()
 
-    def clip(model, geom_column, dimension, *joins_and_filters, owner=None):
+    feature_owners = [import_area_id, *composed_area_ids]
+
+    def clip(model, geom_column, dimension, *joins_and_filters, owner=None, owners=(import_area_id,)):
         clipped = func.ST_CollectionExtract(func.ST_Intersection(geom_column, scope_geom), dimension, type_=Geometry)
         query = select(model.id, clipped)
         for join in joins_and_filters:
             query = query.join(*join)
         query = query.where(
-            (owner if owner is not None else model.import_area_id) == import_area_id,
+            (owner if owner is not None else model.import_area_id).in_(owners),
             func.ST_Intersects(geom_column, scope_geom),
         )
         result = {}
@@ -117,11 +134,11 @@ def clip_to_scope(session: Session, import_area_id: uuid.UUID, boundary_id: uuid
             (RoadModel, RoadSegmentModel.road_id == RoadModel.id), owner=RoadModel.import_area_id,
         ),
         navigable_nodes=clip(NavigableNodeModel, NavigableNodeModel.geom, _POINTS),
-        blocks=clip(BlockModel, BlockModel.boundary, _POLYGONS),
-        block_buildable_areas=clip(BlockModel, BlockModel.buildable_area, _POLYGONS),
-        buildings=clip(BuildingModel, BuildingModel.geom, _POLYGONS),
-        pois=clip(PointOfInterestModel, PointOfInterestModel.geom, _POINTS),
-        area_features=clip(AreaFeatureModel, AreaFeatureModel.geom, _POLYGONS),
+        blocks=clip(BlockModel, BlockModel.boundary, _POLYGONS, owners=feature_owners),
+        block_buildable_areas=clip(BlockModel, BlockModel.buildable_area, _POLYGONS, owners=feature_owners),
+        buildings=clip(BuildingModel, BuildingModel.geom, _POLYGONS, owners=feature_owners),
+        pois=clip(PointOfInterestModel, PointOfInterestModel.geom, _POINTS, owners=feature_owners),
+        area_features=clip(AreaFeatureModel, AreaFeatureModel.geom, _POLYGONS, owners=feature_owners),
     )
 
 

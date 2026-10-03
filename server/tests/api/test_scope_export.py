@@ -54,7 +54,7 @@ def neighborhood(client):
 def test_whole_area_export_states_scope_mode_and_projection(client, neighborhood):
     body = _map_data(client, neighborhood)
 
-    assert body["scope"] == {"type": "import_area", "id": neighborhood}
+    assert body["scope"] == {"type": "import_area", "id": neighborhood, "composed_area_ids": []}
     assert body["mode"] == "filter"
     projection = body["projection"]
     assert projection["origin"] == pytest.approx({"latitude": 9.934, "longitude": -84.08})
@@ -68,7 +68,7 @@ def test_boundary_export_returns_whole_entities_intersecting_the_boundary(client
     everything = _map_data(client, neighborhood)
     body = _map_data(client, neighborhood, boundary_id=west)
 
-    assert body["scope"] == {"type": "boundary", "id": west}
+    assert body["scope"] == {"type": "boundary", "id": west, "composed_area_ids": []}
     assert body["mode"] == "filter"
     assert len(body["buildings"]["features"]) == 1
     assert body["pois"]["features"] == []
@@ -97,8 +97,8 @@ def test_whole_area_equals_a_boundary_covering_the_whole_rectangle(client, neigh
     area_export = _map_data(client, neighborhood)
     boundary_export = _map_data(client, neighborhood, boundary_id=whole)
 
-    assert area_export.pop("scope") == {"type": "import_area", "id": neighborhood}
-    assert boundary_export.pop("scope") == {"type": "boundary", "id": whole}
+    assert area_export.pop("scope") == {"type": "import_area", "id": neighborhood, "composed_area_ids": []}
+    assert boundary_export.pop("scope") == {"type": "boundary", "id": whole, "composed_area_ids": []}
     assert area_export == boundary_export
 
 

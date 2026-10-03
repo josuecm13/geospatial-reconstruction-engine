@@ -92,7 +92,11 @@ def node_feature(node: NavigableNode) -> Feature:
 
 
 def poi_feature(poi: PointOfInterest) -> Feature:
-    return Feature(id=poi.id, geometry=point_geometry(poi.point), properties={"category": poi.category.value, "name": poi.name})
+    return Feature(
+        id=poi.id,
+        geometry=point_geometry(poi.point),
+        properties={"category": poi.category.value, "name": poi.name, "import_area_id": poi.import_area_id},
+    )
 
 
 def building_feature(building: Building) -> Feature:
@@ -104,12 +108,17 @@ def building_feature(building: Building) -> Feature:
             "block_id": building.block_id,
             "height_meters": building.height_meters,
             "levels": building.levels,
+            "import_area_id": building.import_area_id,
         },
     )
 
 
 def area_feature_feature(feature: AreaFeature) -> Feature:
-    return Feature(id=feature.id, geometry=polygon_geometry(feature.geom), properties={"kind": feature.kind.value})
+    return Feature(
+        id=feature.id,
+        geometry=polygon_geometry(feature.geom),
+        properties={"kind": feature.kind.value, "import_area_id": feature.import_area_id},
+    )
 
 
 def block_feature(block: Block) -> Feature:
@@ -122,6 +131,7 @@ def block_feature(block: Block) -> Feature:
             "buildable_area_square_meters": block.buildable_area_square_meters,
             "is_median": block.is_median,
             "is_clipped": block.is_clipped,
+            "import_area_id": block.import_area_id,
         },
     )
 

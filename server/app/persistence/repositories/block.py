@@ -1,8 +1,8 @@
 import uuid
 from collections import defaultdict
 
-from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy import exists, func, select
+from sqlalchemy.orm import Session, aliased
 
 from app.domain.block import Block
 from app.persistence.geometry import geom_to_multipolygon, geom_to_polygon, polygon_to_geom
@@ -35,9 +35,30 @@ class BlockRepository:
         return self._to_domain(model, block.bounding_segment_ids)
 
     def list_for_import_area(self, import_area_id: uuid.UUID) -> list[Block]:
-        block_models = self.session.execute(
-            select(BlockModel).where(BlockModel.import_area_id == import_area_id)
-        ).scalars().all()
+        return self._list(select(BlockModel).where(BlockModel.import_area_id == import_area_id))
+
+    def list_composable(self, inner_area_ids: list[uuid.UUID], outer_area_id: uuid.UUID) -> list[Block]:
+        """The inner areas' whole blocks that the outer area does not hold itself.
+
+        An inner area's clipped blocks are only the inside part of a block that straddles its
+        edge, which the outer area stores whole. And an outer area imported before an inner one
+        still holds every block, so a block is left out wherever an outer block covers it.
+        """
+        if not inner_area_ids:
+            return []
+        outer = aliased(BlockModel)
+        held_by_outer = exists().where(
+            outer.import_area_id == outer_area_id,
+            func.ST_Covers(outer.boundary, func.ST_PointOnSurface(BlockModel.boundary)),
+        )
+        return self._list(
+            select(BlockModel)
+            .where(BlockModel.import_area_id.in_(inner_area_ids), BlockModel.is_clipped.is_(False), ~held_by_outer)
+            .order_by(BlockModel.import_area_id, BlockModel.id)
+        )
+
+    def _list(self, query) -> list[Block]:
+        block_models = self.session.execute(query).scalars().all()
         block_ids = [model.id for model in block_models]
 
         # One extra query for every block's boundary segments, not one per block.

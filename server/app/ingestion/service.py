@@ -1,17 +1,22 @@
 from __future__ import annotations
 
 import logging
+import time
+from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from dataclasses import dataclass, replace
 
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.domain.area_feature import AreaFeature
-from app.domain.bounding_box import BoundingBox
+from app.domain.bounding_box import BoundingBox, Coordinate
 from app.domain.building import Building
+from app.domain.covered_areas import without_covered
 from app.domain.enums import RestrictionKind
 from app.domain.import_area import ImportArea
 from app.domain.poi import PointOfInterest
+from app.domain.rings import mean_vertex, ring_batches
 from app.domain.road_graph import NavigableNode, Road, RoadSegment, Street
 from app.domain.street_grouping import GroupableWay, group_ways_into_streets, street_id_for
 from app.domain.turn_movement import TurnMovement
@@ -38,6 +43,24 @@ from app.persistence.repositories.turn_movement import TurnMovementRepository
 
 logger = logging.getLogger(__name__)
 
+# Wraps one ingestion step; the default does nothing. `server/scripts/benchmark_import.py` passes a timer.
+StepTimer = Callable[[str], AbstractContextManager[None]]
+
+
+def _untimed(step: str) -> AbstractContextManager[None]:
+    return nullcontext()
+
+# Called as `emit(stage, **info)` once a stage's rows are written (flushed, not committed), so the
+# listener can read them back through the same session. The stages, in order: `fetched` (with the
+# ids of the inner areas the import skips), `ground`, `roads`, `blocks`, then `buildings` once per
+# ring of buildings. The listener maps `info` to JSON.
+StageEmitter = Callable[..., None]
+
+
+def _no_emit(stage: str, **info) -> None:
+    pass
+
+
 @dataclass(frozen=True)
 class ImportResult:
     import_area: ImportArea
@@ -55,9 +78,10 @@ class ImportResult:
 
 
 class OSMIngestionService:
-    def __init__(self, session: Session, adapter: OSMFixtureAdapter | None = None):
+    def __init__(self, session: Session, adapter: OSMFixtureAdapter | None = None, step_timer: StepTimer = _untimed):
         self.session = session
         self.adapter = adapter or OSMFixtureAdapter()
+        self.step_timer = step_timer
 
     def import_fixture(self, bbox: BoundingBox, payload: dict, provider: str = "osm") -> ImportResult:
         # Before the area is created or marked importing: an incomplete response must leave the
@@ -70,9 +94,11 @@ class OSMIngestionService:
         self.session.commit()
         try:
             area_repo.mark_importing(import_area.id)
-            records = self.adapter.parse(with_way_nodes_from_geometry(payload))
+            with self._step(import_area.id, "parse"):
+                records = self.adapter.parse(with_way_nodes_from_geometry(payload))
             self._validate_within_bounding_box(bbox, records)
-            result = self._persist(import_area, records)
+            inner_areas = area_repo.completed_areas_covered_by(bbox, exclude_id=import_area.id)
+            result = self._persist(import_area, records, inner_areas=inner_areas)
             self.session.commit()
             return result
         except Exception as error:
@@ -87,8 +113,23 @@ class OSMIngestionService:
                 raise
             raise OSMIngestionError(f"OSM import failed: {error}") from error
 
-    def _persist(self, import_area: ImportArea, records: ImportRecords) -> ImportResult:
+    def _persist(
+        self,
+        import_area: ImportArea,
+        records: ImportRecords,
+        emit: StageEmitter = _no_emit,
+        inner_areas: tuple[ImportArea, ...] | list[ImportArea] = (),
+    ) -> ImportResult:
         area_id = import_area.id
+        started = time.perf_counter()
+        # Completed areas inside this rectangle already hold their buildings, POIs and area
+        # features: those are not stored here, and earlier copies here are swept as not produced.
+        # The road network stays whole, so routes and blocks cross the inner areas.
+        records = self._without_inner_area_features(area_id, records, inner_areas)
+        logger.info(
+            "import area %s: persisting %d nodes, %d roads, %d buildings, %d POIs, %d area features",
+            area_id, len(records.nodes), len(records.roads), len(records.buildings), len(records.pois), len(records.areas),
+        )
         streets = StreetRepository(self.session)
         roads = RoadRepository(self.session)
         nodes = NavigableNodeRepository(self.session)
@@ -126,32 +167,33 @@ class OSMIngestionService:
         # 1. Upsert every source entity, tracking which rows this payload
         #    touched — anything for this area *not* in these sets is stale
         #    from a previous import and gets swept below.
-        node_ids = self._navigable_node_ids(records)
-        persisted_nodes = {
-            source_id: nodes.upsert(NavigableNode(None, area_id, source_id, records.nodes[source_id]))
-            for source_id in node_ids
-        }
-        touched_node_ids = {node.id for node in persisted_nodes.values()}
+        with self._step(area_id, "persist features"):
+            node_ids = self._navigable_node_ids(records)
+            persisted_nodes = {
+                source_id: nodes.upsert(NavigableNode(None, area_id, source_id, records.nodes[source_id]))
+                for source_id in node_ids
+            }
+            touched_node_ids = {node.id for node in persisted_nodes.values()}
 
-        touched_street_ids: set = set()
-        touched_road_ids: set = set()
-        touched_segment_ids: set = set()
-        segments_by_way: dict[str, list[RoadSegment]] = {}
-        street_by_way = self._persist_streets(streets, area_id, records)
-        touched_street_ids.update(street.id for street in street_by_way.values())
-        for source_road in records.roads:
-            street = street_by_way[source_road.source_id]
-            road = roads.upsert(
-                Road(None, area_id, source_road.source_id, source_road.classification,
-                     tuple(records.nodes[node_id] for node_id in source_road.node_ids), street.id)
-            )
-            touched_road_ids.add(road.id)
-            produced = self._segments_for_road(source_road, road, persisted_nodes, records.nodes, node_ids)
-            persisted_segments = [segments.upsert(segment) for segment in produced]
-            segments_by_way[source_road.source_id] = persisted_segments
-            touched_segment_ids.update(segment.id for segment in persisted_segments)
+            touched_street_ids: set = set()
+            touched_road_ids: set = set()
+            touched_segment_ids: set = set()
+            segments_by_way: dict[str, list[RoadSegment]] = {}
+            street_by_way = self._persist_streets(streets, area_id, records)
+            touched_street_ids.update(street.id for street in street_by_way.values())
+            for source_road in records.roads:
+                street = street_by_way[source_road.source_id]
+                road = roads.upsert(
+                    Road(None, area_id, source_road.source_id, source_road.classification,
+                         tuple(records.nodes[node_id] for node_id in source_road.node_ids), street.id)
+                )
+                touched_road_ids.add(road.id)
+                produced = self._segments_for_road(source_road, road, persisted_nodes, records.nodes, node_ids)
+                persisted_segments = [segments.upsert(segment) for segment in produced]
+                segments_by_way[source_road.source_id] = persisted_segments
+                touched_segment_ids.update(segment.id for segment in persisted_segments)
 
-        touched_building_ids, touched_poi_ids, touched_area_feature_ids = self._persist_features(area_id, records)
+            touched_building_ids, touched_poi_ids, touched_area_feature_ids = self._persist_features(area_id, records)
 
         # 2. Reset derived block data *before* sweeping stale segments: blocks
         #    and block_boundary_segments reference segments, and no foreign
@@ -161,19 +203,24 @@ class OSMIngestionService:
         block_service.clear_for_import_area(area_id)
 
         # 3-4. Sweep every row this payload no longer produces, children first.
-        self._sweep(
-            area_id,
-            touched_segment_ids=touched_segment_ids,
-            touched_road_ids=touched_road_ids,
-            touched_street_ids=touched_street_ids,
-            touched_node_ids=touched_node_ids,
-            touched_building_ids=touched_building_ids,
-            touched_poi_ids=touched_poi_ids,
-            touched_area_feature_ids=touched_area_feature_ids,
-        )
+        with self._step(area_id, "sweep"):
+            self._sweep(
+                area_id,
+                touched_segment_ids=touched_segment_ids,
+                touched_road_ids=touched_road_ids,
+                touched_street_ids=touched_street_ids,
+                touched_node_ids=touched_node_ids,
+                touched_building_ids=touched_building_ids,
+                touched_poi_ids=touched_poi_ids,
+                touched_area_feature_ids=touched_area_feature_ids,
+            )
+        emit("ground")
 
         # 5. Turn candidates/restrictions, generated only over the now-reconciled segments.
-        skipped_restrictions = [*records.skipped_restrictions, *self._persist_turns(records, segments_by_way, persisted_nodes)]
+        with self._step(area_id, "turns"):
+            skipped_turns = self._persist_turns(records, segments_by_way, persisted_nodes)
+        skipped_restrictions = [*records.skipped_restrictions, *skipped_turns]
+        emit("roads")
         if skipped_restrictions:
             logger.warning(
                 "import area %s: skipped %d turn restriction(s) that are malformed or can't be resolved inside the import: %s",
@@ -181,8 +228,13 @@ class OSMIngestionService:
             )
 
         # 6. Derive fresh blocks and link buildings over the reconciled network.
-        blocks = block_service.derive_for_import_area(area_id)
-        linked_building_count = BuildingRepository(self.session).link_to_containing_block(area_id)
+        with self._step(area_id, "block derivation"):
+            blocks = block_service.derive_for_import_area(area_id)
+        emit("blocks")
+        with self._step(area_id, "link buildings"):
+            linked_building_count = BuildingRepository(self.session).link_to_containing_block(area_id)
+        if emit is not _no_emit:  # the synchronous import has no listener to batch for
+            self._emit_building_rings(import_area, emit)
 
         # 7. Counts are read back from storage, so they always equal what map data returns.
         counts = self._counts_for_area(area_id)
@@ -203,6 +255,11 @@ class OSMIngestionService:
         updated_count = sum(len(touched & existing) for existing, touched in reconciled)
         removed_count = sum(len(existing - touched) for existing, touched in reconciled)
 
+        logger.info(
+            "import area %s: persisted in %.1f s: %d roads, %d buildings, %d blocks (%d created, %d updated, %d removed)",
+            area_id, time.perf_counter() - started, counts["road_count"], counts["building_count"], len(blocks),
+            created_count, updated_count, removed_count,
+        )
         return ImportResult(
             import_area=completed,
             block_count=len(blocks),
@@ -213,6 +270,79 @@ class OSMIngestionService:
             skipped_restriction_count=len(skipped_restrictions),
             **counts,
         )
+
+    def import_staged(self, bbox: BoundingBox, payload: dict, emit: StageEmitter, provider: str = "osm") -> ImportResult:
+        """`import_fixture` for a background import: the same steps in the same single transaction,
+        announcing each stage through `emit` as its rows are written.
+
+        Nothing is committed until every stage has succeeded, and a failure leaves the session for
+        the caller to roll back: unlike `import_fixture`, the area is not marked failed, so its status
+        and data stay as they were. The area row must already exist and be committed.
+        """
+        ensure_complete(payload)
+        area_repo = ImportAreaRepository(self.session)
+        import_area = area_repo.get_or_create(provider, bbox)
+        try:
+            area_repo.mark_importing(import_area.id)
+            records = self.adapter.parse(with_way_nodes_from_geometry(payload))
+            self._validate_within_bounding_box(bbox, records)
+            inner_areas = area_repo.completed_areas_covered_by(bbox, exclude_id=import_area.id)
+            emit(
+                "fetched",
+                element_count=len(payload.get("elements", [])),
+                inner_area_ids=[inner.id for inner in inner_areas],
+            )
+            result = self._persist(import_area, records, emit, inner_areas=inner_areas)
+            self.session.commit()
+            return result
+        except OSMIngestionError:
+            raise
+        except Exception as error:
+            raise OSMIngestionError(f"OSM import failed: {error}") from error
+
+    @staticmethod
+    def _without_inner_area_features(area_id, records: ImportRecords, inner_areas) -> ImportRecords:
+        """`records` without the buildings, POIs and area features covered by an inner area's box."""
+        boxes = [inner.bbox for inner in inner_areas]
+        if not boxes:
+            return records
+        buildings, skipped_buildings = without_covered(
+            records.buildings, lambda feature: (records.nodes[node_id] for node_id in feature.node_ids), boxes
+        )
+        pois, skipped_pois = without_covered(records.pois, lambda poi: (poi.point,), boxes)
+        areas, skipped_areas = without_covered(
+            records.areas, lambda feature: (records.nodes[node_id] for node_id in feature.node_ids), boxes
+        )
+        logger.info(
+            "import area %s: skipping %d buildings, %d POIs, %d area features held by %d inner area(s): %s",
+            area_id, len(skipped_buildings), len(skipped_pois), len(skipped_areas), len(boxes),
+            ", ".join(str(inner.id) for inner in inner_areas),
+        )
+        return replace(records, buildings=tuple(buildings), pois=tuple(pois), areas=tuple(areas))
+
+    @contextmanager
+    def _step(self, area_id, step: str) -> Iterator[None]:
+        """Runs one ingestion step inside the caller's `step_timer`, and logs how long it took."""
+        started = time.perf_counter()
+        try:
+            with self.step_timer(step):
+                yield
+        finally:
+            logger.info("import area %s: %s took %.1f s", area_id, step, time.perf_counter() - started)
+
+    def _emit_building_rings(self, import_area: ImportArea, emit: StageEmitter) -> None:
+        """One `buildings` event per ring of buildings around the rectangle's centre, nearest first."""
+        bbox = import_area.bbox
+        center = Coordinate(
+            latitude=(bbox.min_corner.latitude + bbox.max_corner.latitude) / 2,
+            longitude=(bbox.min_corner.longitude + bbox.max_corner.longitude) / 2,
+        )
+        buildings = BuildingRepository(self.session).list_for_import_area(import_area.id)
+        batches = ring_batches(
+            buildings, center, lambda building: mean_vertex(building.geom), tie_break=lambda building: str(building.id)
+        )
+        for ring, batch in enumerate(batches):
+            emit("buildings", ring=ring, buildings=batch)
 
     def _sweep(
         self,
@@ -298,6 +428,11 @@ class OSMIngestionService:
         must lie inside it, since a point has no edge to cross.
         """
         offending: list[str] = []
+        offending_refs: list[str] = []
+
+        def reject(source_id: str, osm_type: str) -> None:
+            offending.append(source_id)
+            offending_refs.append(f"{osm_type}/{source_id}")
 
         def envelope_intersects(node_ids: tuple[str, ...]) -> bool:
             lats = [records.nodes[node_id].latitude for node_id in node_ids]
@@ -311,14 +446,14 @@ class OSMIngestionService:
 
         for road in records.roads:
             if not envelope_intersects(road.node_ids):
-                offending.append(road.source_id)
+                reject(road.source_id, "way")
         for feature in (*records.buildings, *records.areas):
             if not envelope_intersects(feature.node_ids):
-                offending.append(feature.source_id)
+                reject(feature.source_id, "way")
         for poi in records.pois:
             if poi.footprint_node_ids:
                 if not envelope_intersects(poi.footprint_node_ids):
-                    offending.append(poi.source_id)
+                    reject(poi.source_id, "way")
                 continue
             point = poi.point
             inside = (
@@ -326,13 +461,14 @@ class OSMIngestionService:
                 and bbox.min_corner.longitude <= point.longitude <= bbox.max_corner.longitude
             )
             if not inside:
-                offending.append(poi.source_id)
+                reject(poi.source_id, "node")
 
         if offending:
             raise PayloadOutsideBoundingBox(
                 "payload contains features outside the import bounding box: "
                 + ", ".join(offending[:10]),
                 source_ids=offending,
+                source_refs=offending_refs,
             )
 
     @staticmethod

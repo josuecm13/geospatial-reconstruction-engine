@@ -1,14 +1,21 @@
 import type * as maplibregl from "maplibre-gl";
 import type { ApiClient } from "../api/client";
-import type { BoundingBox, ImportArea } from "../api/types";
+import type { BoundingBox, ImportArea, MapData } from "../api/types";
 import { areaSquareMeters, bboxProblem, formatSquareKilometers, MAX_AREA_SQUARE_METERS, roundBbox } from "../geo/bbox";
 import type { MapDataLayers } from "../views/mapDataLayers";
-import { importErrorMessage } from "./errorMessages";
+import { renderReportedError, useErrorReporter } from "../errors/errorReporter";
+import { IMPORT_MESSAGES } from "./errorMessages";
 import { RectangleTool } from "./rectangleTool";
-import { CurrentArea, describeArea, findByBbox } from "./recentImports";
+import { ApiError } from "../api/client";
+import { mapDataQuery, sameScope, type Scope, type SelectionStore } from "../state/selection";
+import { describeArea, findByBbox } from "./recentImports";
+import { flyToArea } from "../locations/flyTo";
+import type { Camera } from "../routing/routes";
+import { runStagedImport, type StagedTarget } from "./stagedImport";
 
-/** How many completed areas the panel lists. */
-const LISTED_AREAS = 50;
+/** How many completed areas the panel fetches, to tell a re-import of a rectangle from a new one. */
+const LISTED_AREAS = 200;
+const reportError = useErrorReporter(IMPORT_MESSAGES);
 
 export const REIMPORT_WARNING =
   "This rectangle was imported before. Importing it again reconciles it with OpenStreetMap as it is " +
@@ -18,9 +25,10 @@ export const REIMPORT_WARNING =
 /** The 2D picker: draw a rectangle up to 1 km², import it live, and see what the engine built. */
 export class ImportPanel {
   private readonly tool: RectangleTool;
-  private readonly current = new CurrentArea(localStorage);
   /** Completed import areas from the API, most recent first. */
   private areas: ImportArea[] = [];
+  /** The area on the map now, for the line under "Imported areas". */
+  private openArea: ImportArea | null = null;
   private readonly el: {
     draw: HTMLButtonElement;
     area: HTMLElement;
@@ -29,12 +37,21 @@ export class ImportPanel {
     recent: HTMLElement;
   };
   private busy = false;
+  /** The area and scope whose map data is on the map now. */
+  private shown: { areaId: string; scope: Scope } | null = null;
+  /** A camera move requested while the map was hidden (it has no size then); `shown()` plays it. */
+  private pendingCamera: (() => void) | null = null;
 
   constructor(
     container: HTMLElement,
     private readonly map: maplibregl.Map,
     private readonly api: ApiClient,
     private readonly layers: MapDataLayers,
+    private readonly selection: SelectionStore,
+    /** Runs after an import succeeds and its area is open, for example to save a traced boundary. */
+    private readonly afterImport: (areaId: string) => Promise<void> = async () => {},
+    /** Where an import is built in front of the user. Without it the import runs in one request, with no animation. */
+    private readonly staging?: StagedTarget,
   ) {
     container.innerHTML = `
       <h2>Import a place</h2>
@@ -44,7 +61,8 @@ export class ImportPanel {
       <button type="button" class="primary" data-role="import" disabled>Import from OpenStreetMap</button>
       <p class="status" data-role="status" role="status" aria-live="polite"></p>
       <h3>Imported areas</h3>
-      <ul class="recent" data-role="recent"><li class="hint">Loading…</li></ul>`;
+      <p class="hint" data-role="recent">Loading…</p>
+      <a class="browse-locations" data-link href="/locations">Browse locations</a>`;
     const pick = <T extends HTMLElement>(role: string) => container.querySelector<T>(`[data-role="${role}"]`)!;
     this.el = {
       draw: pick("draw"),
@@ -59,9 +77,25 @@ export class ImportPanel {
       this.tool.startDrawing();
     });
     this.el.importButton.addEventListener("click", () => void this.importSelection());
+    // Map layers follow the shared scope: choosing a boundary (or the whole area) reloads them.
+    this.selection.subscribe((selection) => {
+      const shown = this.shown;
+      if (shown && selection.areaId === shown.areaId && !sameScope(selection.scope, shown.scope)) void this.reloadMapData(selection.scope);
+    });
     void this.refreshAreas();
-    const current = this.current.id;
-    if (current) void this.open(current, { quiet: true });
+  }
+
+  /** Call when the map's container becomes visible again: resizes the map and plays any camera move that waited for it. */
+  mapShown(): void {
+    this.map.resize();
+    const move = this.pendingCamera;
+    this.pendingCamera = null;
+    move?.();
+  }
+
+  /** The rectangle on the map: the one being drawn, or the open area's. */
+  get bbox(): BoundingBox | null {
+    return this.tool.bbox;
   }
 
   private selectionChanged(bbox: BoundingBox | null): void {
@@ -91,11 +125,12 @@ export class ImportPanel {
     tick();
     const timer = window.setInterval(tick, 1000);
     try {
-      const area = await this.api.importArea(bbox);
+      const area = this.staging ? await runStagedImport(this.api, this.staging, bbox) : await this.api.importArea(bbox);
       await this.open(area.id, { area });
       void this.refreshAreas();
+      await this.afterImport(area.id);
     } catch (error) {
-      this.setStatus(importErrorMessage(error), "error");
+      this.showError(error);
     } finally {
       window.clearInterval(timer);
       this.busy = false;
@@ -103,26 +138,73 @@ export class ImportPanel {
     }
   }
 
-  /** Loads an import area's map data and shows it: the engine's own representation. */
-  async open(areaId: string, options: { area?: ImportArea; quiet?: boolean } = {}): Promise<void> {
+  /**
+   * Loads an import area's map data and shows it: the engine's own representation. `camera` puts the
+   * map there instead of flying to the area, and `instant` fits the area without any animation. Otherwise
+   * the map flies to the area (or jumps, for a user who prefers reduced motion).
+   */
+  async open(areaId: string, options: { area?: ImportArea; quiet?: boolean; instant?: boolean; camera?: Camera | null } = {}): Promise<void> {
     try {
       const area = options.area ?? (await this.api.getImportArea(areaId));
-      const data = await this.api.mapData(areaId);
+      // Another area starts at its whole extent; only reopening the current area keeps its scope.
+      const current = this.selection.get();
+      let scope: Scope = areaId === current.areaId ? current.scope : { type: "import_area" };
+      let data: MapData;
+      try {
+        data = await this.api.mapData(areaId, mapDataQuery(scope));
+      } catch (error) {
+        // A remembered boundary that was deleted since: fall back to the whole area.
+        if (!(error instanceof ApiError && error.code === "boundary_not_found" && scope.type === "boundary")) throw error;
+        scope = { type: "import_area" };
+        data = await this.api.mapData(areaId);
+      }
       this.layers.show(data);
+      this.shown = { areaId, scope };
       this.tool.show(area.bbox, true);
-      this.map.fitBounds(
-        [
-          [area.bbox.min_longitude, area.bbox.min_latitude],
-          [area.bbox.max_longitude, area.bbox.max_latitude],
-        ],
-        { padding: 60, duration: options.quiet ? 0 : 800 },
-      );
-      this.current.id = areaId;
+      const { camera } = options;
+      const moveCamera = () => {
+        if (camera) this.map.jumpTo({ center: [camera.lon, camera.lat], zoom: camera.zoom });
+        else if (options.quiet || options.instant) {
+          this.map.fitBounds(
+            [
+              [area.bbox.min_longitude, area.bbox.min_latitude],
+              [area.bbox.max_longitude, area.bbox.max_latitude],
+            ],
+            { padding: 60, duration: 0 },
+          );
+        } else flyToArea(this.map, area.bbox);
+      };
+      // A hidden map has no size to fit into (the page opened on the Scene view): wait until it shows.
+      if (this.map.getContainer().clientWidth === 0) this.pendingCamera = moveCamera;
+      else {
+        this.pendingCamera = null;
+        moveCamera();
+      }
+      this.openArea = area;
+      this.selection.setArea(areaId);
+      this.selection.setScope(scope);
       this.setStatus(summary(area), "ok");
       this.selectionChanged(area.bbox);
       this.renderAreas();
     } catch (error) {
-      if (!options.quiet) this.setStatus(importErrorMessage(error), "error");
+      if (!options.quiet) this.showError(error);
+    }
+  }
+
+  /** Redraws the open area's map data for another scope. */
+  private async reloadMapData(scope: Scope): Promise<void> {
+    const shown = this.shown;
+    if (!shown) return;
+    try {
+      const data = await this.api.mapData(shown.areaId, mapDataQuery(scope));
+      // Ignore the answer if the user moved on while it was loading.
+      const now = this.selection.get();
+      if (now.areaId !== shown.areaId || !sameScope(now.scope, scope)) return;
+      this.layers.show(data);
+      this.shown = { areaId: shown.areaId, scope };
+    } catch (error) {
+      if (error instanceof ApiError && error.code === "boundary_not_found") this.selection.setScope({ type: "import_area" });
+      else this.showError(error);
     }
   }
 
@@ -132,27 +214,18 @@ export class ImportPanel {
       this.areas = await this.api.listImportAreas({ status: "completed", limit: LISTED_AREAS });
       this.renderAreas();
     } catch (error) {
-      this.el.recent.replaceChildren(Object.assign(document.createElement("li"), { textContent: importErrorMessage(error), className: "hint" }));
+      renderReportedError(this.el.recent, reportError(error));
     }
   }
 
+  /** The line under "Imported areas": the open area (the gallery lists the rest). */
   private renderAreas(): void {
-    const selected = this.current.id;
-    this.el.recent.replaceChildren(
-      ...(this.areas.length
-        ? this.areas.map((area) => {
-            const li = document.createElement("li");
-            const button = document.createElement("button");
-            button.type = "button";
-            button.className = "link";
-            if (area.id === selected) button.setAttribute("aria-current", "true");
-            button.textContent = describeArea(area);
-            button.addEventListener("click", () => void this.open(area.id));
-            li.appendChild(button);
-            return li;
-          })
-        : [Object.assign(document.createElement("li"), { textContent: "None yet", className: "hint" })]),
-    );
+    this.el.recent.textContent = this.openArea ? describeArea(this.openArea) : "None open";
+  }
+
+  private showError(error: unknown): void {
+    renderReportedError(this.el.status, reportError(error));
+    this.el.status.dataset.state = "error";
   }
 
   private setStatus(text: string, state: "ok" | "busy" | "error"): void {

@@ -82,3 +82,42 @@ describe("listImportAreas", () => {
     expect(calls).toEqual(["/api/import-areas?status=completed&limit=20"]);
   });
 });
+
+describe("routingStrategies", () => {
+  const area = { id: "a1", bbox: BBOX };
+  const unknown = { error: { code: "unknown_routing_strategy", message: "nope", details: { registered_strategies: ["distance", "fewest_turns"] } } };
+
+  function routed(routeResponse: Response) {
+    const calls: { url: string; init?: RequestInit }[] = [];
+    const fetchImpl: Fetch = async (url, init) => {
+      calls.push({ url, init });
+      return (url.endsWith("/routes") ? routeResponse : json(200, area)).clone();
+    };
+    return { client: new ApiClient("/api", fetchImpl), calls };
+  }
+
+  it("reads the registered strategies off the unknown_routing_strategy error", async () => {
+    const { client, calls } = routed(json(422, unknown));
+
+    expect(await client.routingStrategies("a1")).toEqual(["distance", "fewest_turns"]);
+
+    const body = JSON.parse(String(calls[1].init?.body));
+    expect(body.strategy).toBe("__list_strategies__");
+    expect(body.origin).toEqual(body.destination);
+  });
+
+  it("asks only once per area", async () => {
+    const { client, calls } = routed(json(422, unknown));
+
+    await client.routingStrategies("a1");
+    await client.routingStrategies("a1");
+
+    expect(calls).toHaveLength(2);
+  });
+
+  it("falls back to no strategies (server default) on any other failure", async () => {
+    const { client } = routed(json(503, { error: { code: "database_unavailable", message: "down" } }));
+
+    expect(await client.routingStrategies("a1")).toEqual([]);
+  });
+});

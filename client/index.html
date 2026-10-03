@@ -7,18 +7,17 @@
   </head>
   <body>
     <header class="app-header">
-      <h1>Geospatial Reconstruction Engine</h1>
-      <nav class="view-tabs" aria-label="View">
-        <a href="#map" data-view="map">Map</a>
-        <a href="#scene" data-view="scene">Scene</a>
+      <h1><a href="/" data-link>Geospatial Reconstruction Engine</a></h1>
+      <nav class="view-tabs" aria-label="Site">
+        <a href="/" data-link data-page="landing">Home</a>
+        <a href="/locations" data-link data-page="locations">Locations</a>
       </nav>
+      <!-- Page-specific links: the explore page puts its Map/Scene toggle here. -->
+      <nav class="view-tabs" id="page-tabs" aria-label="View" hidden></nav>
       <span class="api-status" id="api-status" title="API status">API …</span>
     </header>
-    <main>
-      <section id="map-view" class="view" aria-label="2D map"></section>
-      <aside id="import-panel" class="panel" aria-label="Import"></aside>
-      <section id="scene-view" class="view" aria-label="3D scene" hidden></section>
-    </main>
+    <!-- The current page (src/pages/) is mounted here. -->
+    <main id="page"></main>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

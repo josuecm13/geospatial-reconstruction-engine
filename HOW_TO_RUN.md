@@ -4,6 +4,8 @@ This project is a work-in-progress (see `MILESTONES.md` for status). You can run
 application backed by a local PostGIS database, apply migrations, run the test suite, and call the
 HTTP API to import a fixture area, query it, and plan a route.
 
+For a terse, step-by-step path from a clean checkout to an exported real place, see [`docs/runbook.md`](docs/runbook.md); the UI tour is [`docs/walkthrough.md`](docs/walkthrough.md).
+
 ## Prerequisites
 
 - Python 3.12 (check with `python3.12 --version`; on macOS with Homebrew: `brew install python@3.12`)
@@ -42,6 +44,11 @@ The tests never use the development database. They run against `TEST_DATABASE_UR
 otherwise against `DATABASE_URL` with `_test` appended to the database name (`geodb_test` with
 the default `.env`), which the test session creates and migrates on first run. Data you import
 through the running app therefore can't affect the tests, and a test run leaves `geodb` untouched.
+
+To see where an import's time goes, run `scripts/benchmark_import.py` from `server/` (with `.env` loaded
+and `PYTHONPATH=.`). It imports a recorded 1 km² Berlin Mitte payload into the development database,
+prints the time per step (parse, persist features, sweep, turns, block derivation, link buildings), and rolls
+everything back. It is a measurement, not a test, and CI doesn't run it.
 
 ## 3. Start the app
 
@@ -115,6 +122,10 @@ cd client
 npm install        # first time only
 npm run dev        # http://localhost:55173 (CLIENT_PORT in client/.env to change it)
 ```
+
+The client has real paths (`/`, `/locations`, `/explore/<area id>`), so any path must serve
+`index.html`. Vite's dev and preview servers already do (single-page-app mode). A static host
+for `client/dist/` needs the same fallback rule, or a pasted or reloaded explore URL is a 404.
 
 The header shows whether the API is reachable. `npm test` runs the client's unit tests, and
 `npm run build` type-checks and bundles it into `client/dist/`.

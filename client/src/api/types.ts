@@ -68,6 +68,8 @@ export interface BuildingProperties {
   block_id: string | null;
   height_meters: number | null;
   levels: number | null;
+  /** The area that stores it: the requested one, or an inner area it composes. */
+  import_area_id: string;
 }
 
 export interface BlockProperties {
@@ -76,15 +78,18 @@ export interface BlockProperties {
   buildable_area_square_meters: number;
   is_median: boolean;
   is_clipped: boolean;
+  import_area_id: string;
 }
 
 export interface PoiProperties {
   category: string;
   name: string | null;
+  import_area_id: string;
 }
 
 export interface AreaFeatureProperties {
   kind: string;
+  import_area_id: string;
 }
 
 export interface Projection {
@@ -97,7 +102,8 @@ export type ExportMode = "filter" | "clip";
 
 export interface MapData {
   attribution: string;
-  scope: { type: "import_area" | "boundary"; id: string };
+  /** `composed_area_ids`: the completed areas inside the rectangle whose features are composed in. */
+  scope: { type: "import_area" | "boundary"; id: string; composed_area_ids: string[] };
   mode: ExportMode;
   projection: Projection;
   road_segments: FeatureCollection<RoadSegmentProperties>;
@@ -138,6 +144,8 @@ export type ErrorCode =
   | "import_area_not_found"
   | "import_area_not_ready"
   | "import_conflict"
+  | "import_in_progress"
+  | "import_job_not_found"
   | "building_not_found"
   | "invalid_boundary"
   | "boundary_name_conflict"
@@ -153,3 +161,29 @@ export type ErrorCode =
   | "database_unavailable"
   | "configuration_error"
   | "internal_error";
+
+/** The 202 answer to `POST /import-areas` with `background: true`. */
+export interface ImportStarted {
+  import_area_id: string;
+  events_url: string;
+}
+
+/** The stages of a background import's event stream, in the order the server sends them. */
+export const IMPORT_STAGES = ["fetched", "ground", "roads", "blocks", "buildings", "generated", "completed", "failed"] as const;
+export type ImportStage = (typeof IMPORT_STAGES)[number];
+
+/** The `data` of each stage's event (server/app/api/background_import.py). */
+export interface StageData {
+  fetched: { projection: Projection; element_count: number; inner_area_ids?: string[] };
+  ground: { projection: Projection; area_features: FeatureCollection<AreaFeatureProperties>; pois: FeatureCollection<PoiProperties> };
+  roads: { projection: Projection; road_segments: FeatureCollection<RoadSegmentProperties> };
+  blocks: { projection: Projection; blocks: FeatureCollection<BlockProperties> };
+  /** `ring` counts the non-empty rings from the centre out: 0, 1, 2, ... */
+  buildings: { projection: Projection; ring: number; buildings: FeatureCollection<BuildingProperties> };
+  /** Reserved for Milestone 11; not sent yet. */
+  generated: Record<string, unknown>;
+  completed: ImportArea;
+  failed: { code: string; message: string; details: Record<string, unknown> | null };
+}
+
+export type StageEvent = { [S in ImportStage]: { stage: S; data: StageData[S] } }[ImportStage];

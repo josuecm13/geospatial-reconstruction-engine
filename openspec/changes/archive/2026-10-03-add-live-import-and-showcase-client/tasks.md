@@ -1,0 +1,33 @@
+## 1. Issues
+
+- [x] 1.1 #15 [ingestion] Reject truncated or incomplete Overpass responses before reconcile
+- [x] 1.2 #14 [ingestion] Import Overpass responses whose ways reference nodes outside the bbox
+- [x] 1.3 #16 [ingestion] Map *_link and living_street road classes
+- [x] 1.4 #17 [ingestion] Treat junction=roundabout as one-way
+- [x] 1.5 #18 [ingestion] Handle oneway=reversible/alternating instead of failing the import
+- [x] 1.6 #19 [ingestion] Handle restriction:<vehicle> relations instead of failing the import
+- [x] 1.7 #20 [ingestion] Import multipolygon buildings and areas
+- [x] 1.8 #74 [ingestion] Accept POIs mapped as areas that cross the bounding-box edge
+- [x] 1.9 #35 [api] Expose the logical street id on map-data road segments
+- [x] 1.10 #61 [ingestion] Import a bounded area live from Overpass
+- [x] 1.11 #62 [client] Scaffold client/ with MapLibre GL, Three.js, and CI
+- [x] 1.10a #86 [ingestion] Skip malformed or unresolvable turn restrictions instead of failing the import
+- [x] 1.12 #63 [client] Select a rectangle up to 1 km² on a 2D map and import it
+- [x] 1.12b #92 [api] List import areas
+- [x] 1.12c #93 [client] Open on the map and build the 3D scene only when its tab is opened
+- [x] 1.12d #91 [blocks] Block derivation takes minutes on a 1 km² city import
+- [x] 1.12e #90 [ingestion] Import in stages in the background and stream each stage as server-sent events
+- [x] 1.12f #100 [ingestion] Skip completed areas inside a new import's rectangle
+- [x] 1.12a #88 [client] Show the server's reason for an import failure
+- [x] 1.13 #64 [client] Trace a boundary over the selection and manage saved boundaries
+- [x] 1.14 #65 [client] Build a low-poly 3D scene from map-data
+- [x] 1.15 #66 [client] Explore the scene by flying and walking
+- [x] 1.16 #67 [client] Staged build animation on import
+- [x] 1.17 #68 [client] Show a route between two points in the scene
+- [x] 1.18 #69 [client] Export the scene as glTF
+- [x] 1.18a #101 [client] Pages and URL state: landing, locations, and explore routes
+- [x] 1.18b #102 [client] Landing page that explains the project and its architecture
+- [x] 1.18c #103 [client] Locations gallery with previews and an animated fly-to on open
+- [x] 1.18d #104 [client] Move and resize the selection rectangle by dragging
+- [x] 1.19 #70 [docs] Walkthrough and runbook for a real import
+- [x] 1.20 Close out: MILESTONES.md status, tracking issue, archive the change

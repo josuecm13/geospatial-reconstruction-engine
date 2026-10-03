@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 from collections.abc import Callable
 from typing import Any
@@ -11,6 +12,8 @@ import httpx
 
 from app.domain.bounding_box import BoundingBox
 from app.ingestion.osm_adapter import IngestionError
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 # The public instance refuses requests without an identifying User-Agent (HTTP 406).
@@ -113,6 +116,15 @@ class OverpassClient:
         Raises `UpstreamUnavailable` when Overpass can't be reached, keeps answering busy after
         every retry, or answers with an error; raises `IncompleteSourceResponse` when the body is
         truncated or carries a `remark`."""
+        started = time.perf_counter()
+        payload = self._fetch(bbox)
+        logger.info(
+            "overpass fetch took %.1f s: %d elements, %.1f km²",
+            time.perf_counter() - started, len(payload.get("elements", [])), bbox.area_square_meters() / 1e6,
+        )
+        return payload
+
+    def _fetch(self, bbox: BoundingBox) -> dict[str, Any]:
         query = build_query(bbox)
         # The server gives up at the query timeout; allow for queueing and transfer on top.
         timeout = httpx.Timeout(QUERY_TIMEOUT_SECONDS + 30.0, connect=10.0)

@@ -259,6 +259,11 @@ Key decisions:
   via `import_area_id`, so it is not duplicated into this tuple. A street is a logical group of
   ways (`app/domain/street_grouping.py`), so its `source_id` is the group key rather than a single
   way's id, and its `id` is derived from the import area and that key.
+- Import areas may nest (`docs/architecture.md`, "Nested import areas"). Nesting is not stored: an
+  area's inner areas are the completed ones whose `bbox` is `ST_CoveredBy` its own, found when it
+  imports and when its map data is read. The outer area simply has no rows for what they hold, so
+  `UNIQUE (import_area_id, source_id)` is unchanged and the counts on `import_areas` cover only an
+  area's own rows.
 - `UNIQUE (provider, min_longitude, min_latitude, max_longitude, max_latitude)` on `import_areas`
   — re-importing the same bounding box reuses the same row (updates status/counts/`imported_at`)
   rather than creating a new one; all child entities upsert against that same `import_area_id`.
