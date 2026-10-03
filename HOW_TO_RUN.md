@@ -121,6 +121,10 @@ npm install        # first time only
 npm run dev        # http://localhost:55173 (CLIENT_PORT in client/.env to change it)
 ```
 
+The client has real paths (`/`, `/locations`, `/explore/<area id>`), so any path must serve
+`index.html`. Vite's dev and preview servers already do (single-page-app mode). A static host
+for `client/dist/` needs the same fallback rule, or a pasted or reloaded explore URL is a 404.
+
 The header shows whether the API is reachable. `npm test` runs the client's unit tests, and
 `npm run build` type-checks and bundles it into `client/dist/`.
 

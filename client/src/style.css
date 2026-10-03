@@ -25,6 +25,10 @@ body { display: flex; flex-direction: column; }
   font-size: 14px;
 }
 .view-tabs a[aria-current="true"] { background: #3a4a57; }
+.view-tabs[hidden] { display: none; }
+.app-header h1 a { color: inherit; text-decoration: none; }
+/* A page that scrolls on its own (landing, locations, not found), not the full-bleed explore views. */
+main > .page { position: absolute; inset: 0; overflow: auto; padding: 24px 32px; box-sizing: border-box; }
 .api-status { margin-left: auto; font-size: 13px; opacity: 0.8; }
 .api-status[data-state="ok"]::before { content: "● "; color: #6fcf7f; }
 .api-status[data-state="down"]::before { content: "● "; color: #ef6f6f; }

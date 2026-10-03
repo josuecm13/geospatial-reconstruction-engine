@@ -16,6 +16,8 @@ export interface SceneView extends SceneTarget {
   /** Starts rendering; the loop stops while the view is hidden. */
   shown(): void;
   hidden(): void;
+  /** Stops rendering and releases the WebGL context, for when the page is left. */
+  dispose(): void;
 }
 
 const EMPTY_HINT = "Open an import on the Map tab";
@@ -80,7 +82,8 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps): 
     camera.aspect = clientWidth / clientHeight;
     camera.updateProjectionMatrix();
   };
-  new ResizeObserver(resize).observe(container);
+  const observer = new ResizeObserver(resize);
+  observer.observe(container);
   const frame = () => {
     if (!running) return;
     const delta = clock.getDelta();
@@ -164,6 +167,14 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps): 
     hidden() {
       running = false;
       modes.setActive(false);
+    },
+    dispose() {
+      running = false;
+      modes.setActive(false);
+      observer.disconnect();
+      renderer.dispose();
+      renderer.forceContextLoss();
+      renderer.domElement.remove();
     },
   };
 }

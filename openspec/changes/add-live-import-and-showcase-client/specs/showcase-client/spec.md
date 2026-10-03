@@ -20,11 +20,11 @@ The client SHALL call the API through a configurable base URL. In development, t
 - **THEN** the client shows its sentence, the server's message, and a link to `https://www.openstreetmap.org/way/123` that opens in a new tab
 
 ### Requirement: The client SHALL offer a 2D map view and a 3D scene view
-The client SHALL switch between a 2D map view and a 3D scene view. Every page load SHALL open on the map view, whatever the URL says, and the 3D scene SHALL be built only when the user first opens the scene view. The map view SHALL always show the OpenStreetMap attribution, uncollapsed.
+The client SHALL switch between a 2D map view and a 3D scene view of the open area, and the 3D scene SHALL be built only when the scene view is first shown, so a map-only visit never downloads Three.js or creates a WebGL context. The view is part of the URL (see "The client SHALL keep each view's state in its URL"). The map view SHALL always show the OpenStreetMap attribution, uncollapsed.
 
-#### Scenario: Reloading on the scene
-- **WHEN** a user reloads the page while the scene view is selected
-- **THEN** the map view is shown, and no 3D scene is built until the user opens the scene view
+#### Scenario: A map-only visit
+- **WHEN** a user opens an explore URL without `view=scene` and never switches to the scene
+- **THEN** no 3D scene is built
 
 ### Requirement: The client SHALL select a rectangle of up to 1 km² and import it live
 The map view SHALL let a user draw a rectangle by dragging and adjust it by dragging (inside to move it without changing its size, an edge to resize along one axis, a corner to resize both, by pointer events so touch works, with the cursor naming each part), SHALL show its area in km² while drawing or dragging using the same rule as the server together with its width and height, SHALL show the over-limit style before the drag is released, SHALL restore the previous rectangle when Escape cancels a drag, and SHALL disable import while the rectangle exceeds 1 km². Importing SHALL call the API without a payload, show elapsed progress, and then draw the area's map data: roads at their generated width, buildings distinguishing known from unknown heights, blocks, area features, and points of interest, each describable by clicking. Errors SHALL be shown by a sentence chosen by their code; the server's message and OpenStreetMap links appear only when the client's debug flag is on. Importing a rectangle already imported SHALL first warn that re-import reconciles and may delete data.
@@ -118,3 +118,22 @@ The client SHALL start an import with `background: true`, switch to the scene vi
 #### Scenario: A failed import
 - **WHEN** a `failed` event arrives mid-build
 - **THEN** the partial build is removed, the map view is shown, and the import panel reports the event's `code`
+
+### Requirement: The client SHALL keep each view's state in its URL
+The client SHALL be a set of pages behind a history router, with no page load between them: `/` (landing), `/locations`, and `/explore/:areaId`, and a not-found page for any other path. The explore URL SHALL carry the state that defines the view: the area in the path, and in the query `view` (`map`, the default, or `scene`), `scope` (the id of a traced boundary; absent for the whole area), and `at` (`<lat>,<lon>,<zoom>`, five decimals for latitude and longitude and two for zoom, the 2D map's camera). A query parameter that is invalid SHALL be ignored, not reported as an error. A change of area, scope, or view SHALL add a history entry, and a camera move SHALL only rewrite the current entry (debounced), so Back never steps through pans. The browser's Back and Forward SHALL restore the area, scope, and view of the entry. An old `#map` or `#scene` link on `/` SHALL lead to the explore URL of the area last opened in this browser, or to `/locations` when there is none. An explore URL for an area that does not exist SHALL show the not-found page.
+
+#### Scenario: Pasting the URL in a new tab
+- **WHEN** a user copies `/explore/<id>?view=scene&scope=<boundary>&at=52.52970,13.40100,15.00` into a new tab
+- **THEN** the client opens that area scoped to that boundary on the scene view, and the 2D map, when shown, is centred there at that zoom
+
+#### Scenario: Back restores the previous scope
+- **WHEN** a user opens a boundary as the scope and then presses Back
+- **THEN** the scope returns to the whole area, on the map and in the scene, and the URL has no `scope`
+
+#### Scenario: Panning does not add history
+- **WHEN** a user pans and zooms the 2D map several times
+- **THEN** the URL's `at` follows the map and the number of history entries is unchanged
+
+#### Scenario: A legacy hash link
+- **WHEN** a user opens `/#scene` with an area remembered from an earlier visit
+- **THEN** the client replaces the URL with `/explore/<that area>?view=scene`

@@ -9,6 +9,7 @@ import { RectangleTool } from "./rectangleTool";
 import { ApiError } from "../api/client";
 import { mapDataQuery, sameScope, type Scope, type SelectionStore } from "../state/selection";
 import { describeArea, findByBbox } from "./recentImports";
+import type { Camera } from "../routing/routes";
 import { runStagedImport, type StagedTarget } from "./stagedImport";
 
 /** How many completed areas the panel lists. */
@@ -35,6 +36,8 @@ export class ImportPanel {
   private busy = false;
   /** The area and scope whose map data is on the map now. */
   private shown: { areaId: string; scope: Scope } | null = null;
+  /** A camera move requested while the map was hidden (it has no size then); `shown()` plays it. */
+  private pendingCamera: (() => void) | null = null;
 
   constructor(
     container: HTMLElement,
@@ -76,8 +79,14 @@ export class ImportPanel {
       if (shown && selection.areaId === shown.areaId && !sameScope(selection.scope, shown.scope)) void this.reloadMapData(selection.scope);
     });
     void this.refreshAreas();
-    const current = this.selection.get().areaId;
-    if (current) void this.open(current, { quiet: true });
+  }
+
+  /** Call when the map's container becomes visible again: resizes the map and plays any camera move that waited for it. */
+  mapShown(): void {
+    this.map.resize();
+    const move = this.pendingCamera;
+    this.pendingCamera = null;
+    move?.();
   }
 
   /** The rectangle on the map: the one being drawn, or the open area's. */
@@ -125,8 +134,11 @@ export class ImportPanel {
     }
   }
 
-  /** Loads an import area's map data and shows it: the engine's own representation. */
-  async open(areaId: string, options: { area?: ImportArea; quiet?: boolean } = {}): Promise<void> {
+  /**
+   * Loads an import area's map data and shows it: the engine's own representation. `camera` puts the
+   * map there instead of fitting the area, and `instant` skips the fly-to animation.
+   */
+  async open(areaId: string, options: { area?: ImportArea; quiet?: boolean; instant?: boolean; camera?: Camera | null } = {}): Promise<void> {
     try {
       const area = options.area ?? (await this.api.getImportArea(areaId));
       // Another area starts at its whole extent; only reopening the current area keeps its scope.
@@ -144,13 +156,23 @@ export class ImportPanel {
       this.layers.show(data);
       this.shown = { areaId, scope };
       this.tool.show(area.bbox, true);
-      this.map.fitBounds(
-        [
-          [area.bbox.min_longitude, area.bbox.min_latitude],
-          [area.bbox.max_longitude, area.bbox.max_latitude],
-        ],
-        { padding: 60, duration: options.quiet ? 0 : 800 },
-      );
+      const { camera } = options;
+      const moveCamera = () =>
+        camera
+          ? this.map.jumpTo({ center: [camera.lon, camera.lat], zoom: camera.zoom })
+          : this.map.fitBounds(
+              [
+                [area.bbox.min_longitude, area.bbox.min_latitude],
+                [area.bbox.max_longitude, area.bbox.max_latitude],
+              ],
+              { padding: 60, duration: options.quiet || options.instant ? 0 : 800 },
+            );
+      // A hidden map has no size to fit into (the page opened on the Scene view): wait until it shows.
+      if (this.map.getContainer().clientWidth === 0) this.pendingCamera = moveCamera;
+      else {
+        this.pendingCamera = null;
+        moveCamera();
+      }
       this.selection.setArea(areaId);
       this.selection.setScope(scope);
       this.setStatus(summary(area), "ok");

@@ -49,4 +49,52 @@ scenarios for "paste the URL in a new tab" and "back restores the previous scope
 
 ## Outcome
 
+Built as briefed. `client/src/routing/`: `store.ts` (`createStore(initial, equals = shallowEqual)`), `routes.ts`
+(`Route`, `parseUrl`, `formatRoute`, `roundCamera`, `sameRoute`, `legacyRedirect`), `router.ts` (`createRouter`),
+with `store.test.ts` and `routes.test.ts`. `client/src/pages/`: `types.ts`, `host.ts`, `explore.ts`, and placeholder
+`landing.ts`, `locations.ts`, `notFound.ts`. `main.ts` is now a small shell; `views/viewState.ts` and its test are deleted.
+Tests were written with hand-computed expectations but not run (CI is the gate); `tsc --noEmit -p client` is clean.
+Guards are not mutation-checked.
+
+**API for briefs 14 and 15**
+
+- Page contract: `export const mount: Mount<R> = (el, ctx) => unmount` (`pages/types.ts`). `el` is the empty `<main id="page">`;
+  `ctx = { api, router, route, tabs }` (`route` is the route when the page was requested: read `router.get()` for the latest;
+  `tabs` is the header slot for page links, hidden and empty unless a page fills it). Unmount must undo everything; the shell then
+  empties `el` and `tabs`. Pages are listed in the `switch` in `pages/host.ts` (dynamic imports, so landing and locations
+  never load MapLibre); a page is remounted only when `route.page` changes. For a full-width scrolling page, put a
+  `<div class="page">` in `el` (styled in `style.css`). Replace `landing.ts` / `locations.ts` bodies; keep the export.
+- Router: `router.get()`, `router.subscribe(fn)` (not called immediately, returns unsubscribe), `router.navigate(route, { replace? })`
+  (pushState by default, no-op when the URL is already current), `router.setCamera(camera)` (debounced 300 ms replaceState of `at`).
+  Links: any `<a data-link href="/explore/<id>">` navigates without a page load; build hrefs with `formatRoute(route)`.
+  To open an area from the locations gallery: `router.navigate({ page: "explore", areaId, view: "map", scope: null, at: null })`.
+  `at` is the 2D map camera; explore applies it with `jumpTo` when the page opens on that URL.
+- Routes (`routes.ts`): `/`, `/locations`, `/explore/:areaId?view=scene&scope=<boundaryId>&at=lat,lon,zoom`, anything else `not-found`.
+
+**Decisions**
+
+- Explore creates its own `SelectionStore` per mount and sets area and scope from the URL before building the panels. Route to
+  selection and selection to route both compare before writing, plus an `applying` flag, so there is no loop. Selection changes
+  the user makes (open an area, pick a scope, finish an import) push an entry; the fallback when a remembered boundary was deleted
+  rewrites the entry. `localStorage` keeps only the current area (read by the legacy redirect in `main.ts`) and the scope memory
+  `SelectionStore` already had.
+- `ImportPanel` no longer opens the remembered area in its constructor: explore opens the URL's area through `open(areaId, { area,
+  instant, camera })`, so a URL naming a missing area (404 `import_area_not_found`) becomes the not-found page. It also gained
+  `mapShown()`: a camera move requested while the map is hidden (the page opened on `view=scene`, so the map has no size) waits for
+  the map to be shown.
+- Brief 08's two `location.hash` writes are now `router.navigate` with view `scene` / `map` (push, as before).
+- A pasted scene URL opens the scene directly. The old rule "every page load opens on the map" is gone (the spec requirement is
+  modified); Three.js still loads only when the scene view is first shown.
+- `SceneView.dispose()` (stop, `renderer.dispose()`, `forceContextLoss()`) and `map.remove()` run on unmount.
+- The scene's camera is not in the URL; `at` is the 2D map only.
+- Vite serves `index.html` for any path in dev and preview (`appType` defaults to `spa`; not changed in `vite.config.ts`);
+  `HOW_TO_RUN.md` notes the fallback a static host needs. Not verified in a browser.
+
+Not done: nothing seen running (no local run); a staged import still in flight when the user leaves explore keeps its
+EventSource until the stream ends.
+
 ## Tangents found
+
+- Leaving `/explore` leaves a few inert `window`/`document` listeners behind (`cameraModes` keydown/keyup/blur, `routePanel`
+  Escape, `rectangleTool` Escape), since those modules have no `dispose`. They do nothing once the page is unmounted (their
+  `active`/`enabled` guards are off), but each visit to explore adds a set. A `dispose` on each, or an `AbortSignal`, would fix it.

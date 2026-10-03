@@ -73,6 +73,13 @@ beyond parity.
 | Export a scope in clip mode: `map-data?mode=clip` (with or without `boundary_id`). Geometry and blocks' `buildable_area` are cut at the scope; multi-part cuts are `Multi*` geometries; entities only touching the edge are omitted; no extra end nodes; distances and areas describe the whole entity | shipped | — | Label clip mode as "not routable". Handle `MultiLineString`/`MultiPolygon` |
 | Local projection metadata on every `map-data` response: `projection.origin` (the scope's centroid) and `meters_per_degree_latitude` / `_longitude`, on the same sphere as `distance_meters` | shipped | — | For a Cartesian or 3D renderer (Three.js) |
 
+### The client's pages and URLs (Milestone 9, #101)
+
+| Capability | API status | Client | Client notes |
+|---|---|---|---|
+| Pages behind a history router: `/` landing, `/locations`, `/explore/:areaId`, not found | n/a | done | `client/src/routing/` (`routes.ts` codec, `router.ts`, `store.ts`) and `client/src/pages/`. Landing and locations are placeholders until #102 and #103 |
+| View state in the URL: `view`, `scope`, and the 2D map's `at=<lat>,<lon>,<zoom>`; Back and Forward restore area, scope and view; camera moves rewrite the entry. Old `#map` / `#scene` links redirect | n/a | done | `client/src/pages/explore.ts` keeps the `SelectionStore` and the route in step. The scene camera is not in the URL |
+
 ### Later milestones (planned)
 
 | Capability | Milestone | Client notes |
@@ -156,6 +163,6 @@ Ideas, not commitments. Once one is chosen, it becomes an issue in the milestone
   the projection metadata.
 
 ### General polish
-- Shareable URL state (area, scope, selection, camera).
+- Shareable URL state: area, scope, view and the 2D camera are in the URL (#101); the selection and the 3D camera are not.
 - Keyboard shortcuts and a command palette.
 - Offline cache of the last loaded area.
