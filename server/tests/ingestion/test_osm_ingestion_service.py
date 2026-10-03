@@ -44,7 +44,17 @@ def test_import_reports_each_step_to_the_step_timer(db_session):
 
     OSMIngestionService(db_session, step_timer=step_timer).import_fixture(_bbox(), json.loads(FIXTURE.read_text()))
 
-    assert steps == ["parse", "persist features", "turns", "block derivation", "link buildings"]
+    assert steps == ["parse", "persist features", "sweep", "turns", "block derivation", "link buildings"]
+
+
+def test_import_logs_how_long_each_step_took_and_a_summary(db_session, caplog):
+    with caplog.at_level("INFO", logger="app.ingestion.service"):
+        OSMIngestionService(db_session).import_fixture(_bbox(), json.loads(FIXTURE.read_text()))
+
+    for step in ("parse", "persist features", "sweep", "turns", "block derivation", "link buildings"):
+        assert f"{step} took" in caplog.text
+    assert "persisted in" in caplog.text
+    assert "3 roads, 1 buildings" in caplog.text
 
 
 def test_fixture_import_persists_normalized_data_and_is_idempotent(db_session):

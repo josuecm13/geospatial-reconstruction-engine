@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
-from contextlib import AbstractContextManager, nullcontext
+import time
+from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from dataclasses import dataclass, replace
 
 from sqlalchemy import delete, func, or_, select
@@ -91,7 +92,7 @@ class OSMIngestionService:
         self.session.commit()
         try:
             area_repo.mark_importing(import_area.id)
-            with self.step_timer("parse"):
+            with self._step(import_area.id, "parse"):
                 records = self.adapter.parse(with_way_nodes_from_geometry(payload))
             self._validate_within_bounding_box(bbox, records)
             result = self._persist(import_area, records)
@@ -111,6 +112,11 @@ class OSMIngestionService:
 
     def _persist(self, import_area: ImportArea, records: ImportRecords, emit: StageEmitter = _no_emit) -> ImportResult:
         area_id = import_area.id
+        started = time.perf_counter()
+        logger.info(
+            "import area %s: persisting %d nodes, %d roads, %d buildings, %d POIs, %d area features",
+            area_id, len(records.nodes), len(records.roads), len(records.buildings), len(records.pois), len(records.areas),
+        )
         streets = StreetRepository(self.session)
         roads = RoadRepository(self.session)
         nodes = NavigableNodeRepository(self.session)
@@ -148,7 +154,7 @@ class OSMIngestionService:
         # 1. Upsert every source entity, tracking which rows this payload
         #    touched — anything for this area *not* in these sets is stale
         #    from a previous import and gets swept below.
-        with self.step_timer("persist features"):
+        with self._step(area_id, "persist features"):
             node_ids = self._navigable_node_ids(records)
             persisted_nodes = {
                 source_id: nodes.upsert(NavigableNode(None, area_id, source_id, records.nodes[source_id]))
@@ -184,20 +190,21 @@ class OSMIngestionService:
         block_service.clear_for_import_area(area_id)
 
         # 3-4. Sweep every row this payload no longer produces, children first.
-        self._sweep(
-            area_id,
-            touched_segment_ids=touched_segment_ids,
-            touched_road_ids=touched_road_ids,
-            touched_street_ids=touched_street_ids,
-            touched_node_ids=touched_node_ids,
-            touched_building_ids=touched_building_ids,
-            touched_poi_ids=touched_poi_ids,
-            touched_area_feature_ids=touched_area_feature_ids,
-        )
+        with self._step(area_id, "sweep"):
+            self._sweep(
+                area_id,
+                touched_segment_ids=touched_segment_ids,
+                touched_road_ids=touched_road_ids,
+                touched_street_ids=touched_street_ids,
+                touched_node_ids=touched_node_ids,
+                touched_building_ids=touched_building_ids,
+                touched_poi_ids=touched_poi_ids,
+                touched_area_feature_ids=touched_area_feature_ids,
+            )
         emit("ground")
 
         # 5. Turn candidates/restrictions, generated only over the now-reconciled segments.
-        with self.step_timer("turns"):
+        with self._step(area_id, "turns"):
             skipped_turns = self._persist_turns(records, segments_by_way, persisted_nodes)
         skipped_restrictions = [*records.skipped_restrictions, *skipped_turns]
         emit("roads")
@@ -208,10 +215,10 @@ class OSMIngestionService:
             )
 
         # 6. Derive fresh blocks and link buildings over the reconciled network.
-        with self.step_timer("block derivation"):
+        with self._step(area_id, "block derivation"):
             blocks = block_service.derive_for_import_area(area_id)
         emit("blocks")
-        with self.step_timer("link buildings"):
+        with self._step(area_id, "link buildings"):
             linked_building_count = BuildingRepository(self.session).link_to_containing_block(area_id)
         if emit is not _no_emit:  # the synchronous import has no listener to batch for
             self._emit_building_rings(import_area, emit)
@@ -235,6 +242,11 @@ class OSMIngestionService:
         updated_count = sum(len(touched & existing) for existing, touched in reconciled)
         removed_count = sum(len(existing - touched) for existing, touched in reconciled)
 
+        logger.info(
+            "import area %s: persisted in %.1f s: %d roads, %d buildings, %d blocks (%d created, %d updated, %d removed)",
+            area_id, time.perf_counter() - started, counts["road_count"], counts["building_count"], len(blocks),
+            created_count, updated_count, removed_count,
+        )
         return ImportResult(
             import_area=completed,
             block_count=len(blocks),
@@ -269,6 +281,16 @@ class OSMIngestionService:
             raise
         except Exception as error:
             raise OSMIngestionError(f"OSM import failed: {error}") from error
+
+    @contextmanager
+    def _step(self, area_id, step: str) -> Iterator[None]:
+        """Runs one ingestion step inside the caller's `step_timer`, and logs how long it took."""
+        started = time.perf_counter()
+        try:
+            with self.step_timer(step):
+                yield
+        finally:
+            logger.info("import area %s: %s took %.1f s", area_id, step, time.perf_counter() - started)
 
     def _emit_building_rings(self, import_area: ImportArea, emit: StageEmitter) -> None:
         """One `buildings` event per ring of buildings around the rectangle's centre, nearest first."""

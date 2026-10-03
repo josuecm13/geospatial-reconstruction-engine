@@ -21,6 +21,7 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from app.config.database import make_engine
+from app.config.logging import configure_logging
 from app.config.settings import load_settings
 from app.domain.bounding_box import BoundingBox, Coordinate
 from app.ingestion.service import OSMIngestionService
@@ -31,6 +32,7 @@ MITTE = BoundingBox(Coordinate(52.526332, 13.3930821), Coordinate(52.5344644, 13
 
 
 def main() -> None:
+    configure_logging()
     payload_path = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_PAYLOAD
     with gzip.open(payload_path, "rt") as payload_file:
         payload = json.load(payload_file)
