@@ -43,6 +43,11 @@ otherwise against `DATABASE_URL` with `_test` appended to the database name (`ge
 the default `.env`), which the test session creates and migrates on first run. Data you import
 through the running app therefore can't affect the tests, and a test run leaves `geodb` untouched.
 
+To see where an import's time goes, run `scripts/benchmark_import.py` from `server/` (with `.env` loaded
+and `PYTHONPATH=.`). It imports a recorded 1 km² Berlin Mitte payload into the development database,
+prints the time per step (parse, persist features, turns, block derivation, link buildings), and rolls
+everything back. It is a measurement, not a test, and CI doesn't run it.
+
 ## 3. Start the app
 
 ```bash

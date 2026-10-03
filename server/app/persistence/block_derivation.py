@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 from geoalchemy2.shape import from_shape
 from shapely import wkt as shapely_wkt
-from sqlalchemy import delete, func, or_, select, text, update
+from sqlalchemy import delete, select, text, update
 from sqlalchemy.orm import Session
 
 from app.domain.block import MIN_BUILDABLE_WIDTH_METERS, Block
@@ -11,7 +11,7 @@ from app.domain.block_identity import BlockKeyInput, block_ids_for
 from app.domain.bounding_box import Coordinate
 from app.domain.cross_section import cross_sections_by_classified_segment
 from app.persistence.geometry import geom_to_multipolygon
-from app.persistence.models import BlockBoundarySegmentModel, BlockModel, BuildingModel, RoadModel, RoadSegmentModel
+from app.persistence.models import BlockBoundarySegmentModel, BlockModel, BuildingModel
 from app.persistence.repositories.building import BuildingRepository
 from app.persistence.repositories.road_graph import RoadSegmentRepository
 
@@ -121,40 +121,11 @@ class BlockDerivationService:
             },
         ).fetchall()
 
+        segment_ids_by_face = self._bounding_segment_ids(import_area_id, [row.boundary_wkt for row in candidate_rows])
         faces = []
-        for row in candidate_rows:
+        for row, segment_ids in zip(candidate_rows, segment_ids_by_face):
             shapely_polygon = shapely_wkt.loads(row.boundary_wkt)
-            boundary_geom = from_shape(shapely_polygon, srid=SRID)
-            segment_ids = (
-                self.session.execute(
-                    select(RoadSegmentModel.id)
-                    .join(RoadModel, RoadModel.id == RoadSegmentModel.road_id)
-                    .where(
-                        RoadModel.import_area_id == import_area_id,
-                        or_(
-                            func.ST_Covers(boundary_geom, RoadSegmentModel.geom),
-                            # A segment crossing the bounding box runs along a clipped
-                            # block's boundary without the block covering it.
-                            func.ST_Length(
-                                func.ST_Intersection(
-                                    RoadSegmentModel.geom,
-                                    func.ST_Buffer(func.ST_Boundary(boundary_geom), _COLLINEAR_TOLERANCE_DEGREES),
-                                )
-                            )
-                            > _MIN_SHARED_LENGTH_DEGREES,
-                        ),
-                    )
-                    .order_by(
-                        func.ST_LineLocatePoint(
-                            func.ST_ExteriorRing(boundary_geom),
-                            func.ST_StartPoint(RoadSegmentModel.geom),
-                        )
-                    )
-                )
-                .scalars()
-                .all()
-            )
-            faces.append((row, shapely_polygon, boundary_geom, segment_ids))
+            faces.append((row, shapely_polygon, from_shape(shapely_polygon, srid=SRID), segment_ids))
 
         block_ids = block_ids_for(
             import_area_id,
@@ -216,6 +187,50 @@ class BlockDerivationService:
 
         return blocks
 
+    def _bounding_segment_ids(self, import_area_id: uuid.UUID, boundary_wkts: list[str]) -> list[list[uuid.UUID]]:
+        """Per face, the ids of the road segments along its boundary, in walk order around its exterior.
+
+        One set-based query for every face. Ties in walk order fall back to the segment id,
+        so the order is deterministic.
+        """
+        segment_ids_by_face: list[list[uuid.UUID]] = [[] for _ in boundary_wkts]
+        if not boundary_wkts:
+            return segment_ids_by_face
+        rows = self.session.execute(
+            text(
+                """
+                WITH faces AS (
+                    SELECT f.idx, ST_GeomFromText(f.wkt, 4326) AS geom
+                    FROM unnest(CAST(:boundary_wkts AS text[])) WITH ORDINALITY AS f(wkt, idx)
+                )
+                SELECT faces.idx, rs.id AS segment_id
+                FROM faces
+                JOIN road_segments rs ON rs.geom && ST_Expand(faces.geom, :tolerance * 2)  -- index prefilter
+                JOIN roads r ON r.id = rs.road_id
+                WHERE r.import_area_id = :import_area_id
+                  AND (
+                      ST_Covers(faces.geom, rs.geom)
+                      -- A segment crossing the bounding box runs along a clipped
+                      -- block's boundary without the block covering it.
+                      OR ST_Length(ST_Intersection(rs.geom, ST_Buffer(ST_Boundary(faces.geom), :tolerance)))
+                             > :min_shared_length
+                  )
+                ORDER BY faces.idx,
+                         ST_LineLocatePoint(ST_ExteriorRing(faces.geom), ST_StartPoint(rs.geom)),
+                         rs.id
+                """
+            ),
+            {
+                "boundary_wkts": boundary_wkts,
+                "import_area_id": str(import_area_id),
+                "tolerance": _COLLINEAR_TOLERANCE_DEGREES,
+                "min_shared_length": _MIN_SHARED_LENGTH_DEGREES,
+            },
+        ).fetchall()
+        for row in rows:
+            segment_ids_by_face[row.idx - 1].append(row.segment_id)
+        return segment_ids_by_face
+
     def _buildable_area(self, boundary_wkt: str, half_width_by_segment: dict[uuid.UUID, float]) -> "_Buildable":
         """The boundary minus each bounding segment buffered (in meters) by its half-width.
 
@@ -225,7 +240,8 @@ class BlockDerivationService:
         row = self.session.execute(
             text(
                 """
-                WITH cut AS (
+                -- MATERIALIZED: inlined, `geom` is recomputed once per column that reads it.
+                WITH cut AS MATERIALIZED (
                     SELECT ST_Multi(ST_CollectionExtract(ST_MakeValid(ST_Difference(
                         ST_GeomFromText(:boundary_wkt, 4326),
                         COALESCE(

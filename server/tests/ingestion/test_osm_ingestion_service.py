@@ -1,5 +1,6 @@
 import copy
 import json
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -31,6 +32,19 @@ def _bbox():
 
 def _loop_bbox():
     return BoundingBox(Coordinate(9.9398, -84.0902), Coordinate(9.9407, -84.0893))
+
+
+def test_import_reports_each_step_to_the_step_timer(db_session):
+    steps = []
+
+    @contextmanager
+    def step_timer(step):
+        steps.append(step)
+        yield
+
+    OSMIngestionService(db_session, step_timer=step_timer).import_fixture(_bbox(), json.loads(FIXTURE.read_text()))
+
+    assert steps == ["parse", "persist features", "turns", "block derivation", "link buildings"]
 
 
 def test_fixture_import_persists_normalized_data_and_is_idempotent(db_session):

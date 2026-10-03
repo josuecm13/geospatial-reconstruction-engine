@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, replace
 
 from sqlalchemy import delete, func, or_, select
@@ -38,6 +40,14 @@ from app.persistence.repositories.turn_movement import TurnMovementRepository
 
 logger = logging.getLogger(__name__)
 
+# Wraps one ingestion step; the default does nothing. `server/scripts/benchmark_import.py` passes a timer.
+StepTimer = Callable[[str], AbstractContextManager[None]]
+
+
+def _untimed(step: str) -> AbstractContextManager[None]:
+    return nullcontext()
+
+
 @dataclass(frozen=True)
 class ImportResult:
     import_area: ImportArea
@@ -55,9 +65,10 @@ class ImportResult:
 
 
 class OSMIngestionService:
-    def __init__(self, session: Session, adapter: OSMFixtureAdapter | None = None):
+    def __init__(self, session: Session, adapter: OSMFixtureAdapter | None = None, step_timer: StepTimer = _untimed):
         self.session = session
         self.adapter = adapter or OSMFixtureAdapter()
+        self.step_timer = step_timer
 
     def import_fixture(self, bbox: BoundingBox, payload: dict, provider: str = "osm") -> ImportResult:
         # Before the area is created or marked importing: an incomplete response must leave the
@@ -70,7 +81,8 @@ class OSMIngestionService:
         self.session.commit()
         try:
             area_repo.mark_importing(import_area.id)
-            records = self.adapter.parse(with_way_nodes_from_geometry(payload))
+            with self.step_timer("parse"):
+                records = self.adapter.parse(with_way_nodes_from_geometry(payload))
             self._validate_within_bounding_box(bbox, records)
             result = self._persist(import_area, records)
             self.session.commit()
@@ -126,32 +138,33 @@ class OSMIngestionService:
         # 1. Upsert every source entity, tracking which rows this payload
         #    touched — anything for this area *not* in these sets is stale
         #    from a previous import and gets swept below.
-        node_ids = self._navigable_node_ids(records)
-        persisted_nodes = {
-            source_id: nodes.upsert(NavigableNode(None, area_id, source_id, records.nodes[source_id]))
-            for source_id in node_ids
-        }
-        touched_node_ids = {node.id for node in persisted_nodes.values()}
+        with self.step_timer("persist features"):
+            node_ids = self._navigable_node_ids(records)
+            persisted_nodes = {
+                source_id: nodes.upsert(NavigableNode(None, area_id, source_id, records.nodes[source_id]))
+                for source_id in node_ids
+            }
+            touched_node_ids = {node.id for node in persisted_nodes.values()}
 
-        touched_street_ids: set = set()
-        touched_road_ids: set = set()
-        touched_segment_ids: set = set()
-        segments_by_way: dict[str, list[RoadSegment]] = {}
-        street_by_way = self._persist_streets(streets, area_id, records)
-        touched_street_ids.update(street.id for street in street_by_way.values())
-        for source_road in records.roads:
-            street = street_by_way[source_road.source_id]
-            road = roads.upsert(
-                Road(None, area_id, source_road.source_id, source_road.classification,
-                     tuple(records.nodes[node_id] for node_id in source_road.node_ids), street.id)
-            )
-            touched_road_ids.add(road.id)
-            produced = self._segments_for_road(source_road, road, persisted_nodes, records.nodes, node_ids)
-            persisted_segments = [segments.upsert(segment) for segment in produced]
-            segments_by_way[source_road.source_id] = persisted_segments
-            touched_segment_ids.update(segment.id for segment in persisted_segments)
+            touched_street_ids: set = set()
+            touched_road_ids: set = set()
+            touched_segment_ids: set = set()
+            segments_by_way: dict[str, list[RoadSegment]] = {}
+            street_by_way = self._persist_streets(streets, area_id, records)
+            touched_street_ids.update(street.id for street in street_by_way.values())
+            for source_road in records.roads:
+                street = street_by_way[source_road.source_id]
+                road = roads.upsert(
+                    Road(None, area_id, source_road.source_id, source_road.classification,
+                         tuple(records.nodes[node_id] for node_id in source_road.node_ids), street.id)
+                )
+                touched_road_ids.add(road.id)
+                produced = self._segments_for_road(source_road, road, persisted_nodes, records.nodes, node_ids)
+                persisted_segments = [segments.upsert(segment) for segment in produced]
+                segments_by_way[source_road.source_id] = persisted_segments
+                touched_segment_ids.update(segment.id for segment in persisted_segments)
 
-        touched_building_ids, touched_poi_ids, touched_area_feature_ids = self._persist_features(area_id, records)
+            touched_building_ids, touched_poi_ids, touched_area_feature_ids = self._persist_features(area_id, records)
 
         # 2. Reset derived block data *before* sweeping stale segments: blocks
         #    and block_boundary_segments reference segments, and no foreign
@@ -173,7 +186,9 @@ class OSMIngestionService:
         )
 
         # 5. Turn candidates/restrictions, generated only over the now-reconciled segments.
-        skipped_restrictions = [*records.skipped_restrictions, *self._persist_turns(records, segments_by_way, persisted_nodes)]
+        with self.step_timer("turns"):
+            skipped_turns = self._persist_turns(records, segments_by_way, persisted_nodes)
+        skipped_restrictions = [*records.skipped_restrictions, *skipped_turns]
         if skipped_restrictions:
             logger.warning(
                 "import area %s: skipped %d turn restriction(s) that are malformed or can't be resolved inside the import: %s",
@@ -181,8 +196,10 @@ class OSMIngestionService:
             )
 
         # 6. Derive fresh blocks and link buildings over the reconciled network.
-        blocks = block_service.derive_for_import_area(area_id)
-        linked_building_count = BuildingRepository(self.session).link_to_containing_block(area_id)
+        with self.step_timer("block derivation"):
+            blocks = block_service.derive_for_import_area(area_id)
+        with self.step_timer("link buildings"):
+            linked_building_count = BuildingRepository(self.session).link_to_containing_block(area_id)
 
         # 7. Counts are read back from storage, so they always equal what map data returns.
         counts = self._counts_for_area(area_id)

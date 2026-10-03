@@ -120,6 +120,49 @@ and compare. Running these scripts is allowed: they're measurements, not the tes
 
 ## Outcome
 
-_(fill in: final timing table, which option you took for each query, payload size and where it lives)_
+Derivation on the stored Berlin Mitte area, baseline taken from `main` (`2c83b99`) in a worktree:
+
+| Step | `derive_for_import_area` |
+|---|---|
+| `main` | 207.6 s |
+| `c17dc56` (candidate-face CTEs materialized, from the table above) | 69 s |
+| + one set-based segment lookup | 24.5 s (segment lookup 3.2 s, buildable area 17.0 s) |
+| + `cut` CTE materialized in `_buildable_area` | **10.6 s** |
+
+- **Per-face segment lookup:** took the "one set-based query" option. The face WKTs go in as a
+  `text[]` with `unnest … WITH ORDINALITY`, joined to `road_segments` behind an
+  `rs.geom && ST_Expand(face, tolerance * 2)` prefilter, then the original `ST_Covers` /
+  `ST_Length(ST_Intersection(…))` condition. `ORDER BY face, ST_LineLocatePoint(…), rs.id`.
+- **Buildable area:** kept per face; the geometry operations are untouched. Profiling the stages on
+  the biggest face (buffer 0.07 s, union 0.15 s, difference 0.006 s, make-valid 0.009 s, area
+  0.02 s, inward buffer 0.02 s) summed to about 0.3 s, against 1.38 s through `_buildable_area`.
+  The `cut` CTE is referenced once, so Postgres inlined it and recomputed the whole difference for
+  each of the five columns that read `geom`: the same bug as the candidate faces. `AS MATERIALIZED`
+  fixed it. Batching into one query wasn't needed.
+- **`compare.py` does not print `IDENTICAL` against `main`, for one reason.** Blocks, ids, boundaries,
+  buildable areas, areas, `is_median`, `is_clipped` and building links all match, and every block has
+  the same set of boundary segments. In 64 of 73 blocks, `sequence_order` differs, only among segments
+  whose `ST_LineLocatePoint` is equal (969 tied pairs). I checked for each differing block that the
+  locate values read in both orders are the same sorted sequence. The old query had no tie-break, so
+  its tie order was whatever Postgres returned; the new one breaks ties by segment id. I did not test
+  whether `main`'s order varies from run to run. Block ids don't depend on it (they hash the set of
+  segment ids), and the existing derivation tests pass unchanged in CI. The step-2 snapshot is
+  `IDENTICAL` to the step-1 snapshot, so the `AS MATERIALIZED` change alone alters nothing.
+- **Benchmark:** `server/scripts/benchmark_import.py`, with a `step_timer` hook on
+  `OSMIngestionService` (default: no-op). The payload is 0.82 MB gzipped, so it is committed at
+  `server/tests/fixtures/overpass/berlin_mitte_1km2.json.gz` (one Overpass fetch, 27,194 elements).
+  A run imports it as provider `benchmark` inside a transaction it rolls back (checked: no
+  `benchmark` row remained). The payload has 548 roads and yields 72 blocks, against 549 and 73 stored,
+  because OSM changed between the two fetches.
+- **Fresh import, whole pipeline:** block derivation 13.7 s inside the import (no `ANALYZE` yet on the
+  just-written rows, so slower than the 10.6 s on the settled stored area), persist features 24.0 s,
+  turns 12.9 s, link buildings 0.7 s, total 51.8 s. Derivation is under 15 s in both, but with less
+  margin on a fresh import.
+- Guard tests are not mutation-checked (no local test runs). `test_import_reports_each_step_to_the_step_timer`
+  guards the hook the benchmark relies on.
 
 ## Tangents found
+
+- Persisting features takes 24 s and turn generation 12.9 s on the Mitte payload, together more than
+  block derivation now does. (`server/app/ingestion/service.py`, `_persist` steps 1 and 5; the
+  benchmark prints them.)
