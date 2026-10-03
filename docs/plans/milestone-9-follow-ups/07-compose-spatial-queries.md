@@ -142,4 +142,38 @@ Guard tests are not mutation-checked (no local runs). Say so.
 
 ## Outcome
 
+Done. The brief's claims held: the three generic helpers and the footprint query filtered on
+`import_area_id ==` only, `NearestKind` is `node | segment` (`schemas.py:54-56`), and `get_map_data`
+computed `composed_area_ids` inline.
+
+- **Service** (`app/persistence/spatial_queries.py`). New static `_owned(model, owners)`: an `or_`
+  over the owners, each owner after the first `AND NOT EXISTS` a row of an `aliased(model)` with the
+  same `source_id` owned by an earlier owner. One owner collapses to the plain
+  `import_area_id ==` clause, so the single-area query is unchanged. `_within_radius`,
+  `_intersecting_bbox`, `_contained_by_bbox` and `building_footprint_area_square_meters` take
+  `composed_area_ids=()` and use `_owned`. Only the POI, building and area-feature public methods
+  accept `composed_area_ids`; the node methods don't, so they can't be composed by mistake.
+  `/nearest` is untouched. Checked the compiled SQL for three owners against the PostgreSQL dialect:
+  the shadow subquery correlates to the outer row as intended.
+- **Router.** A dependency `composed_import_area_ids(area, session)` in `app/api/dependencies.py`
+  (named so it doesn't clash with the `composed_area_ids` locals). `nearby`, `within_bbox` and
+  `footprint_area` use it, passing it to the feature-layer kinds only (`functools.partial` in the
+  dispatch tables). I also switched `get_map_data` to it, so map-data and the queries share one
+  lookup.
+- **Boundary scope** needed no change: `_scope` loads the boundary by the outer area's id and its
+  `ST_Intersects` applies to composed rows.
+- **Tests** (`server/tests/api/test_nested_import_areas.py`): nine new cases (one parametrized over
+  `intersects`/`contains`) covering every bullet in the brief, including the node guard (owners of
+  the returned nodes looked up in the DB, since `node_feature` carries no `import_area_id`) and the
+  404 for the inner area's shadowed copy of `STRADDLING_BUILDING`. Written, not run locally; CI is
+  the gate. Guards not mutation-checked.
+- **Verified.** `py_compile` on every changed file; `import app.main` succeeds (FastAPI resolves the
+  new dependency signatures at import).
+- **Docs.** `spatial-query-api` spec: the scoping requirement amended, plus a new "compose an import
+  area's inner areas" requirement with three scenarios. `client-features.md`: the `nearby`,
+  `within-bbox` and footprint-area rows only. `architecture.md`: the endpoint list and the "Nested
+  import areas" paragraph.
+
 ## Tangents found
+
+- None.

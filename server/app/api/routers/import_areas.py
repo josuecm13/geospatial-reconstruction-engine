@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import uuid
 from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, Depends, Header, Query
@@ -16,6 +17,7 @@ from app.api.background_import import PROVIDER, background_import_work
 from app.api.dependencies import (
     SessionScope,
     completed_import_area,
+    composed_import_area_ids,
     get_import_jobs,
     get_job_session_scope,
     get_overpass_client,
@@ -209,6 +211,7 @@ def get_map_data(
     mode: ExportMode = Query(ExportMode.FILTER),
     scope: TracedBoundary | None = Depends(scope_boundary),
     area: ImportArea = Depends(completed_import_area),
+    composed_area_ids: list[uuid.UUID] = Depends(composed_import_area_ids),
     session: Session = Depends(get_session),
 ) -> MapDataOut:
     """Filter mode returns whole entities that intersect the scope. Segments keep their full
@@ -219,9 +222,6 @@ def get_map_data(
     The area composes the completed areas inside its rectangle: their buildings, POIs, area
     features, and whole blocks join its own, each feature naming its `import_area_id`, so the
     response is one complete place. Where both hold a feature, the area's own copy wins."""
-    composed_area_ids = [
-        inner.id for inner in ImportAreaRepository(session).completed_areas_covered_by(area.bbox, exclude_id=area.id)
-    ]
     segments = RoadSegmentRepository(session).list_for_import_area_with_street(area.id)
     # Cross-sections read the whole area (a direction is inferred from a road's reverse
     # twin), so they are computed before the scope narrows the segments.

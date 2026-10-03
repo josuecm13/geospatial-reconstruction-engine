@@ -48,11 +48,11 @@ beyond parity.
 
 | Capability | Endpoint | API status | Client | Client notes |
 |---|---|---|---|---|
-| Within a radius: node / POI / building / area feature | `GET …/nearby` | shipped | — | Click and drag a circle |
-| Inside a bbox, `intersects` or `contains`: node / building / area feature (no POIs) | `GET …/within-bbox` | shipped | — | Box select. The query box has the same 1 km² limit |
+| Within a radius: node / POI / building / area feature. POIs, buildings and area features compose inner areas like `map-data` | `GET …/nearby` | shipped | — | Click and drag a circle |
+| Inside a bbox, `intersects` or `contains`: node / building / area feature (no POIs). Buildings and area features compose inner areas like `map-data` | `GET …/within-bbox` | shipped | — | Box select. The query box has the same 1 km² limit |
 | Nearest node / segment to a coordinate | `GET …/nearest` | shipped | — | Snap to the network on hover |
 | Nearest segment with its full cross-section | `GET …/nearest` | planned (#36) | — | Today `lane_count` can differ from what `map-data` returns for the same segment |
-| Building footprint area (m²) | `GET …/buildings/{id}/footprint-area` | shipped | — | Building inspector |
+| Building footprint area (m²), for every building id `map-data` returns, inner areas' included | `GET …/buildings/{id}/footprint-area` | shipped | — | Building inspector |
 
 ### Routing
 

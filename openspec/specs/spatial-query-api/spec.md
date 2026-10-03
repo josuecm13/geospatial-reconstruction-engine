@@ -57,7 +57,7 @@ The API SHALL expose `GET /import-areas/{id}/buildings/{building_id}/footprint-a
 - **THEN** the response is a 404 error with code `building_not_found`
 
 ### Requirement: Spatial queries SHALL be scoped to an existing, completed import area
-Every spatial-query endpoint SHALL reject an unknown import area id and an import area whose status is not `completed`, and SHALL only return entities belonging to the named import area.
+Every spatial-query endpoint SHALL reject an unknown import area id and an import area whose status is not `completed`, and SHALL only return entities belonging to the named import area or, for POIs, buildings, and area features, to the inner areas it composes, as `map-data` does.
 
 #### Scenario: Unknown import area
 - **WHEN** a client runs any spatial query against an import area id that does not exist
@@ -66,6 +66,22 @@ Every spatial-query endpoint SHALL reject an unknown import area id and an impor
 #### Scenario: Failed import area
 - **WHEN** a client runs any spatial query against an import area whose status is `failed`
 - **THEN** the response is a 409 error with code `import_area_not_ready`
+
+### Requirement: Spatial queries SHALL compose an import area's inner areas
+Radius and bounding-box queries for POIs, buildings, and area features, and the building footprint area, SHALL cover the completed inner areas the import area composes in `map-data`, with the same precedence: a source id SHALL appear at most once, the area's own copy first and then the inner areas' in `map-data` order. A footprint-area request SHALL succeed for exactly the building ids `map-data` of the area returns. Nodes and segments SHALL be the area's own, because the road network is stored whole in the outer area. A boundary scope SHALL apply to composed entities the same way.
+
+#### Scenario: An inner area's building found from the outer area
+- **WHEN** a client runs `/nearby?kind=building` on an outer import area around a building that only a completed inner area stores
+- **THEN** the result holds that building, with `properties.import_area_id` naming the inner area
+
+#### Scenario: A shared building returned once
+- **WHEN** a building crosses an inner area's edge, so both the outer and the inner area store a copy, and a client queries around it on the outer area
+- **THEN** the building appears once, as the outer area's copy
+- **AND** a footprint-area request on the outer area for the inner area's copy is a 404 error with code `building_not_found`
+
+#### Scenario: Nodes are not composed
+- **WHEN** a client runs `/within-bbox?kind=node` on an outer area over a completed inner area
+- **THEN** every node returned belongs to the outer area
 
 ### Requirement: The API SHALL scope spatial queries to a traced boundary on request
 `GET /import-areas/{id}/nearby`, `/within-bbox`, and `/nearest` SHALL accept an optional `boundary_id` query parameter naming one of the import area's traced boundaries. With it, results SHALL be limited to entities intersecting that boundary; without it, the query SHALL behave exactly as before. `GET /import-areas/{id}/buildings/{building_id}/footprint-area` SHALL NOT take a boundary.
