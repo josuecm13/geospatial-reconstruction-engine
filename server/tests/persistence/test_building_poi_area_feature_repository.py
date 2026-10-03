@@ -9,7 +9,9 @@ from app.persistence.repositories.area_feature import AreaFeatureRepository
 from app.persistence.repositories.building import BuildingRepository
 from app.persistence.repositories.import_area import ImportAreaRepository
 from app.persistence.repositories.poi import PointOfInterestRepository
+from app.persistence.models import BuildingModel
 from app.persistence.repositories.road_graph import NavigableNodeRepository, RoadRepository, RoadSegmentRepository
+from app.persistence.spatial_queries import SpatialQueryService
 
 
 def _import_area_id(db_session):
@@ -45,6 +47,47 @@ def test_building_upsert_is_idempotent(db_session):
 
     assert first.id == second.id
     assert first.category == BuildingCategory.RESIDENTIAL
+
+
+def test_feature_upsert_many_creates_then_updates_in_place_and_keys_by_source_id(db_session):
+    area = _import_area_id(db_session)
+    buildings, pois, areas = (
+        BuildingRepository(db_session), PointOfInterestRepository(db_session), AreaFeatureRepository(db_session)
+    )
+    building_batch = [
+        Building(None, area, f"way/b{i}", BuildingCategory.RESIDENTIAL, _square_ring(30.0, -97.8, 30.0001, -97.7999))
+        for i in range(2)
+    ]
+    poi_batch = [PointOfInterest(None, area, f"node/p{i}", PoiCategory.SHOPPING, Coordinate(30.0, -97.8), "Shop") for i in range(2)]
+    area_batch = [
+        AreaFeature(None, area, f"way/a{i}", AreaFeatureKind.PARK, _square_ring(30.0, -97.8, 30.0001, -97.7999))
+        for i in range(2)
+    ]
+
+    first = (buildings.upsert_many(area, building_batch), pois.upsert_many(area, poi_batch), areas.upsert_many(area, area_batch))
+    second = (buildings.upsert_many(area, building_batch), pois.upsert_many(area, poi_batch), areas.upsert_many(area, area_batch))
+
+    for created, updated, prefix in zip(first, second, ("way/b", "node/p", "way/a")):
+        assert set(created) == {f"{prefix}0", f"{prefix}1"}
+        assert {k: v.id for k, v in created.items()} == {k: v.id for k, v in updated.items()}
+    assert len(buildings.list_for_import_area(area)) == 2
+    assert len(pois.list_for_import_area(area)) == 2
+    assert len(areas.list_for_import_area(area)) == 2
+
+
+def test_feature_upsert_many_with_the_same_key_twice_leaves_one_row(db_session):
+    area = _import_area_id(db_session)
+    buildings = BuildingRepository(db_session)
+    ring = _square_ring(30.0, -97.8, 30.0001, -97.7999)
+
+    result = buildings.upsert_many(area, [
+        Building(None, area, "way/b", BuildingCategory.RESIDENTIAL, ring),
+        Building(None, area, "way/b", BuildingCategory.COMMERCIAL, ring),
+    ])
+
+    assert list(result) == ["way/b"]
+    assert result["way/b"].category == BuildingCategory.COMMERCIAL
+    assert len(buildings.list_for_import_area(area)) == 1
 
 
 def test_poi_upsert_is_idempotent(db_session):
@@ -137,6 +180,57 @@ def test_building_inside_block_is_linked(db_session):
     linked = building_repo.get(building.id)
 
     assert linked.block_id == block.id
+
+
+def _unlinked_building_in_block(db_session):
+    import_area_id = _import_area_id(db_session)
+    block = _build_square_block(db_session, import_area_id)
+    building = BuildingRepository(db_session).upsert(
+        Building(
+            id=None,
+            import_area_id=import_area_id,
+            source_id="way/stale-check-building",
+            category=BuildingCategory.RESIDENTIAL,
+            geom=_square_ring(30.0002, -97.7998, 30.0004, -97.7996),
+        )
+    )
+    return import_area_id, block, building
+
+
+def test_link_refreshes_a_building_the_session_still_holds_via_get(db_session):
+    import_area_id, block, building = _unlinked_building_in_block(db_session)
+    held = db_session.get(BuildingModel, building.id)  # keep the reference: the identity map is weak
+    assert held.block_id is None
+
+    BuildingRepository(db_session).link_to_containing_block(import_area_id)
+
+    assert BuildingRepository(db_session).get(building.id).block_id == block.id
+    assert held.block_id == block.id
+
+
+def test_link_refreshes_buildings_a_session_listed_earlier(db_session):
+    import_area_id, block, _ = _unlinked_building_in_block(db_session)
+    repo = BuildingRepository(db_session)
+    held = db_session.query(BuildingModel).filter_by(import_area_id=import_area_id).all()
+    assert [b.block_id for b in repo.list_for_import_area(import_area_id)] == [None]
+
+    repo.link_to_containing_block(import_area_id)
+
+    assert [b.block_id for b in repo.list_for_import_area(import_area_id)] == [block.id]
+    assert [m.block_id for m in held] == [block.id]
+
+
+def test_link_refreshes_buildings_the_spatial_queries_return(db_session):
+    import_area_id, block, building = _unlinked_building_in_block(db_session)
+    held = db_session.get(BuildingModel, building.id)
+    service = SpatialQueryService(db_session)
+    center = Coordinate(30.0003, -97.7997)
+    assert [b.block_id for b in service.buildings_within_radius(import_area_id, center, 500)] == [None]
+
+    BuildingRepository(db_session).link_to_containing_block(import_area_id)
+
+    assert [b.block_id for b in service.buildings_within_radius(import_area_id, center, 500)] == [block.id]
+    assert held.block_id == block.id
 
 
 def test_building_outside_every_block_is_left_unlinked(db_session):

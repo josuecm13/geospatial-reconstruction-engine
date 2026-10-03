@@ -96,6 +96,14 @@ def completed_import_area(area: ImportArea = Depends(import_area)) -> ImportArea
     return area
 
 
+def composed_import_area_ids(
+    area: ImportArea = Depends(completed_import_area), session: Session = Depends(get_session)
+) -> list[uuid.UUID]:
+    """The completed inner areas an import area composes (map-data, the feature-layer spatial
+    queries), in the order their copies take precedence after the area's own."""
+    return [inner.id for inner in ImportAreaRepository(session).completed_areas_covered_by(area.bbox, exclude_id=area.id)]
+
+
 def traced_boundary(
     boundary_id: uuid.UUID, area: ImportArea = Depends(import_area), session: Session = Depends(get_session)
 ) -> TracedBoundary:

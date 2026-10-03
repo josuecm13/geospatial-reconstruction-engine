@@ -1,8 +1,11 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { BoundingBox, MapData } from "../api/types";
-import { buildWorld } from "../scene/buildWorld";
+import { prefersReducedMotion } from "../locations/flyTo";
+import { buildWorld, LAYER_ORDER } from "../scene/buildWorld";
+import { createAutoRotate, ROTATE_SPEED } from "../scene/autoRotate";
 import { createCameraModes } from "../scene/cameraModes";
+import { createFramingPolicy, overview, rectangleOverview } from "../scene/framing";
 import { createExportButton } from "../scene/exportButton";
 import { createRoutePanel, type RoutingDeps } from "../scene/routePanel";
 import type { SceneTarget } from "../scene/sceneLoader";
@@ -38,8 +41,9 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps): 
 
   // The placeholder world, removed once a real one is loaded.
   const placeholder = new THREE.Group();
-  const placeholderGround = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), new THREE.MeshLambertMaterial({ color: "#d9d4c7" }));
+  const placeholderGround = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), new THREE.MeshLambertMaterial({ color: "#d9d4c7", depthWrite: false }));
   placeholderGround.rotation.x = -Math.PI / 2;
+  placeholderGround.renderOrder = LAYER_ORDER.ground;
   placeholder.add(placeholderGround, new THREE.GridHelper(1000, 20, "#b8b2a4", "#c8c2b4"));
   scene.add(placeholder);
 
@@ -66,12 +70,35 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps): 
   camera.position.set(0, 400, 500);
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.maxPolarAngle = Math.PI / 2.1;
-  const modes = createCameraModes(camera, controls, renderer.domElement, container);
+  // The row of buttons under the layer toggle: Rotate | Download glTF | Walk, right to left.
+  const actions = Object.assign(document.createElement("div"), { className: "scene-actions" });
+  container.appendChild(actions);
+  const modes = createCameraModes(camera, controls, renderer.domElement, container, actions);
+  // Turntable rotation in fly mode; never during a staged build (the waiting wireframe spins).
+  const rotate = createAutoRotate(!prefersReducedMotion());
+  controls.autoRotateSpeed = ROTATE_SPEED;
+  // The user moving the camera (not auto-rotation, which fires no event) decides whether a finished
+  // staged build keeps their view.
+  const framing = createFramingPolicy();
+  controls.addEventListener("start", () => {
+    rotate.interactionStart();
+    framing.userMoved();
+  });
+  controls.addEventListener("end", () => rotate.interactionEnd());
+  let building = false;
   const clock = new THREE.Clock();
   // Route between two picked points (routePanel.ts); clicks only pick while flying.
   const routes = routing && createRoutePanel(container, scene, camera, renderer.domElement, routing, () => modes.mode === "fly");
 
-  const exporter = createExportButton(container);
+  const exporter = createExportButton(actions);
+  const rotateButton = Object.assign(document.createElement("button"), { className: "scene-rotate", type: "button", textContent: "Rotate", hidden: true });
+  const showRotate = () => rotateButton.setAttribute("aria-pressed", String(rotate.enabled));
+  showRotate();
+  rotateButton.addEventListener("click", () => {
+    rotate.setEnabled(!rotate.enabled);
+    showRotate();
+  });
+  actions.appendChild(rotateButton);
   const staged = createStagedScene(scene, container);
 
   let running = false;
@@ -87,7 +114,13 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps): 
   const frame = () => {
     if (!running) return;
     const delta = clock.getDelta();
-    if (modes.mode === "fly") controls.update();
+    rotateButton.disabled = modes.mode !== "fly";
+    const context = { fly: modes.mode === "fly", world: !!world, building };
+    const turning = rotate.update(delta, context);
+    if (context.fly) {
+      controls.autoRotate = turning;
+      controls.update(delta);
+    }
     modes.update(delta);
     staged.update(delta);
     renderer.render(scene, camera);
@@ -108,14 +141,19 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps): 
       scene.remove(placeholder);
       overlay.hidden = true;
       toggle.hidden = false;
-      // Frame the whole world from a raised, angled viewpoint.
-      const box = new THREE.Box3().setFromObject(world);
-      const center = box.getCenter(new THREE.Vector3());
-      const size = Math.max(box.getSize(new THREE.Vector3()).length(), 50);
-      camera.far = Math.max(5000, size * 10);
+      rotateButton.hidden = false;
+      // Frame the whole world from a raised, angled viewpoint, unless the user moved the camera
+      // during the staged build that this world finishes.
+      const view = overview(new THREE.Box3().setFromObject(world));
+      if (framing.shouldFrame()) {
+        camera.far = view.far;
+        controls.target.copy(view.target);
+        camera.position.copy(view.position);
+      } else {
+        // The finished world can be bigger than the rectangle that was built.
+        camera.far = Math.max(camera.far, view.far);
+      }
       camera.updateProjectionMatrix();
-      controls.target.copy(center);
-      camera.position.set(center.x, center.y + size * 0.6, center.z + size * 0.7);
       controls.update();
     },
     beginStaged(bbox) {
@@ -123,6 +161,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps): 
       modes.setWorld(undefined);
       routes?.setWorld(undefined);
       exporter.setWorld(undefined);
+      framing.stagedStarted();
       const build = staged.begin(bbox);
       world = build.world;
       world.getObjectByName("blocks")!.visible = buildable.checked;
@@ -131,18 +170,31 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps): 
       toggle.hidden = false;
       // The export waits for the build to play out; the finished world is loaded after it.
       exporter.setBusy(true);
-      void build.handle.finished.then(() => exporter.setBusy(false));
+      rotateButton.hidden = true;
+      building = true;
+      void build.handle.finished.then(() => {
+        building = false;
+        exporter.setBusy(false);
+      });
       // Frame the rectangle, whose centre is the projection origin, from the usual raised viewpoint.
       const { width, height } = bboxMeters(bbox);
-      const size = Math.max(Math.hypot(width, height), 50);
-      camera.far = Math.max(5000, size * 10);
+      const view = rectangleOverview(width, height);
+      camera.far = view.far;
       camera.updateProjectionMatrix();
-      controls.target.set(0, 0, 0);
-      camera.position.set(0, size * 0.6, size * 0.7);
+      controls.target.copy(view.target);
+      camera.position.copy(view.position);
       controls.update();
-      return build.handle;
+      // An abandoned build reloads the previous area, which gets the overview, not this view.
+      return {
+        ...build.handle,
+        abandon() {
+          framing.reset();
+          build.handle.abandon();
+        },
+      };
     },
     showMessage(message: string) {
+      framing.reset();
       removeWorld();
       modes.setWorld(undefined);
       routes?.setWorld(undefined);
@@ -151,6 +203,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps): 
       overlay.textContent = message;
       overlay.hidden = false;
       toggle.hidden = true;
+      rotateButton.hidden = true;
     },
     clear() {
       this.showMessage(EMPTY_HINT);
@@ -172,6 +225,9 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps): 
       running = false;
       modes.setActive(false);
       observer.disconnect();
+      modes.dispose();
+      routes?.dispose();
+      controls.dispose();
       renderer.dispose();
       renderer.forceContextLoss();
       renderer.domElement.remove();

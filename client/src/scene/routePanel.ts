@@ -1,23 +1,24 @@
 import * as THREE from "three";
-import type { Coordinate, Route } from "../api/types";
+import type { Coordinate, Route, RoutingStrategies } from "../api/types";
 import { renderReportedError, useErrorReporter } from "../errors/errorReporter";
 import { createRouteLayer } from "./routeLayer";
-import { IDLE, ROUTING_MESSAGES, clear, failed, formatDistance, pick, snapWarning, succeeded, type RoutePickState } from "./routePicking";
+import { IDLE, ROUTING_MESSAGES, clear, failed, formatDistance, pick, snapWarning, strategyOptions, succeeded, type RoutePickState } from "./routePicking";
 
 /** What the panel needs of the API and of the selection. */
 export interface RoutingDeps {
   api: {
     route(areaId: string, origin: Coordinate, destination: Coordinate, strategy?: string): Promise<Route>;
-    routingStrategies(areaId: string): Promise<string[]>;
+    routingStrategies(): Promise<RoutingStrategies | null>;
   };
   areaId(): string | null;
 }
 
 export interface RoutePanel {
   setWorld(world: THREE.Object3D | undefined): void;
+  /** Removes the `window` listener; call when the page is left. */
+  dispose(): void;
 }
 
-const SERVER_DEFAULT = "";
 const CLICK_SLOP_PIXELS = 5;
 const HINT = "Click the origin, then the destination.";
 
@@ -50,7 +51,8 @@ export function createRoutePanel(
   container.append(panel);
 
   let state: RoutePickState = IDLE;
-  let strategiesFor: string | null = null;
+  let strategiesLoaded = false;
+  let strategiesLoading = false;
   let lastError: unknown;
 
   const render = () => {
@@ -92,16 +94,16 @@ export function createRoutePanel(
     }
   };
 
+  // The registry is global, so the list is read once. A failed read offers only the server's
+  // default (no `strategy` is sent) and is retried the next time the toggle is turned on.
   const loadStrategies = async () => {
-    const areaId = deps.areaId();
-    if (!areaId || areaId === strategiesFor) return;
-    strategiesFor = areaId;
-    const names = await deps.api.routingStrategies(areaId);
-    if (strategiesFor !== areaId) return;
-    // No list means the probe failed: only the server's default is offered (no `strategy` is sent).
-    const options = names.length ? names : ["server default"];
+    if (strategiesLoaded || strategiesLoading) return;
+    strategiesLoading = true;
+    const listing = await deps.api.routingStrategies();
+    strategiesLoading = false;
+    strategiesLoaded = listing !== null;
     strategy.replaceChildren(
-      ...options.map((name, i) => Object.assign(document.createElement("option"), { value: names.length ? name : SERVER_DEFAULT, textContent: name, selected: i === 0 })),
+      ...strategyOptions(listing).map(({ value, label, selected }) => Object.assign(document.createElement("option"), { value, textContent: label, selected })),
     );
     strategy.hidden = false;
   };
@@ -139,11 +141,12 @@ export function createRoutePanel(
     render();
     if (state.phase === "requesting") void request(state);
   });
-  window.addEventListener("keydown", (event) => {
+  const onKeyDown = (event: KeyboardEvent) => {
     if (event.code !== "Escape" || !enabled.checked || panel.hidden) return;
     state = clear();
     render();
-  });
+  };
+  window.addEventListener("keydown", onKeyDown);
   enabled.addEventListener("change", () => {
     canvas.style.cursor = enabled.checked ? "crosshair" : "";
     if (enabled.checked) void loadStrategies();
@@ -154,10 +157,11 @@ export function createRoutePanel(
     setWorld(world) {
       layer.setWorld(world);
       state = IDLE;
-      strategiesFor = null;
       panel.hidden = !world;
-      if (world && enabled.checked) void loadStrategies();
       render();
+    },
+    dispose() {
+      window.removeEventListener("keydown", onKeyDown);
     },
   };
 }

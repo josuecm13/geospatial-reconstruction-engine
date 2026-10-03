@@ -84,40 +84,38 @@ describe("listImportAreas", () => {
 });
 
 describe("routingStrategies", () => {
-  const area = { id: "a1", bbox: BBOX };
-  const unknown = { error: { code: "unknown_routing_strategy", message: "nope", details: { registered_strategies: ["distance", "fewest_turns"] } } };
+  const listing = { strategies: ["distance", "fewest_turns"], default: "distance" };
 
-  function routed(routeResponse: Response) {
-    const calls: { url: string; init?: RequestInit }[] = [];
-    const fetchImpl: Fetch = async (url, init) => {
-      calls.push({ url, init });
-      return (url.endsWith("/routes") ? routeResponse : json(200, area)).clone();
+  function answering(...responses: Response[]) {
+    const calls: string[] = [];
+    const fetchImpl: Fetch = async (url) => {
+      calls.push(url);
+      return responses[Math.min(calls.length, responses.length) - 1].clone();
     };
     return { client: new ApiClient("/api", fetchImpl), calls };
   }
 
-  it("reads the registered strategies off the unknown_routing_strategy error", async () => {
-    const { client, calls } = routed(json(422, unknown));
+  it("lists the strategies and the default from GET /routing-strategies", async () => {
+    const { client, calls } = answering(json(200, listing));
 
-    expect(await client.routingStrategies("a1")).toEqual(["distance", "fewest_turns"]);
-
-    const body = JSON.parse(String(calls[1].init?.body));
-    expect(body.strategy).toBe("__list_strategies__");
-    expect(body.origin).toEqual(body.destination);
+    expect(await client.routingStrategies()).toEqual(listing);
+    expect(calls).toEqual(["/api/routing-strategies"]);
   });
 
-  it("asks only once per area", async () => {
-    const { client, calls } = routed(json(422, unknown));
+  it("asks only once", async () => {
+    const { client, calls } = answering(json(200, listing));
 
-    await client.routingStrategies("a1");
-    await client.routingStrategies("a1");
+    await client.routingStrategies();
+    await client.routingStrategies();
 
+    expect(calls).toHaveLength(1);
+  });
+
+  it("gives null on a failure and asks again next time", async () => {
+    const { client, calls } = answering(json(503, { error: { code: "database_unavailable", message: "down" } }), json(200, listing));
+
+    expect(await client.routingStrategies()).toBeNull();
+    expect(await client.routingStrategies()).toEqual(listing);
     expect(calls).toHaveLength(2);
-  });
-
-  it("falls back to no strategies (server default) on any other failure", async () => {
-    const { client } = routed(json(503, { error: { code: "database_unavailable", message: "down" } }));
-
-    expect(await client.routingStrategies("a1")).toEqual([]);
   });
 });

@@ -17,16 +17,19 @@ export const COLORS = {
 const flat = (color: string, extra: THREE.MeshLambertMaterialParameters = {}) =>
   new THREE.MeshLambertMaterial({ color, flatShading: true, ...extra });
 
+/** Ground-level layers write no depth: their draw order (LAYER_ORDER in buildWorld.ts) decides what shows on top. */
+const decal = (color: string, extra: THREE.MeshLambertMaterialParameters = {}) => flat(color, { depthWrite: false, ...extra });
+
 export const MATERIALS = {
-  ground: flat(COLORS.ground),
-  green: flat(COLORS.green),
-  water: flat(COLORS.water),
-  roadNormal: flat(COLORS.roadNormal),
-  roadWide: flat(COLORS.roadWide),
-  roadNarrow: flat(COLORS.roadNarrow),
+  ground: decal(COLORS.ground),
+  green: decal(COLORS.green),
+  water: decal(COLORS.water),
+  roadNormal: decal(COLORS.roadNormal),
+  roadWide: decal(COLORS.roadWide),
+  roadNarrow: decal(COLORS.roadNarrow),
   buildingMeasured: flat(COLORS.buildingMeasured),
   buildingDefaulted: flat(COLORS.buildingDefaulted),
-  buildable: flat(COLORS.buildable, { transparent: true, opacity: 0.45, side: THREE.DoubleSide }),
+  buildable: decal(COLORS.buildable, { transparent: true, opacity: 0.45, side: THREE.DoubleSide }),
 };
 
 export const roadMaterial = (laneType: string) =>

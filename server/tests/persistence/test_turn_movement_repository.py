@@ -142,6 +142,31 @@ def test_explicit_restriction_marks_movement_not_allowed(db_session):
     assert restricted.restriction_kind == RestrictionKind.NO_LEFT_TURN
 
 
+def test_persist_many_is_idempotent_and_updates_in_place(db_session):
+    fixture = _build_four_way_intersection(db_session)
+    repo = TurnMovementRepository(db_session)
+    candidates = repo.generate_candidates(fixture["intersection_node_id"])
+
+    first = repo.persist_many(candidates)
+    restricted = [
+        TurnMovement(
+            id=None,
+            intersection_node_id=c.intersection_node_id,
+            incoming_segment_id=c.incoming_segment_id,
+            outgoing_segment_id=c.outgoing_segment_id,
+            movement_kind=c.movement_kind,
+            allowed=False,
+            restriction_kind=RestrictionKind.NO_LEFT_TURN,
+        )
+        for c in candidates
+    ]
+    second = repo.persist_many(restricted)
+
+    assert [m.id for m in first] == [m.id for m in second]
+    assert all(not m.allowed for m in second)
+    assert len(repo.list_for_intersection(fixture["intersection_node_id"])) == 4
+
+
 def test_trigger_rejects_incoming_segment_not_ending_at_intersection(db_session):
     fixture = _build_four_way_intersection(db_session)
 

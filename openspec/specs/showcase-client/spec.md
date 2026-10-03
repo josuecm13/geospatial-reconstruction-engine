@@ -45,7 +45,12 @@ The map view SHALL let a user draw a rectangle by dragging and adjust it by drag
 - **THEN** the client asks for confirmation, warning that data OpenStreetMap no longer has will be deleted
 
 ### Requirement: The client SHALL trace, save, and scope by boundaries
-The map view SHALL let a user trace a shape inside the rectangle by clicking vertices (closing it by clicking the first vertex or double-clicking, cancelling with Escape) or freehand (press, drag, release), drawn distinctly from the import rectangle. It SHALL save the shape as a named boundary of the open area, list the area's saved boundaries, select one, and delete one after confirmation. A shape traced before an import SHALL be saved to the new area right after the import succeeds; if the server rejects it, the import SHALL stand, the rejection SHALL be shown, and the shape SHALL be kept so it can be fixed and saved again. A rejection of kind `invalid_boundary` SHALL be shown as a plain-words sentence chosen by `details.rule`. A scope selector SHALL choose between the whole area and one boundary; the map layers SHALL show the map data of the chosen scope, and the chosen scope SHALL be remembered per area across a reload.
+The map view SHALL let a user trace a shape inside the rectangle by clicking vertices (closing it by clicking the first vertex or double-clicking, cancelling with Escape) or freehand (press, drag, release), drawn distinctly from the import rectangle. It SHALL save the shape as a named boundary of the open area, list the area's saved boundaries, select one, and delete one after confirmation. A shape traced before an import SHALL be saved to the new area right after the import succeeds; if the server rejects it, the import SHALL stand, the rejection SHALL be shown, and the shape SHALL be kept so it can be fixed and saved again. A rejection of kind `invalid_boundary` SHALL be shown as a plain-words sentence chosen by `details.rule`. A scope selector SHALL choose between the whole area and one boundary; the map layers SHALL show the map data of the chosen scope, and the chosen scope SHALL be remembered per area across a reload. While a trace is active, clicking the map SHALL NOT open a feature's description, and one already open SHALL close.
+
+#### Scenario: Clicking a building while tracing
+- **WHEN** a user places a vertex on a building while tracing
+- **THEN** the vertex is added and no description opens
+- **AND** once tracing ends or is cancelled, clicking a building describes it again
 
 #### Scenario: A self-crossing shape
 - **WHEN** a user saves a shape whose edges cross each other
@@ -60,11 +65,15 @@ The map view SHALL let a user trace a shape inside the rectangle by clicking ver
 - **THEN** the scope returns to the whole area and the map layers show the whole area
 
 ### Requirement: The client SHALL build a low-poly 3D scene from map-data
-The scene view SHALL show the open area, or its selected boundary, as a low-poly 3D world built from `GET /import-areas/{id}/map-data`, in meters from the response's projection origin. It SHALL draw area features and roads (once per two-way road, at `width_meters`) as flat shapes and buildings extruded to their height, and SHALL offer a toggle for the blocks' buildable area, hidden by default. A building's height SHALL be `height_meters` when known, else its levels at 3.2 m each, else a default by category; a height taken from the category default SHALL be visibly marked (a paler material). The scene SHALL reload when the selection changes while it is shown, and SHALL ignore a response that is no longer the latest request.
+The scene view SHALL show the open area, or its selected boundary, as a low-poly 3D world built from `GET /import-areas/{id}/map-data`, in meters from the response's projection origin. It SHALL draw area features and roads (once per two-way road, at `width_meters`) as flat shapes and buildings extruded to their height, and SHALL offer a toggle for the blocks' buildable area, hidden by default. The flat layers SHALL draw in a fixed order that doesn't depend on camera distance: the ground, then area features (water over green), then roads (wider lane types over narrower), then the buildable overlay. A building's height SHALL be `height_meters` when known, else its levels at 3.2 m each, else a default by category; a height taken from the category default SHALL be visibly marked (a paler material). The scene SHALL reload when the selection changes while it is shown, and SHALL ignore a response that is no longer the latest request.
 
 #### Scenario: A building with no height or levels
 - **WHEN** map-data contains a building whose `height_meters` and `levels` are both null
 - **THEN** the scene draws it with its category's default height, in the paler material, flagged as defaulted
+
+#### Scenario: Zoomed out over a junction of a wide and a normal road
+- **WHEN** the camera is zoomed out to its farthest over an area with a wide road crossing a normal one
+- **THEN** the junction shows the wide road whole, with no flicker
 
 #### Scenario: Switching boundary while the scene is shown
 - **WHEN** the selection changes to another boundary while a previous request is still loading
@@ -81,8 +90,19 @@ The scene view SHALL offer two camera modes with one toggle (a corner button and
 - **WHEN** a user presses `V` in fly mode and again in walk mode
 - **THEN** the camera moves to the road start at eye height, then returns to the previous orbit view
 
+### Requirement: The client SHALL rotate the scene slowly in fly mode
+In fly mode, with a finished world loaded, the scene SHALL turn slowly around the open area (one turn every two minutes). Rotation SHALL stop while the user drags or zooms, SHALL NOT run in walk mode or during a staged build, and SHALL resume five seconds after the last interaction, after leaving walk mode, or after a build ends. A "Rotate" button SHALL turn it on and off (rotating at once when turned on). Rotation SHALL start off when the browser reports `prefers-reduced-motion: reduce`.
+
+#### Scenario: Dragging the scene
+- **WHEN** a user drags the scene
+- **THEN** rotation stops, and resumes five seconds after the drag ends
+
+#### Scenario: Reduced motion
+- **WHEN** the browser reports `prefers-reduced-motion: reduce`
+- **THEN** the scene opens without rotating, and the "Rotate" button turns rotation on
+
 ### Requirement: The client SHALL show a route between two picked points
-With the scene's "Route" toggle on, the first click on the ground or a road SHALL set the origin and the second the destination; the client SHALL then request a route for the open import area and draw it as a ribbon on the road surfaces, with a green marker at the origin and a red one at the destination. A third click SHALL start over with that click as the new origin, and Escape SHALL clear the route. The strategy picker SHALL list the strategies the server registered, read from the `unknown_routing_strategy` error's `details.registered_strategies`, and send no strategy when that list cannot be read. The result SHALL show the distance and both snap distances, and SHALL warn when a snap distance is over 25 m. Routing errors SHALL be shown by their code.
+With the scene's "Route" toggle on, the first click on the ground or a road SHALL set the origin and the second the destination; the client SHALL then request a route for the open import area and draw it as a ribbon on the road surfaces, with a green marker at the origin and a red one at the destination. A third click SHALL start over with that click as the new origin, and Escape SHALL clear the route. The strategy picker SHALL list the strategies from `GET /routing-strategies`, with the server's default pre-selected, and SHALL send no strategy when that list cannot be read. The result SHALL show the distance and both snap distances, and SHALL warn when a snap distance is over 25 m. Routing errors SHALL be shown by their code.
 
 #### Scenario: A point far from any road
 - **WHEN** the route comes back with an origin snap distance of 40 m
@@ -104,15 +124,23 @@ The scene view SHALL offer a "Download glTF" button, enabled once a world is loa
 - **THEN** a building appears as a node named `building:<id>` and a road as `road:<id>`
 
 ### Requirement: The client SHALL build an imported place in stages as the server streams them
-The client SHALL start an import with `background: true`, switch to the scene view, and reveal each stage as its server-sent event arrives: a waiting animation until `fetched`, then the ground (area features), roads, buildings rising ring by ring from the centre out, and the blocks overlay last. It SHALL ignore an event that repeats or arrives out of order. A completed area that `fetched` names in `inner_area_ids` SHALL be shown fully built at once. A "Skip animation" button SHALL jump every pending step to its final state. While a build plays, the glTF export SHALL be disabled, and the finished area SHALL be loaded from map-data once it ends. A `failed` event SHALL discard the build, return to the map view, and report the event's `code`. Opening an already imported area SHALL show it with no animation.
+The client SHALL start an import with `background: true`, switch to the scene view, and reveal each stage as its server-sent event arrives: a waiting animation until `fetched`, then the ground (area features), roads, buildings rising ring by ring from the centre out, and the blocks overlay last. It SHALL ignore an event that repeats or arrives out of order. A completed area that `fetched` names in `inner_area_ids` SHALL have its area features, blocks and buildings shown at once, but not its roads, because the `roads` stage already carries the whole network. A "Skip animation" button SHALL jump every pending step to its final state. While a build plays, the glTF export SHALL be disabled, and the finished area SHALL be loaded from map-data once it ends, keeping the camera where it is if the user moved it during the build and otherwise showing the overview. A `failed` event SHALL discard the build, return to the map view, and report the event's `code`. Opening an already imported area SHALL show it with no animation.
 
 #### Scenario: Reveal order
 - **WHEN** the events `fetched`, `ground`, `roads`, `blocks`, two `buildings` rings and `completed` arrive
 - **THEN** the scene reveals the ground, then the roads, then the first ring of buildings, then the second, and finally the blocks overlay
 
+#### Scenario: An inner area's roads
+- **WHEN** an import's `fetched` event names an inner area
+- **THEN** each road inside it is drawn once, from the `roads` stage
+
 #### Scenario: Skipping the animation
 - **WHEN** a user presses "Skip animation" while the build is playing
 - **THEN** every pending step, and every step that arrives afterwards, is shown in its final state at once
+
+#### Scenario: Moving the camera during a build
+- **WHEN** a user orbits the camera during a staged build
+- **THEN** the finished area replaces the build without moving the camera
 
 #### Scenario: Reopening an imported area
 - **WHEN** a user opens an already imported area from the list, or loads the page with one open
@@ -123,7 +151,7 @@ The client SHALL start an import with `background: true`, switch to the scene vi
 - **THEN** the partial build is removed, the map view is shown, and the import panel reports the event's `code`
 
 ### Requirement: The client SHALL keep each view's state in its URL
-The client SHALL be a set of pages behind a history router, with no page load between them: `/` (landing), `/locations`, `/explore/:areaId`, and `/explore` (the map with no area open, where a first import starts; an import that completes there opens its area's URL), and a not-found page for any other path. The explore URL SHALL carry the state that defines the view: the area in the path, and in the query `view` (`map`, the default, or `scene`), `scope` (the id of a traced boundary; absent for the whole area), and `at` (`<lat>,<lon>,<zoom>`, five decimals for latitude and longitude and two for zoom, the 2D map's camera). A query parameter that is invalid SHALL be ignored, not reported as an error. A change of area, scope, or view SHALL add a history entry, and a camera move SHALL only rewrite the current entry (debounced), so Back never steps through pans. The browser's Back and Forward SHALL restore the area, scope, and view of the entry. An old `#map` or `#scene` link on `/` SHALL lead to the explore URL of the area last opened in this browser, or to `/locations` when there is none. An explore URL for an area that does not exist SHALL show the not-found page.
+The client SHALL be a set of pages behind a history router, with no page load between them: `/` (landing), `/locations`, `/explore/:areaId`, and `/explore` (the map with no area open, where a first import starts; an import that completes there opens its area's URL), and a not-found page for any other path. The explore URL SHALL carry the state that defines the view: the area in the path, and in the query `view` (`map`, the default, or `scene`), `scope` (the id of a traced boundary; absent for the whole area), and `at` (`<lat>,<lon>,<zoom>`, five decimals for latitude and longitude and two for zoom, the 2D map's camera). A query parameter that is invalid SHALL be ignored, not reported as an error. A change of area, scope, or view SHALL add a history entry, and a camera move SHALL only rewrite the current entry (debounced), so Back never steps through pans. The browser's Back and Forward SHALL restore the area, scope, and view of the entry. An old `#map` or `#scene` link on `/` SHALL lead to the explore URL of the area last opened in this browser, or to `/locations` when there is none. An explore URL for an area that does not exist SHALL show the not-found page. Leaving the explore page SHALL release its `window` and `document` listeners and close a running import's event stream, while the import itself continues on the server.
 
 #### Scenario: Pasting the URL in a new tab
 - **WHEN** a user copies `/explore/<id>?view=scene&scope=<boundary>&at=52.52970,13.40100,15.00` into a new tab
@@ -141,12 +169,16 @@ The client SHALL be a set of pages behind a history router, with no page load be
 - **WHEN** no area has been imported and a user chooses "Import a new place" on the landing or locations page
 - **THEN** the client opens `/explore` with the rectangle tool available, and once the import completes the URL becomes `/explore/<new area>`
 
+#### Scenario: Leaving during a staged import
+- **WHEN** a user leaves `/explore` while a staged import is streaming
+- **THEN** the event stream is closed, and the area appears in the list once the server finishes it
+
 #### Scenario: A legacy hash link
 - **WHEN** a user opens `/#scene` with an area remembered from an earlier visit
 - **THEN** the client replaces the URL with `/explore/<that area>?view=scene`
 
 ### Requirement: The client SHALL open on a landing page that explains the engine
-The client SHALL serve a landing page at `/` that says what the engine takes in (an OpenStreetMap rectangle of up to 1 km²), what it produces (streets with lanes and widths, buildable blocks, buildings, and a routable graph), and what it is for. It SHALL draw the pipeline (Overpass, ingestion, PostGIS domain, derivation, HTTP API, this client) as an interactive diagram in which hovering, focusing, or activating a stage shows what the stage produces and links to its documentation, and every stage SHALL be reachable by keyboard. It SHALL show the most recent completed import areas from `GET /import-areas` as cards that open the area, a link to the full locations page, and a primary action to import a new place. The explanation and the diagram SHALL render when the API is unreachable, and the locations block SHALL then show the error reporter's sentence. The layout SHALL fit down to a phone width.
+The client SHALL serve a landing page at `/` that says what the engine takes in (an OpenStreetMap rectangle of up to 1 km²), what it produces (streets with lanes and widths, buildable blocks, buildings at their source heights where the source has them, and a routable graph), and what it is for. It SHALL draw the pipeline (Overpass, ingestion, PostGIS domain, derivation, HTTP API, this client) as an interactive diagram in which hovering, focusing, or activating a stage shows what the stage produces and links to its documentation, and every stage SHALL be reachable by keyboard. It SHALL show the most recent completed import areas from `GET /import-areas` as cards that open the area, a link to the full locations page, and a primary action to import a new place. The explanation and the diagram SHALL render when the API is unreachable, and the locations block SHALL then show the error reporter's sentence. The layout SHALL fit down to a phone width.
 
 #### Scenario: Reading a stage
 - **WHEN** a user tabs to the "Derivation" stage of the diagram

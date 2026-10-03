@@ -73,7 +73,7 @@ export const STAGES: readonly Stage[] = [
     id: "client",
     title: "This client",
     caption: "2D map, 3D scene",
-    produces: ["A 2D map to choose a place and trace boundaries", "A low-poly 3D scene to fly over and walk through", "glTF export of the scene"],
+    produces: ["A 2D map to choose a place and trace boundaries", "A low-poly 3D scene to fly over and walk through, with buildings raised to their source heights (paler where the height is a default)", "glTF export of the scene"],
     docHref: `${DOCS}/client-features.md`,
     docLabel: "Client features",
   },

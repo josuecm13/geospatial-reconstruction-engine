@@ -16,10 +16,17 @@ STRATEGIES: dict[str, type[RoutingStrategy]] = {
 }
 
 
+def registered_strategy_names() -> list[str]:
+    """The registered strategy names, sorted. The strategy listing endpoint and
+    the `unknown_routing_strategy` error details both read this, so they can't
+    drift apart."""
+    return sorted(STRATEGIES)
+
+
 class UnknownRoutingStrategy(ValueError):
     def __init__(self, name: str):
         self.name = name
-        self.registered_names = sorted(STRATEGIES)
+        self.registered_names = registered_strategy_names()
         super().__init__(f"unknown routing strategy {name!r}; registered strategies: {self.registered_names}")
 
 

@@ -2,12 +2,15 @@ import * as THREE from "three";
 import type { BoundingBox, FeatureCollection, MapData, Projection } from "../api/types";
 import { metersPerDegree } from "../geo/localMeters";
 import { Animator } from "./buildAnimation";
-import { buildWorld, WORLD_GROUPS } from "./buildWorld";
-import { MATERIALS } from "./palette";
+import { buildWorld, groundPlane, WORLD_GROUPS } from "./buildWorld";
 import { toLocal } from "./projection";
 import type { RevealStep } from "./stagedBuild";
 
 const GROUND_MARGIN = 20;
+
+/** What an inner area adds to a staged build. Not its roads: the outer area's `roads` stage carries
+ *  the whole network across the rectangle, inner areas included. */
+export const INNER_AREA_LAYERS = ["area_features", "blocks", "buildings"] as const;
 const WAITING_LABEL = "Building the map…";
 const FETCHED_LABEL = "Building…";
 
@@ -21,7 +24,7 @@ export function bboxMeters(bbox: BoundingBox): { width: number; height: number }
 export interface StagedHandle {
   /** Queues a step. Steps play one after another, each once the one before has finished. */
   apply(step: RevealStep): void;
-  /** Shows an already imported inner area at once, fully built (its map-data, in its own projection). */
+  /** Shows an already imported inner area's features, blocks and buildings at once (its map-data, in its own projection). Its roads come from the `roads` stage. */
   addBuilt(data: MapData): void;
   /** No more steps are coming: `finished` resolves once those queued have played. */
   complete(): void;
@@ -63,11 +66,7 @@ function groundFor(bbox: BoundingBox, projection: Projection): THREE.Mesh {
   const b = toLocal(projection, [bbox.max_longitude, bbox.max_latitude]);
   const [minX, maxX] = [Math.min(a.x, b.x) - GROUND_MARGIN, Math.max(a.x, b.x) + GROUND_MARGIN];
   const [minZ, maxZ] = [Math.min(a.z, b.z) - GROUND_MARGIN, Math.max(a.z, b.z) + GROUND_MARGIN];
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(maxX - minX, maxZ - minZ), MATERIALS.ground);
-  ground.rotation.x = -Math.PI / 2;
-  ground.position.set((minX + maxX) / 2, 0, (minZ + maxZ) / 2);
-  ground.name = "ground:plane";
-  return ground;
+  return groundPlane(minX, maxX, minZ, maxZ);
 }
 
 const meshesOf = (objects: THREE.Object3D[]): THREE.Mesh[] => objects.filter((o): o is THREE.Mesh => (o as THREE.Mesh).isMesh);
@@ -186,8 +185,9 @@ export function createStagedScene(scene: THREE.Scene, container: HTMLElement): S
         addBuilt(data) {
           if (over || !projection) return;
           const offset = toLocal(projection, [data.projection.origin.longitude, data.projection.origin.latitude]);
-          const inner = buildWorld(data); // its own ground and the unreleased `generated` group stay behind
-          for (const name of ["area_features", "roads", "blocks", "buildings"] as const) {
+          const inner = buildWorld(data); // its own ground, roads and the unreleased `generated` group stay behind
+          inner.getObjectByName("roads")!.traverse((object) => (object as THREE.Mesh).geometry?.dispose());
+          for (const name of INNER_AREA_LAYERS) {
             for (const mesh of take(inner, name)) {
               mesh.position.x += offset.x;
               mesh.position.z += offset.z;

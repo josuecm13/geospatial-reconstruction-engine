@@ -205,3 +205,31 @@ def test_route_crosses_a_primary_link_between_two_roads(client):
 
     assert response.status_code == 200
     assert len(response.json()["segment_ids"]) == 3
+
+
+def test_routing_strategies_lists_the_registered_names_and_the_default(client):
+    response = client.get("/routing-strategies")
+
+    assert response.status_code == 200
+    assert response.json() == {"strategies": ["distance"], "default": "distance"}
+
+
+def test_strategy_listing_and_unknown_strategy_details_read_the_same_registry(client, monkeypatch):
+    from app.domain.routing_strategies import DistanceDijkstraStrategy
+    from app.routing import strategies
+
+    monkeypatch.setitem(strategies.STRATEGIES, "another", DistanceDijkstraStrategy)
+
+    listed = client.get("/routing-strategies").json()
+    assert listed == {"strategies": ["another", "distance"], "default": "distance"}
+
+    # The 422 is raised only after the area dependency passes, so this half
+    # needs a completed area.
+    area = _import_routing_fixture(client)
+    response = client.post(
+        f"/import-areas/{area['id']}/routes",
+        json=_route_body((10.0, -84.000), (10.0, -84.002), strategy="teleport"),
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["details"]["registered_strategies"] == listed["strategies"]

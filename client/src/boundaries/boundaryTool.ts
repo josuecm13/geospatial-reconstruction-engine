@@ -83,6 +83,11 @@ export class BoundaryTool {
     this.cancelTrace = mode === "vertices" ? this.traceVertices() : this.traceFreehand();
   }
 
+  /** Ends a trace in progress and removes its listeners, for when the page is left. */
+  dispose(): void {
+    this.stop();
+  }
+
   /** Abandons an unfinished trace, leaving any finished shape alone. */
   cancel(): void {
     if (!this.tracing) return;

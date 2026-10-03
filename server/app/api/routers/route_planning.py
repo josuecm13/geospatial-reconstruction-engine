@@ -1,5 +1,5 @@
-"""Route endpoint (design.md Decision 8): plans a route between two
-coordinates with a selectable, named strategy."""
+"""Route endpoints (design.md Decision 8): plans a route between two
+coordinates with a selectable, named strategy, and lists the strategies."""
 
 from __future__ import annotations
 
@@ -9,13 +9,18 @@ from sqlalchemy.orm import Session
 from app.api.dependencies import completed_import_area, get_session
 from app.api.errors import ApiError
 from app.api.mappers import route_out
-from app.api.schemas import RouteOut, RouteRequest
+from app.api.schemas import RouteOut, RouteRequest, RoutingStrategiesOut
 from app.domain.bounding_box import Coordinate, InvalidBoundingBox
 from app.domain.geometry import point_distance_meters
 from app.domain.import_area import ImportArea
 from app.persistence.repositories.road_graph import NavigableNodeRepository
 from app.routing.engine import RoutingEngine
-from app.routing.strategies import DEFAULT_STRATEGY_NAME, UnknownRoutingStrategy, resolve_strategy
+from app.routing.strategies import (
+    DEFAULT_STRATEGY_NAME,
+    UnknownRoutingStrategy,
+    registered_strategy_names,
+    resolve_strategy,
+)
 
 router = APIRouter(tags=["routes"])
 
@@ -25,6 +30,13 @@ def _as_coordinate(latitude: float, longitude: float) -> Coordinate:
         return Coordinate(latitude, longitude)
     except InvalidBoundingBox as exc:
         raise ApiError(422, "invalid_coordinate", str(exc)) from exc
+
+
+@router.get("/routing-strategies", response_model=RoutingStrategiesOut)
+def list_routing_strategies() -> RoutingStrategiesOut:
+    """The registered strategy names and the one used when a route request
+    names none. Global: it needs no import area."""
+    return RoutingStrategiesOut(strategies=registered_strategy_names(), default=DEFAULT_STRATEGY_NAME)
 
 
 @router.post("/import-areas/{import_area_id}/routes", response_model=RouteOut)

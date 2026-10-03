@@ -37,6 +37,8 @@ export class ImportPanel {
     recent: HTMLElement;
   };
   private busy = false;
+  /** Aborted when the page is left, to close a running import's event stream. */
+  private readonly leaving = new AbortController();
   /** The area and scope whose map data is on the map now. */
   private shown: { areaId: string; scope: Scope } | null = null;
   /** A camera move requested while the map was hidden (it has no size then); `shown()` plays it. */
@@ -93,6 +95,12 @@ export class ImportPanel {
     move?.();
   }
 
+  /** Closes a running import's event stream (the import itself carries on in the server) and releases the rectangle tool's listeners. */
+  dispose(): void {
+    this.leaving.abort();
+    this.tool.dispose();
+  }
+
   /** The rectangle on the map: the one being drawn, or the open area's. */
   get bbox(): BoundingBox | null {
     return this.tool.bbox;
@@ -125,11 +133,12 @@ export class ImportPanel {
     tick();
     const timer = window.setInterval(tick, 1000);
     try {
-      const area = this.staging ? await runStagedImport(this.api, this.staging, bbox) : await this.api.importArea(bbox);
+      const area = this.staging ? await runStagedImport(this.api, this.staging, bbox, this.leaving.signal) : await this.api.importArea(bbox);
       await this.open(area.id, { area });
       void this.refreshAreas();
       await this.afterImport(area.id);
     } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return; // the page was left
       this.showError(error);
     } finally {
       window.clearInterval(timer);

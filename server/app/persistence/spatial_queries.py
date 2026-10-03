@@ -1,8 +1,9 @@
 import uuid
+from collections.abc import Sequence
 
 from geoalchemy2 import Geography
-from sqlalchemy import cast, func, select
-from sqlalchemy.orm import Session
+from sqlalchemy import and_, cast, func, or_, select
+from sqlalchemy.orm import Session, aliased
 
 from app.domain.area_feature import AreaFeature
 from app.domain.bounding_box import BoundingBox, Coordinate
@@ -40,7 +41,13 @@ class InvalidSpatialQuery(ValueError):
 
 class SpatialQueryService:
     """Every query except the footprint area takes an optional `boundary_id`. When it is
-    set, only entities whose geometry intersects that traced boundary are considered."""
+    set, only entities whose geometry intersects that traced boundary are considered.
+
+    The feature-layer queries (POIs, buildings, area features, and the footprint area) also take
+    `composed_area_ids`: the completed inner areas the import area composes in map-data. They then
+    answer over the same rows map-data shows, each source id once, the area's own copy first. The
+    road network (nodes and segments) is stored whole in the outer area, so its queries never
+    compose."""
 
     def __init__(self, session: Session):
         self.session = session
@@ -53,45 +60,84 @@ class SpatialQueryService:
         )
 
     def pois_within_radius(
-        self, import_area_id: uuid.UUID, center: Coordinate, radius_meters: float, boundary_id: uuid.UUID | None = None
+        self,
+        import_area_id: uuid.UUID,
+        center: Coordinate,
+        radius_meters: float,
+        boundary_id: uuid.UUID | None = None,
+        composed_area_ids: Sequence[uuid.UUID] = (),
     ) -> list[PointOfInterest]:
         return self._within_radius(
-            PointOfInterestModel, import_area_id, center, radius_meters, PointOfInterestRepository._to_domain, boundary_id
+            PointOfInterestModel, import_area_id, center, radius_meters, PointOfInterestRepository._to_domain, boundary_id, composed_area_ids
         )
 
     def buildings_within_radius(
-        self, import_area_id: uuid.UUID, center: Coordinate, radius_meters: float, boundary_id: uuid.UUID | None = None
+        self,
+        import_area_id: uuid.UUID,
+        center: Coordinate,
+        radius_meters: float,
+        boundary_id: uuid.UUID | None = None,
+        composed_area_ids: Sequence[uuid.UUID] = (),
     ) -> list[Building]:
         return self._within_radius(
-            BuildingModel, import_area_id, center, radius_meters, BuildingRepository._to_domain, boundary_id
+            BuildingModel, import_area_id, center, radius_meters, BuildingRepository._to_domain, boundary_id, composed_area_ids
         )
 
     def area_features_within_radius(
-        self, import_area_id: uuid.UUID, center: Coordinate, radius_meters: float, boundary_id: uuid.UUID | None = None
+        self,
+        import_area_id: uuid.UUID,
+        center: Coordinate,
+        radius_meters: float,
+        boundary_id: uuid.UUID | None = None,
+        composed_area_ids: Sequence[uuid.UUID] = (),
     ) -> list[AreaFeature]:
         return self._within_radius(
-            AreaFeatureModel, import_area_id, center, radius_meters, AreaFeatureRepository._to_domain, boundary_id
+            AreaFeatureModel, import_area_id, center, radius_meters, AreaFeatureRepository._to_domain, boundary_id, composed_area_ids
         )
 
     def buildings_intersecting_bbox(
-        self, import_area_id: uuid.UUID, bbox: BoundingBox, boundary_id: uuid.UUID | None = None
+        self,
+        import_area_id: uuid.UUID,
+        bbox: BoundingBox,
+        boundary_id: uuid.UUID | None = None,
+        composed_area_ids: Sequence[uuid.UUID] = (),
     ) -> list[Building]:
-        return self._intersecting_bbox(BuildingModel, import_area_id, bbox, BuildingRepository._to_domain, boundary_id)
+        return self._intersecting_bbox(
+            BuildingModel, import_area_id, bbox, BuildingRepository._to_domain, boundary_id, composed_area_ids
+        )
 
     def buildings_contained_by_bbox(
-        self, import_area_id: uuid.UUID, bbox: BoundingBox, boundary_id: uuid.UUID | None = None
+        self,
+        import_area_id: uuid.UUID,
+        bbox: BoundingBox,
+        boundary_id: uuid.UUID | None = None,
+        composed_area_ids: Sequence[uuid.UUID] = (),
     ) -> list[Building]:
-        return self._contained_by_bbox(BuildingModel, import_area_id, bbox, BuildingRepository._to_domain, boundary_id)
+        return self._contained_by_bbox(
+            BuildingModel, import_area_id, bbox, BuildingRepository._to_domain, boundary_id, composed_area_ids
+        )
 
     def area_features_intersecting_bbox(
-        self, import_area_id: uuid.UUID, bbox: BoundingBox, boundary_id: uuid.UUID | None = None
+        self,
+        import_area_id: uuid.UUID,
+        bbox: BoundingBox,
+        boundary_id: uuid.UUID | None = None,
+        composed_area_ids: Sequence[uuid.UUID] = (),
     ) -> list[AreaFeature]:
-        return self._intersecting_bbox(AreaFeatureModel, import_area_id, bbox, AreaFeatureRepository._to_domain, boundary_id)
+        return self._intersecting_bbox(
+            AreaFeatureModel, import_area_id, bbox, AreaFeatureRepository._to_domain, boundary_id, composed_area_ids
+        )
 
     def area_features_contained_by_bbox(
-        self, import_area_id: uuid.UUID, bbox: BoundingBox, boundary_id: uuid.UUID | None = None
+        self,
+        import_area_id: uuid.UUID,
+        bbox: BoundingBox,
+        boundary_id: uuid.UUID | None = None,
+        composed_area_ids: Sequence[uuid.UUID] = (),
     ) -> list[AreaFeature]:
-        return self._contained_by_bbox(AreaFeatureModel, import_area_id, bbox, AreaFeatureRepository._to_domain, boundary_id)
+        return self._contained_by_bbox(
+            AreaFeatureModel, import_area_id, bbox, AreaFeatureRepository._to_domain, boundary_id, composed_area_ids
+        )
 
     def nodes_intersecting_bbox(
         self, import_area_id: uuid.UUID, bbox: BoundingBox, boundary_id: uuid.UUID | None = None
@@ -103,12 +149,16 @@ class SpatialQueryService:
     ) -> list[NavigableNode]:
         return self._contained_by_bbox(NavigableNodeModel, import_area_id, bbox, NavigableNodeRepository._to_domain, boundary_id)
 
-    def building_footprint_area_square_meters(self, import_area_id: uuid.UUID, building_id: uuid.UUID) -> float:
+    def building_footprint_area_square_meters(
+        self, import_area_id: uuid.UUID, building_id: uuid.UUID, composed_area_ids: Sequence[uuid.UUID] = ()
+    ) -> float:
+        """Answers for exactly the buildings map-data of the area returns: an inner area's copy
+        shadowed by the area's own (or an earlier inner area's) is not found."""
         self._require_import_area(import_area_id)
         area = self.session.execute(
             select(func.ST_Area(cast(BuildingModel.geom, Geography))).where(
                 BuildingModel.id == building_id,
-                BuildingModel.import_area_id == import_area_id,
+                self._owned(BuildingModel, [import_area_id, *composed_area_ids]),
             )
         ).scalar_one_or_none()
         if area is None:
@@ -151,42 +201,64 @@ class SpatialQueryService:
         ).scalar_one_or_none()
         return RoadSegmentRepository._to_domain(model) if model is not None else None
 
-    def _within_radius(self, model, import_area_id, center: Coordinate, radius_meters: float, to_domain, boundary_id):
+    def _within_radius(
+        self, model, import_area_id, center: Coordinate, radius_meters: float, to_domain, boundary_id, composed_area_ids=()
+    ):
         self._require_import_area(import_area_id)
         self._require_positive_radius(radius_meters)
         point = point_to_geom(center)
         rows = self.session.execute(
             select(model).where(
-                model.import_area_id == import_area_id,
+                self._owned(model, [import_area_id, *composed_area_ids]),
                 func.ST_DWithin(cast(model.geom, Geography), cast(point, Geography), radius_meters),
                 *self._scope(model.geom, import_area_id, boundary_id),
             )
         ).scalars().all()
         return [to_domain(row) for row in rows]
 
-    def _intersecting_bbox(self, model, import_area_id, bbox: BoundingBox, to_domain, boundary_id):
+    def _intersecting_bbox(self, model, import_area_id, bbox: BoundingBox, to_domain, boundary_id, composed_area_ids=()):
         self._require_import_area(import_area_id)
         bbox_geom = bbox_to_geom(bbox)
         rows = self.session.execute(
             select(model).where(
-                model.import_area_id == import_area_id,
+                self._owned(model, [import_area_id, *composed_area_ids]),
                 func.ST_Intersects(model.geom, bbox_geom),
                 *self._scope(model.geom, import_area_id, boundary_id),
             )
         ).scalars().all()
         return [to_domain(row) for row in rows]
 
-    def _contained_by_bbox(self, model, import_area_id, bbox: BoundingBox, to_domain, boundary_id):
+    def _contained_by_bbox(self, model, import_area_id, bbox: BoundingBox, to_domain, boundary_id, composed_area_ids=()):
         self._require_import_area(import_area_id)
         bbox_geom = bbox_to_geom(bbox)
         rows = self.session.execute(
             select(model).where(
-                model.import_area_id == import_area_id,
+                self._owned(model, [import_area_id, *composed_area_ids]),
                 func.ST_Contains(bbox_geom, model.geom),
                 *self._scope(model.geom, import_area_id, boundary_id),
             )
         ).scalars().all()
         return [to_domain(row) for row in rows]
+
+    @staticmethod
+    def _owned(model, owners: Sequence[uuid.UUID]):
+        """Rows of `model` that the composed layer of owners[0] shows: owned by one of `owners`, and
+        not shadowed by a row with the same source_id owned by an earlier owner (the same
+        precedence as `compose_by_source_id` in map-data). One owner is a plain ownership test."""
+        clauses = []
+        for index, owner in enumerate(owners):
+            clause = model.import_area_id == owner
+            earlier = owners[:index]
+            if earlier:
+                shadow = aliased(model)
+                shadowed = (
+                    select(shadow.id)
+                    .where(shadow.source_id == model.source_id, shadow.import_area_id.in_(earlier))
+                    .exists()
+                )
+                clause = and_(clause, ~shadowed)
+            clauses.append(clause)
+        return clauses[0] if len(clauses) == 1 else or_(*clauses)
 
     def _scope(self, geom_column, import_area_id: uuid.UUID, boundary_id: uuid.UUID | None) -> list:
         """The extra WHERE clauses for a boundary scope: none without one."""

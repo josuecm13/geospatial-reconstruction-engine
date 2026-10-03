@@ -19,7 +19,7 @@ from app.domain.poi import PointOfInterest
 from app.domain.rings import mean_vertex, ring_batches
 from app.domain.road_graph import NavigableNode, Road, RoadSegment, Street
 from app.domain.street_grouping import GroupableWay, group_ways_into_streets, street_id_for
-from app.domain.turn_movement import TurnMovement
+from app.domain.turn_movement import TurnMovement, turn_candidates
 from app.ingestion.osm_adapter import ImportRecords, OSMFixtureAdapter, OSMIngestionError, PayloadOutsideBoundingBox
 from app.ingestion.overpass import ensure_complete, with_way_nodes_from_geometry
 from app.persistence.block_derivation import BlockDerivationService
@@ -169,29 +169,37 @@ class OSMIngestionService:
         #    from a previous import and gets swept below.
         with self._step(area_id, "persist features"):
             node_ids = self._navigable_node_ids(records)
-            persisted_nodes = {
-                source_id: nodes.upsert(NavigableNode(None, area_id, source_id, records.nodes[source_id]))
-                for source_id in node_ids
-            }
+            # One batch per table, in foreign-key order: nodes, streets, roads, then segments.
+            persisted_nodes = nodes.upsert_many(
+                area_id, [NavigableNode(None, area_id, source_id, records.nodes[source_id]) for source_id in node_ids]
+            )
             touched_node_ids = {node.id for node in persisted_nodes.values()}
 
-            touched_street_ids: set = set()
-            touched_road_ids: set = set()
-            touched_segment_ids: set = set()
-            segments_by_way: dict[str, list[RoadSegment]] = {}
             street_by_way = self._persist_streets(streets, area_id, records)
-            touched_street_ids.update(street.id for street in street_by_way.values())
-            for source_road in records.roads:
-                street = street_by_way[source_road.source_id]
-                road = roads.upsert(
+            touched_street_ids = {street.id for street in street_by_way.values()}
+            persisted_roads = roads.upsert_many(
+                area_id,
+                [
                     Road(None, area_id, source_road.source_id, source_road.classification,
-                         tuple(records.nodes[node_id] for node_id in source_road.node_ids), street.id)
+                         tuple(records.nodes[node_id] for node_id in source_road.node_ids),
+                         street_by_way[source_road.source_id].id)
+                    for source_road in records.roads
+                ],
+            )
+            touched_road_ids = {road.id for road in persisted_roads.values()}
+            produced_by_way = {
+                source_road.source_id: self._segments_for_road(
+                    source_road, persisted_roads[source_road.source_id], persisted_nodes, records.nodes, node_ids
                 )
-                touched_road_ids.add(road.id)
-                produced = self._segments_for_road(source_road, road, persisted_nodes, records.nodes, node_ids)
-                persisted_segments = [segments.upsert(segment) for segment in produced]
-                segments_by_way[source_road.source_id] = persisted_segments
-                touched_segment_ids.update(segment.id for segment in persisted_segments)
+                for source_road in records.roads
+            }
+            persisted_segments = iter(segments.upsert_many(
+                segment for produced in produced_by_way.values() for segment in produced
+            ))
+            segments_by_way: dict[str, list[RoadSegment]] = {
+                source_id: [next(persisted_segments) for _ in produced] for source_id, produced in produced_by_way.items()
+            }
+            touched_segment_ids = {segment.id for way_segments in segments_by_way.values() for segment in way_segments}
 
             touched_building_ids, touched_poi_ids, touched_area_feature_ids = self._persist_features(area_id, records)
 
@@ -492,12 +500,13 @@ class OSMIngestionService:
                          tuple(records.nodes[node_id] for node_id in road.node_ids), road.one_way_direction)
             for road in records.roads
         ])
+        persisted = streets.upsert_many(
+            area_id,
+            [Street(street_id_for(area_id, group.key), area_id, group.key, group.name, group.classification) for group in groups],
+        )
         street_by_way: dict[str, Street] = {}
         for group in groups:
-            street = streets.upsert(
-                Street(street_id_for(area_id, group.key), area_id, group.key, group.name, group.classification)
-            )
-            street_by_way.update({source_id: street for source_id in group.way_source_ids})
+            street_by_way.update({source_id: persisted[group.key] for source_id in group.way_source_ids})
         return street_by_way
 
     @staticmethod
@@ -523,11 +532,9 @@ class OSMIngestionService:
         buildings = BuildingRepository(self.session)
         pois = PointOfInterestRepository(self.session)
         areas = AreaFeatureRepository(self.session)
-        touched_building_ids: set = set()
-        touched_poi_ids: set = set()
-        touched_area_feature_ids: set = set()
-        for feature in records.buildings:
-            persisted = buildings.upsert(
+        persisted_buildings = buildings.upsert_many(
+            area_id,
+            [
                 Building(
                     None,
                     area_id,
@@ -537,27 +544,54 @@ class OSMIngestionService:
                     height_meters=feature.height_meters,
                     levels=feature.levels,
                 )
-            )
-            touched_building_ids.add(persisted.id)
-        for poi in records.pois:
-            persisted = pois.upsert(PointOfInterest(None, area_id, poi.source_id, poi.category, poi.point, poi.name))
-            touched_poi_ids.add(persisted.id)
-        for feature in records.areas:
-            persisted = areas.upsert(
+                for feature in records.buildings
+            ],
+        )
+        persisted_pois = pois.upsert_many(
+            area_id,
+            [PointOfInterest(None, area_id, poi.source_id, poi.category, poi.point, poi.name) for poi in records.pois],
+        )
+        persisted_areas = areas.upsert_many(
+            area_id,
+            [
                 AreaFeature(None, area_id, feature.source_id, feature.category, tuple(records.nodes[node_id] for node_id in feature.node_ids))
-            )
-            touched_area_feature_ids.add(persisted.id)
-        return touched_building_ids, touched_poi_ids, touched_area_feature_ids
+                for feature in records.areas
+            ],
+        )
+        return (
+            {building.id for building in persisted_buildings.values()},
+            {poi.id for poi in persisted_pois.values()},
+            {area_feature.id for area_feature in persisted_areas.values()},
+        )
 
     def _persist_turns(self, records, segments_by_way, persisted_nodes) -> list[str]:
         """Persists turn candidates and applies restrictions; returns the source ids of
         restrictions that don't resolve to exactly one legal turn, which are skipped."""
         repository = TurnMovementRepository(self.session)
         skipped: list[str] = []
+        # After the sweep the area's segments are exactly those in segments_by_way, so the
+        # candidates at each node come from memory: no query per node.
+        incoming_by_node: dict = {}
+        outgoing_by_node: dict = {}
+        seen_segment_ids: set = set()
+        for way_segments in segments_by_way.values():
+            for segment in way_segments:
+                if segment.id in seen_segment_ids:
+                    continue
+                seen_segment_ids.add(segment.id)
+                incoming_by_node.setdefault(segment.to_node_id, []).append(segment)
+                outgoing_by_node.setdefault(segment.from_node_id, []).append(segment)
+        # Movements by node, then by (incoming, outgoing) pair. Restrictions are applied to this
+        # in order, so a later one builds on an earlier one at the same intersection.
+        movements_by_node: dict = {}
         for node in persisted_nodes.values():
-            candidates = repository.generate_candidates(node.id)
+            candidates = turn_candidates(
+                node.id, incoming_by_node.get(node.id, ()), outgoing_by_node.get(node.id, ())
+            )
             if candidates:
-                repository.persist_candidates(candidates)
+                movements_by_node[node.id] = {
+                    (item.incoming_segment_id, item.outgoing_segment_id): item for item in candidates
+                }
         for restriction in records.restrictions:
             via_id = persisted_nodes[restriction.via_node_id].id
             incoming = [segment for segment in segments_by_way[restriction.from_way_id] if segment.to_node_id == via_id]
@@ -565,12 +599,13 @@ class OSMIngestionService:
             if len(incoming) != 1 or len(outgoing) != 1:
                 skipped.append(restriction.source_id)
                 continue
-            # Read the currently persisted state, not fresh defaults: a second
+            # Build on the node's current state, not fresh defaults: a second
             # restriction at the same intersection must build on what an earlier
-            # one already persisted, or it would reset it back to allowed.
-            candidates = repository.list_for_intersection(via_id)
+            # one already applied, or it would reset it back to allowed.
+            node_movements = movements_by_node.get(via_id, {})
+            candidates = list(node_movements.values())
             target = (incoming[0].id, outgoing[0].id)
-            if not any((item.incoming_segment_id, item.outgoing_segment_id) == target for item in candidates):
+            if target not in node_movements:
                 skipped.append(restriction.source_id)
                 continue
             adjusted = []
@@ -585,5 +620,10 @@ class OSMIngestionService:
                     adjusted.append(candidate)
             if not restriction.kind.value.startswith("only_"):
                 adjusted = [replace(candidate, allowed=False, restriction_kind=restriction.kind) if (candidate.incoming_segment_id, candidate.outgoing_segment_id) == target else candidate for candidate in adjusted]
-            repository.persist_candidates(adjusted)
+            movements_by_node[via_id] = {
+                (item.incoming_segment_id, item.outgoing_segment_id): item for item in adjusted
+            }
+        repository.persist_many(
+            movement for node_movements in movements_by_node.values() for movement in node_movements.values()
+        )
         return skipped

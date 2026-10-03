@@ -9,8 +9,22 @@ import { dedupeTwins, roadPolygon } from "./roadGeometry";
 /** The layer groups of a world, in order. `generated` is reserved for Milestone 11. */
 export const WORLD_GROUPS = ["ground", "area_features", "roads", "blocks", "buildings", "generated"] as const;
 
-/** Heights above the ground (y = 0) for flat layers, so they don't z-fight. */
+/** Heights above the ground (y = 0) for flat layers. The scene view draws them by LAYER_ORDER instead; this
+ * physical separation stays because glTF has no render order, so other viewers of the export need it. */
 export const LAYER_Y = { area_features: 0.02, blocks: 0.03, roads: 0.05 } as const;
+
+/** Draw order of the ground-level layers, lowest first. They write no depth (palette.ts), so this order alone decides what shows on top. */
+export const LAYER_ORDER = { ground: -50, green: -40, water: -39, roadNarrow: -30, roadNormal: -29, roadWide: -28, blocks: -20 } as const;
+
+/** The ground plane over the given local extent. Shared by buildWorld and the staged build. */
+export function groundPlane(minX: number, maxX: number, minZ: number, maxZ: number): THREE.Mesh {
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(maxX - minX, maxZ - minZ), MATERIALS.ground);
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.set((minX + maxX) / 2, 0, (minZ + maxZ) / 2);
+  ground.name = "ground:plane";
+  ground.renderOrder = LAYER_ORDER.ground;
+  return ground;
+}
 
 const GROUND_MARGIN = 20;
 const DEFAULT_HALF_EXTENT = 100;
@@ -66,6 +80,7 @@ export function buildWorld(data: MapData): THREE.Group {
     const material = feature.properties.kind === "water" ? MATERIALS.water : MATERIALS.green;
     const mesh = entity("area_feature", feature, flatGeometry(polygons.map(polygonShape)), material);
     mesh.position.y = LAYER_Y.area_features;
+    mesh.renderOrder = feature.properties.kind === "water" ? LAYER_ORDER.water : LAYER_ORDER.green;
     groups.area_features.add(mesh);
   }
 
@@ -79,6 +94,8 @@ export function buildWorld(data: MapData): THREE.Group {
     roadOutlines.push(...outlines);
     const mesh = entity("road", feature, flatGeometry(outlines.map(footprintShape)), roadMaterial(feature.properties.lane_type));
     mesh.position.y = LAYER_Y.roads;
+    const laneType = feature.properties.lane_type;
+    mesh.renderOrder = laneType === "wide" ? LAYER_ORDER.roadWide : laneType === "narrow" ? LAYER_ORDER.roadNarrow : LAYER_ORDER.roadNormal;
     groups.roads.add(mesh);
   }
 
@@ -87,6 +104,7 @@ export function buildWorld(data: MapData): THREE.Group {
     if (!polygons.length) continue;
     const mesh = entity("block", feature, flatGeometry(polygons.map(polygonShape)), MATERIALS.buildable);
     mesh.position.y = LAYER_Y.blocks;
+    mesh.renderOrder = LAYER_ORDER.blocks;
     groups.blocks.add(mesh);
   }
   // Hidden by default; the scene view's "Show buildable area" checkbox toggles it.
@@ -112,10 +130,6 @@ export function buildWorld(data: MapData): THREE.Group {
   const [minX, maxX, minZ, maxZ] = extent.isEmpty()
     ? [-DEFAULT_HALF_EXTENT, DEFAULT_HALF_EXTENT, -DEFAULT_HALF_EXTENT, DEFAULT_HALF_EXTENT]
     : [extent.min.x - GROUND_MARGIN, extent.max.x + GROUND_MARGIN, extent.min.y - GROUND_MARGIN, extent.max.y + GROUND_MARGIN];
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(maxX - minX, maxZ - minZ), MATERIALS.ground);
-  ground.rotation.x = -Math.PI / 2;
-  ground.position.set((minX + maxX) / 2, 0, (minZ + maxZ) / 2);
-  ground.name = "ground:plane";
-  groups.ground.add(ground);
+  groups.ground.add(groundPlane(minX, maxX, minZ, maxZ));
   return world;
 }

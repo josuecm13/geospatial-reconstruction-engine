@@ -1,6 +1,6 @@
 """An import whose rectangle contains a completed import area skips what that inner area holds
 (its buildings, POIs, area features, and interior blocks), keeps the whole road network, and
-composes the inner area's features back in on map-data."""
+composes the inner area's features back in on map-data and in the feature-layer spatial queries."""
 
 import json
 import math
@@ -12,13 +12,16 @@ from sqlalchemy import select
 
 from app.api.dependencies import get_import_jobs, get_job_session_scope
 from app.ingestion.jobs import ImportJobRegistry
-from app.persistence.models import AreaFeatureModel, BuildingModel, PointOfInterestModel
+from app.persistence.models import AreaFeatureModel, BuildingModel, NavigableNodeModel, PointOfInterestModel
 
 # A 4 x 4 grid of residential roads, 0.001° apart, making 3 x 3 road-bounded blocks.
 LAT0, LON0, STEP = 10.100, -84.200, 0.001
 OUTER_BBOX = {"min_latitude": 10.0995, "min_longitude": -84.2005, "max_latitude": 10.1035, "max_longitude": -84.1965}
 # Covers the centre block (rows 1-2, columns 1-2) and cuts through the eight around it.
 INNER_BBOX = {"min_latitude": 10.1008, "min_longitude": -84.1992, "max_latitude": 10.1022, "max_longitude": -84.1978}
+# Between the two: covers the inner box (and so the centre block whole), lies inside the outer one,
+# and meets only the grid's rows and columns 1-2, like the inner box.
+MIDDLE_BBOX = {"min_latitude": 10.1003, "min_longitude": -84.1997, "max_latitude": 10.1027, "max_longitude": -84.1973}
 # Contains the inner box but reaches past the outer one's east edge: only partly overlaps it.
 PARTIAL_BBOX = {"min_latitude": 10.1008, "min_longitude": -84.1992, "max_latitude": 10.1022, "max_longitude": -84.1950}
 
@@ -236,6 +239,215 @@ def test_a_partly_overlapping_area_is_imported_in_full(client):
     body = client.get(f"/import-areas/{outer['id']}/map-data").json()
     assert body["scope"]["composed_area_ids"] == []
     assert partial["id"] not in {feature["properties"]["import_area_id"] for feature in body["buildings"]["features"]}
+
+
+def _import_middle(client) -> dict:
+    return _import(client, MIDDLE_BBOX, _payload(inner_only=True))
+
+
+def _centre_blocks(body) -> list[dict]:
+    """The blocks lying wholly inside the inner box: the grid's centre block."""
+    return [block for block in body["blocks"]["features"] if all(_inside(INNER_BBOX, *point) for point in _ring(block))]
+
+
+def _assert_each_block_once(body, centre_owner) -> None:
+    blocks = body["blocks"]["features"]
+    assert len(blocks) == 9
+    assert len({json.dumps(sorted(map(tuple, _ring(block)))) for block in blocks}) == 9, "no two blocks share a shape"
+    centre = _centre_blocks(body)
+    assert len(centre) == 1
+    assert centre[0]["properties"]["import_area_id"] == centre_owner
+
+
+def test_a_middle_area_imported_before_its_inner_area_composes_each_block_once(client):
+    middle = _import_middle(client)
+    inner = _import_inner(client)
+    outer = _import_outer(client)
+
+    body = client.get(f"/import-areas/{outer['id']}/map-data").json()
+
+    assert body["scope"]["composed_area_ids"] == [middle["id"], inner["id"]]
+    _assert_each_block_once(body, centre_owner=middle["id"])
+
+
+def test_a_middle_area_then_the_outer_then_the_inner_composes_each_block_once(client):
+    middle = _import_middle(client)
+    outer = _import_outer(client)
+    inner = _import_inner(client)
+
+    body = client.get(f"/import-areas/{outer['id']}/map-data").json()
+
+    assert body["scope"]["composed_area_ids"] == [middle["id"], inner["id"]]
+    _assert_each_block_once(body, centre_owner=middle["id"])
+
+
+def test_two_level_nesting_composes_each_block_once_after_reimporting_the_middle(client):
+    middle = _import_middle(client)
+    inner = _import_inner(client)
+    outer = _import_outer(client)
+
+    again = _import_middle(client)
+
+    assert again["id"] == middle["id"]
+    body = client.get(f"/import-areas/{outer['id']}/map-data").json()
+    # The re-imported middle area skips the inner area's faces, so the inner copy is the only one.
+    _assert_each_block_once(body, centre_owner=inner["id"])
+
+
+def test_two_level_nesting_imported_outside_in_composes_each_block_once(client):
+    """Passed before the multi-level rule too: the outer area, imported first, holds every block."""
+    outer = _import_outer(client)
+    _import_middle(client)
+    _import_inner(client)
+
+    body = client.get(f"/import-areas/{outer['id']}/map-data").json()
+
+    _assert_each_block_once(body, centre_owner=outer["id"])
+
+
+def test_a_boundary_scope_over_two_level_nesting_returns_the_centre_block_once(client):
+    middle = _import_middle(client)
+    _import_inner(client)
+    outer = _import_outer(client)
+    ring = [[-84.19895, 10.1011], [-84.1981, 10.1011], [-84.1981, 10.1019], [-84.19895, 10.1019], [-84.19895, 10.1011]]
+    boundary = client.post(
+        f"/import-areas/{outer['id']}/boundaries", json={"name": "centre", "geometry": {"type": "Polygon", "coordinates": [ring]}}
+    )
+    assert boundary.status_code == 201, boundary.text
+
+    body = client.get(f"/import-areas/{outer['id']}/map-data", params={"boundary_id": boundary.json()["id"]}).json()
+
+    blocks = body["blocks"]["features"]
+    assert len(blocks) == 1
+    assert blocks[0]["properties"]["import_area_id"] == middle["id"]
+
+
+def _nearby(client, area_id, latitude, longitude, radius_meters, kind, **params) -> list[dict]:
+    response = client.get(
+        f"/import-areas/{area_id}/nearby",
+        params={"latitude": latitude, "longitude": longitude, "radius_meters": radius_meters, "kind": kind, **params},
+    )
+    assert response.status_code == 200, response.text
+    return response.json()["results"]
+
+
+def _within_inner_bbox(client, area_id, kind, mode) -> list[dict]:
+    response = client.get(f"/import-areas/{area_id}/within-bbox", params={**INNER_BBOX, "kind": kind, "mode": mode})
+    assert response.status_code == 200, response.text
+    return response.json()["results"]
+
+
+def _building_id(db_session, area_id, source_id):
+    return db_session.scalar(
+        select(BuildingModel.id).where(BuildingModel.import_area_id == area_id, BuildingModel.source_id == source_id)
+    )
+
+
+def test_nearby_on_the_outer_area_finds_the_inner_areas_building(client, db_session):
+    inner = _import_inner(client)
+    outer = _import_outer(client)
+
+    results = _nearby(client, outer["id"], 10.1014, -84.1986, 15, "building")
+
+    assert _source_ids(db_session, BuildingModel, results) == [INNER_BUILDING]
+    assert results[0]["properties"]["import_area_id"] == inner["id"]
+
+
+def test_nearby_returns_a_shared_building_once_as_the_outer_copy(client, db_session):
+    _import_inner(client)
+    outer = _import_outer(client)
+
+    # 60 m from between the inner and straddling buildings reaches both, and not the outer one.
+    results = _nearby(client, outer["id"], 10.1011, -84.1985, 60, "building")
+
+    assert _source_ids(db_session, BuildingModel, results) == [INNER_BUILDING, STRADDLING_BUILDING]
+    assert len(results) == 2, "no source id appears twice"
+    straddling = _building_id(db_session, outer["id"], STRADDLING_BUILDING)
+    owners = {feature["id"]: feature["properties"]["import_area_id"] for feature in results}
+    assert owners[str(straddling)] == outer["id"]
+
+
+def test_nearby_on_the_outer_area_finds_the_inner_areas_poi_and_park(client, db_session):
+    inner = _import_inner(client)
+    outer = _import_outer(client)
+
+    pois = _nearby(client, outer["id"], 10.1017, -84.1983, 10, "poi")
+    parks = _nearby(client, outer["id"], 10.1017, -84.1988, 10, "area_feature")
+
+    assert _source_ids(db_session, PointOfInterestModel, pois) == [INNER_POI]
+    assert pois[0]["properties"]["import_area_id"] == inner["id"]
+    assert _source_ids(db_session, AreaFeatureModel, parks) == [INNER_PARK]
+    assert parks[0]["properties"]["import_area_id"] == inner["id"]
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected"),
+    [("intersects", [INNER_BUILDING, STRADDLING_BUILDING]), ("contains", [INNER_BUILDING])],
+)
+def test_within_bbox_on_the_outer_area_composes_the_inner_areas_buildings(client, db_session, mode, expected):
+    _import_inner(client)
+    outer = _import_outer(client)
+
+    results = _within_inner_bbox(client, outer["id"], "building", mode)
+
+    assert _source_ids(db_session, BuildingModel, results) == expected
+    assert len(results) == len(expected), "no source id appears twice"
+
+
+def test_within_bbox_nodes_stay_the_outer_areas_own(client, db_session):
+    _import_inner(client)
+    outer = _import_outer(client)
+
+    results = _within_inner_bbox(client, outer["id"], "node", "intersects")
+
+    assert results, "the outer area's network crosses the inner box"
+    owners = db_session.scalars(
+        select(NavigableNodeModel.import_area_id).where(NavigableNodeModel.id.in_([node["id"] for node in results]))
+    ).all()
+    assert {str(owner) for owner in owners} == {outer["id"]}, "the road network is never composed"
+
+
+def test_footprint_area_on_the_outer_area_answers_for_exactly_the_buildings_map_data_returns(client, db_session):
+    inner = _import_inner(client)
+    outer = _import_outer(client)
+
+    def footprint(building_id):
+        return client.get(f"/import-areas/{outer['id']}/buildings/{building_id}/footprint-area")
+
+    inner_building = footprint(_building_id(db_session, inner["id"], INNER_BUILDING))
+    assert inner_building.status_code == 200, inner_building.text
+    assert inner_building.json()["area_square_meters"] > 0
+    assert footprint(_building_id(db_session, outer["id"], STRADDLING_BUILDING)).status_code == 200
+    # The inner area holds its own copy of the straddling building; map-data shows the outer copy.
+    shadowed = footprint(_building_id(db_session, inner["id"], STRADDLING_BUILDING))
+    assert shadowed.status_code == 404
+    assert shadowed.json()["error"]["code"] == "building_not_found"
+
+
+def test_a_boundary_scoped_spatial_query_composes_the_inner_area(client, db_session):
+    inner = _import_inner(client)
+    outer = _import_outer(client)
+    ring = [[-84.19895, 10.1011], [-84.1981, 10.1011], [-84.1981, 10.1019], [-84.19895, 10.1019], [-84.19895, 10.1011]]
+    boundary = client.post(
+        f"/import-areas/{outer['id']}/boundaries", json={"name": "centre", "geometry": {"type": "Polygon", "coordinates": [ring]}}
+    )
+    assert boundary.status_code == 201, boundary.text
+
+    # Without the boundary this radius also reaches the straddling building, which lies outside it.
+    results = _nearby(client, outer["id"], 10.1011, -84.1985, 60, "building", boundary_id=boundary.json()["id"])
+
+    assert _source_ids(db_session, BuildingModel, results) == [INNER_BUILDING]
+    assert results[0]["properties"]["import_area_id"] == inner["id"]
+
+
+def test_spatial_queries_on_the_inner_area_are_its_own(client, db_session):
+    inner = _import_inner(client)
+    _import_outer(client)
+
+    results = _nearby(client, inner["id"], 10.1011, -84.1985, 60, "building")
+
+    assert _source_ids(db_session, BuildingModel, results) == [INNER_BUILDING, STRADDLING_BUILDING]
+    assert {feature["properties"]["import_area_id"] for feature in results} == {inner["id"]}
 
 
 class _InlineExecutor(Executor):

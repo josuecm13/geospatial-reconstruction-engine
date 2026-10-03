@@ -11,6 +11,7 @@ const CLICKABLE = ["engine-area-features", "engine-roads", "engine-buildings", "
 
 export class MapDataLayers {
   private readonly popup = new maplibregl.Popup({ closeButton: true, maxWidth: "320px" });
+  private popupsEnabled = true;
 
   constructor(private readonly map: maplibregl.Map) {
     for (const name of LAYERS) map.addSource(sourceId(name), { type: "geojson", data: { type: "FeatureCollection", features: [] } });
@@ -55,9 +56,17 @@ export class MapDataLayers {
     });
     for (const id of CLICKABLE) {
       map.on("click", id, (event) => this.describe(event));
-      map.on("mouseenter", id, () => (map.getCanvas().style.cursor = "pointer"));
+      map.on("mouseenter", id, () => {
+        if (this.popupsEnabled) map.getCanvas().style.cursor = "pointer";
+      });
       map.on("mouseleave", id, () => (map.getCanvas().style.cursor = ""));
     }
+  }
+
+  /** Turned off while a boundary is being traced, so a click places a vertex and nothing else; closes an open popup. */
+  setPopupsEnabled(enabled: boolean): void {
+    this.popupsEnabled = enabled;
+    if (!enabled) this.popup.remove();
   }
 
   show(data: MapData): void {
@@ -69,6 +78,7 @@ export class MapDataLayers {
   }
 
   private describe(event: maplibregl.MapLayerMouseEvent): void {
+    if (!this.popupsEnabled) return;
     const feature = event.features?.[0];
     if (!feature) return;
     // Only the top-most clicked layer describes itself.

@@ -30,7 +30,7 @@ const FACTS: readonly [string, string][] = [
   ["What goes in", "A rectangle of up to 1 km² on the OpenStreetMap map, fetched live from Overpass."],
   [
     "What comes out",
-    "A city model the engine owns: streets with lanes and widths, buildable blocks, buildings, and a road graph that can be routed over.",
+    "A city model the engine owns: streets with lanes and widths, buildable blocks, buildings at the height OpenStreetMap gives them, and a road graph that can be routed over.",
   ],
   ["What it is for", "Games, simulation, and art: places you can query, fly over, walk through, and export as glTF."],
 ];

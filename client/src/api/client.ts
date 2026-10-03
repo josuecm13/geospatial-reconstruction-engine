@@ -13,6 +13,7 @@ import type {
   ImportStatus,
   MapData,
   Route,
+  RoutingStrategies,
 } from "./types";
 
 /** A non-2xx API response, carrying the contract's machine-readable `code`. Switch on `code`, not the status. */
@@ -27,9 +28,6 @@ export class ApiError extends Error {
     this.name = "ApiError";
   }
 }
-
-/** A strategy name no server registers, sent to make it answer with the list of those it has. */
-export const PROBE_STRATEGY = "__list_strategies__";
 
 export type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -108,30 +106,22 @@ export class ApiClient {
     });
   }
 
-  private strategies = new Map<string, string[]>();
+  private strategies: RoutingStrategies | null = null;
 
   /**
-   * The routing strategies the server has registered, for the route picker. There is no endpoint
-   * that lists them: the only source is `details.registered_strategies` on the 422
-   * `unknown_routing_strategy` error, so this sends a route request naming a strategy that can't
-   * exist (the strategy is resolved before any routing happens) and reads the list off the error.
-   * Cached per area for the session. If anything else goes wrong it returns `[]`, which the picker
-   * treats as "server default only" (no `strategy` field is sent).
+   * The routing strategies the server has registered and its default, for the route picker. The
+   * registry is global, so the first answer is cached for the client's lifetime. Any failure gives
+   * `null` and isn't cached, so a later call asks again; the picker treats `null` as "server
+   * default only" (no `strategy` field is sent).
    */
-  async routingStrategies(areaId: string): Promise<string[]> {
-    const cached = this.strategies.get(areaId);
-    if (cached) return cached;
-    let names: string[] = [];
+  async routingStrategies(): Promise<RoutingStrategies | null> {
+    if (this.strategies) return this.strategies;
     try {
-      const { bbox } = await this.getImportArea(areaId);
-      const centre = { latitude: (bbox.min_latitude + bbox.max_latitude) / 2, longitude: (bbox.min_longitude + bbox.max_longitude) / 2 };
-      await this.route(areaId, centre, centre, PROBE_STRATEGY);
-    } catch (error) {
-      const listed = error instanceof ApiError && error.code === "unknown_routing_strategy" ? error.details?.registered_strategies : null;
-      if (Array.isArray(listed)) names = listed.map(String);
+      this.strategies = await this.request<RoutingStrategies>("GET", "/routing-strategies");
+    } catch {
+      return null;
     }
-    if (names.length) this.strategies.set(areaId, names);
-    return names;
+    return this.strategies;
   }
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {

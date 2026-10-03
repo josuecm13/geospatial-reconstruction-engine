@@ -40,6 +40,8 @@ export class BoundaryPanel {
     private readonly selection: SelectionStore,
     /** The rectangle to precheck a traced shape against: the open area's, or the one being drawn. */
     private readonly bounds: () => BoundingBox | null,
+    /** Told on every start, finish and cancel of a trace, so other layers can step aside while it runs. */
+    private readonly onTracingChange: (tracing: boolean) => void = () => {},
   ) {
     container.innerHTML = `
       <h2>Boundaries</h2>
@@ -90,6 +92,11 @@ export class BoundaryPanel {
     this.renderName();
     this.render();
     void this.refresh();
+  }
+
+  /** Ends a trace in progress and releases the tool's listeners, for when the page is left. Run it before the map is removed. */
+  dispose(): void {
+    this.tool.dispose();
   }
 
   /**
@@ -177,6 +184,7 @@ export class BoundaryPanel {
   private traceChanged(): void {
     const tracing = this.tool.isTracing;
     const shape = this.tool.shape;
+    this.onTracingChange(tracing);
     this.el.trace.textContent = tracing ? "Cancel tracing (Esc)" : shape ? "Trace again" : "Trace boundary";
     this.el.mode.disabled = tracing;
     this.el.save.disabled = !shape || this.busy || !this.selection.get().areaId;

@@ -44,6 +44,14 @@ The API SHALL accept a strategy name from a fixed set of registered strategies, 
 - **WHEN** a client requests a route with a strategy name that is not registered
 - **THEN** the response is a 422 error with code `unknown_routing_strategy` whose details list the registered strategy names
 
+### Requirement: The API SHALL list the registered routing strategies
+`GET /routing-strategies` SHALL return the registered strategy names, sorted, and the default used when a route request names none. It SHALL need no import area, and its names SHALL be the same ones an `unknown_routing_strategy` error lists.
+
+#### Scenario: Listing the strategies
+- **WHEN** a client requests `GET /routing-strategies`
+- **THEN** the response holds every name `POST /import-areas/{id}/routes` accepts and the default `distance`
+- **AND** the same names appear in an `unknown_routing_strategy` error's `details.registered_strategies`
+
 ### Requirement: The API SHALL report unroutable requests distinctly
 The API SHALL distinguish a request that cannot be snapped onto the road network from one whose snapped endpoints are not connected by any legal path.
 
