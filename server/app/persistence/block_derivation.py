@@ -72,28 +72,30 @@ class BlockDerivationService:
         candidate_rows = self.session.execute(
             text(
                 """
+                -- MATERIALIZED: inlined, the planner re-runs each buffered union once per face
+                -- in its nested loops, which took 143 s instead of 3 s on a 1 km² city import.
                 WITH area AS (
                     SELECT bbox FROM import_areas WHERE id = :import_area_id
                 ),
-                segments AS (
+                segments AS MATERIALIZED (
                     SELECT rs.geom
                     FROM road_segments rs
                     JOIN roads r ON r.id = rs.road_id
                     WHERE r.import_area_id = :import_area_id
                 ),
-                near_roads AS (
+                near_roads AS MATERIALIZED (
                     SELECT ST_Buffer(ST_Union(geom), :tolerance) AS geom FROM segments
                 ),
-                near_crossing_roads AS (
+                near_crossing_roads AS MATERIALIZED (
                     SELECT ST_Buffer(ST_Union(segments.geom), :tolerance) AS geom
                     FROM segments, area
                     WHERE NOT ST_CoveredBy(segments.geom, area.bbox)
                 ),
-                faces AS (
+                faces AS MATERIALIZED (
                     SELECT (ST_Dump(ST_Polygonize(ARRAY[ST_Node(ST_Union(geom))]))).geom AS geom
                     FROM (SELECT geom FROM segments UNION ALL SELECT ST_ExteriorRing(bbox) FROM area) AS lines
                 ),
-                candidates AS (
+                candidates AS MATERIALIZED (
                     -- Faces come from roads and the box's ring, so any stretch of a face's
                     -- exterior that isn't along a road is along the box: the face is clipped.
                     SELECT faces.geom,
