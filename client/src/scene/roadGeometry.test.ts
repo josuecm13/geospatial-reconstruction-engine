@@ -23,7 +23,8 @@ describe("roadPolygon", () => {
 
   it("bevels a very sharp turn instead of spiking", () => {
     const outline = roadPolygon([{ x: 0, z: 0 }, { x: 10, z: 0 }, { x: 0, z: 0.5 }], 2);
-    for (const p of outline) expect(Math.hypot(p.x - 10, p.z)).toBeLessThan(10);
+    // A miter here would reach about 40 m past the apex at x = 10; a bevel stays within half the width.
+    for (const p of outline) expect(p.x).toBeLessThanOrEqual(10 + 1 + 1e-9);
     expect(outline.length).toBeGreaterThan(6);
   });
 
