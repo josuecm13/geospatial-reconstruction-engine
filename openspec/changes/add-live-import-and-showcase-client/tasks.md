@@ -24,7 +24,7 @@
 - [x] 1.15 #66 [client] Explore the scene by flying and walking
 - [ ] 1.16 #67 [client] Staged build animation on import
 - [x] 1.17 #68 [client] Show a route between two points in the scene
-- [ ] 1.18 #69 [client] Export the scene as glTF
+- [x] 1.18 #69 [client] Export the scene as glTF
 - [ ] 1.18a #101 [client] Pages and URL state: landing, locations, and explore routes
 - [ ] 1.18b #102 [client] Landing page that explains the project and its architecture
 - [ ] 1.18c #103 [client] Locations gallery with previews and an animated fly-to on open

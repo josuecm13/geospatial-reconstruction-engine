@@ -140,6 +140,10 @@ Ideas, not commitments. Once one is chosen, it becomes an issue in the milestone
   in its corner, or the `V` key, drops the camera to eye height (1.7 m) on the road nearest the
   centre, facing north; click the canvas to look around, WASD or the arrows to move (Shift runs),
   Esc releases the mouse. Building footprints stop the walker (`scene/collision.ts`, `scene/cameraModes.ts`).
+- **glTF export** (#69, shipped): a "Download glTF" button in the scene's corner saves the world as a
+  binary `.glb` (`gre-<scope type>-<id>.glb`). Nodes are named `<layer>:<id>`; the root's extras carry
+  the scope, projection origin, and axes, and the asset copyright is the OpenStreetMap attribution.
+  Hidden layers (buildable area, unless shown) are left out (`scene/exportGltf.ts`, `scene/exportButton.ts`).
 - **Generation playground** (M11): change the seed or density and watch the block repopulate.
   Pin a seed you like.
 - **Export panel**: pick the scope, mode (filter / clip), and layers, and download GeoJSON with

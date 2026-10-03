@@ -58,4 +58,24 @@ Brief 06: the World contract. The `world` group already has `<layer>:<id>` mesh 
 
 ## Outcome
 
+Added `scene/exportGltf.ts` (`exportWorld`, `glbFileName`, `downloadGlb`), `scene/exportButton.ts` (the corner
+button; `setWorld`, and `setBusy` for brief 08 to call while a staged build runs, since 08 is not on the branch
+yet), the `gltf-validator` dev dependency with a small `src/gltf-validator.d.ts` (the package has no types), a style
+block, and three lines in `sceneView.ts`. Tests: `exportGltf.test.ts` (jsdom; validator reports zero errors, node
+names, root extras, asset copyright, only-the-world, userData restored, file name).
+
+Decisions:
+- The copyright uses `GLTFExporter`'s own `copyright` option (three 0.186 writes `asset.copyright` from it), so no
+  plugin hook is needed.
+- Per-mesh `userData.properties` is always stripped for the export (only `layer` and `id` stay), and the world's
+  `footprints` / `roadOutlines` are not exported either. The export swaps `userData` and restores it in a `finally`.
+  I could not size a real area without running anything, so this was decided on principle (the properties duplicate the
+  API payload and would be repeated per node), not measured.
+- The button is placed at top 48 px / right 84 px, left of the Walk button; the export failure shows on the button
+  ("Export failed", message in its title).
+- Not run locally (no test suites); only `tsc --noEmit` is clean. Guards not mutation-checked. "Opens in Blender"
+  is for a human to check; it belongs as a checkbox in the PR description.
+
 ## Tangents found
+
+- Brief 08's staged build is not on this branch, so nothing calls `setBusy` yet; brief 08 (or 13) must wire it.

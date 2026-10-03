@@ -3,6 +3,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { MapData } from "../api/types";
 import { buildWorld } from "../scene/buildWorld";
 import { createCameraModes } from "../scene/cameraModes";
+import { createExportButton } from "../scene/exportButton";
 import { createRoutePanel, type RoutingDeps } from "../scene/routePanel";
 import type { SceneTarget } from "../scene/sceneLoader";
 
@@ -65,6 +66,8 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps): 
   // Route between two picked points (routePanel.ts); clicks only pick while flying.
   const routes = routing && createRoutePanel(container, scene, camera, renderer.domElement, routing, () => modes.mode === "fly");
 
+  const exporter = createExportButton(container);
+
   let running = false;
   const resize = () => {
     const { clientWidth, clientHeight } = container;
@@ -93,6 +96,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps): 
       scene.add(world);
       modes.setWorld(world);
       routes?.setWorld(world);
+      exporter.setWorld(world);
       scene.remove(placeholder);
       overlay.hidden = true;
       toggle.hidden = false;
@@ -110,6 +114,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps): 
       removeWorld();
       modes.setWorld(undefined);
       routes?.setWorld(undefined);
+      exporter.setWorld(undefined);
       scene.add(placeholder);
       overlay.textContent = message;
       overlay.hidden = false;

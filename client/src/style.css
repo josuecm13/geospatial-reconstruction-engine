@@ -116,3 +116,8 @@ body:has(#map-view[hidden]) .panel { display: none; }
 .route-output { margin-top: 4px; }
 .route-error { color: #b00020; }
 .route-warning { color: #8a5a00; }
+.scene-export {
+  position: absolute; top: 48px; right: 84px; padding: 4px 12px; border: 0; border-radius: 4px;
+  background: rgba(255, 255, 255, 0.9); font-size: 13px; cursor: pointer;
+}
+.scene-export:disabled { opacity: 0.5; cursor: default; }

@@ -84,3 +84,14 @@ With the scene's "Route" toggle on, the first click on the ground or a road SHAL
 #### Scenario: No route between the points
 - **WHEN** the server answers `no_route_found`
 - **THEN** the panel shows "No route connects these points." and no ribbon is drawn
+
+### Requirement: The client SHALL export the scene as glTF
+The scene view SHALL offer a "Download glTF" button, enabled once a world is loaded and while no build is running, that saves the visible world (and nothing else: no lights, route markers, or placeholder) as a binary `.glb` named `gre-<scope type>-<first 8 characters of the scope id>.glb`. The root node's `extras` SHALL carry the scope, the projection origin and meters-per-degree, the axes, and the OpenStreetMap attribution, and the asset's `copyright` SHALL be the attribution. Entity nodes SHALL be named `<layer>:<id>`. The file SHALL pass the Khronos glTF validator with no errors.
+
+#### Scenario: Metadata in the file
+- **WHEN** a user downloads the glTF of an open import area
+- **THEN** the root node's extras hold the scope and the projection origin, and the asset copyright is "© OpenStreetMap contributors"
+
+#### Scenario: Node names
+- **WHEN** the file is opened in a glTF viewer
+- **THEN** a building appears as a node named `building:<id>` and a road as `road:<id>`
