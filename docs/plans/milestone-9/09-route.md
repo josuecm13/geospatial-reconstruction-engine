@@ -59,4 +59,18 @@ are built), and for the large-snap warning threshold.
 
 ## Outcome
 
+Done as briefed. New modules in `client/src/scene/`: `routePicking.ts` (state machine, `LARGE_SNAP_METERS`, distance
+format, snap warning, routing messages; tested), `routeLayer.ts` (raycast over `ground`/`area_features`/`roads`, cones,
+2 m ribbon at y = 0.08 via `roadPolygon`), `routePanel.ts` (Route toggle, strategy select, result, Escape). `ApiClient.routingStrategies`
+probes with `__list_strategies__` at the area's bbox centre (looked up with `getImportArea`) and caches per area; any other
+failure gives `[]` and the picker offers "server default" and sends no `strategy`. Wiring: `createSceneView(container, routing?)`
+in `sceneView.ts` (three small lines) and one argument in `main.ts`.
+
+Decisions: markers and ribbon live in a `route` group added to the scene, not to the world, so brief 10's export
+doesn't pick them up unless it wants to. Picking only works while flying, and a press that moves over 5 px is a drag,
+so orbiting still works with Route on. The routing error sentences are a table in `routePicking.ts`. Not run locally
+(no test suites); `tsc --noEmit` is clean. Guards not mutation-checked.
+
 ## Tangents found
+
+- `GET /routing-strategies` would replace the probe request, which sends a route request that always fails 422.

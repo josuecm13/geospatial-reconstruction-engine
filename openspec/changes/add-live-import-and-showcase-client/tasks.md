@@ -22,7 +22,7 @@
 - [x] 1.14 #65 [client] Build a low-poly 3D scene from map-data
 - [x] 1.15 #66 [client] Explore the scene by flying and walking
 - [ ] 1.16 #67 [client] Staged build animation on import
-- [ ] 1.17 #68 [client] Show a route between two points in the scene
+- [x] 1.17 #68 [client] Show a route between two points in the scene
 - [ ] 1.18 #69 [client] Export the scene as glTF
 - [ ] 1.18a #101 [client] Pages and URL state: landing, locations, and explore routes
 - [ ] 1.18b #102 [client] Landing page that explains the project and its architecture

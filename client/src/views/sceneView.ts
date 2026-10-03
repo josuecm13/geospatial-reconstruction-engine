@@ -3,6 +3,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { MapData } from "../api/types";
 import { buildWorld } from "../scene/buildWorld";
 import { createCameraModes } from "../scene/cameraModes";
+import { createRoutePanel, type RoutingDeps } from "../scene/routePanel";
 import type { SceneTarget } from "../scene/sceneLoader";
 
 export interface SceneView extends SceneTarget {
@@ -17,7 +18,7 @@ const EMPTY_HINT = "Open an import on the Map tab";
 
 /** The low-poly world of the open area: sky, light, and (once `setWorld` is called) the imported
  * city. Before that, a placeholder ground and grid, and a hint. */
-export function createSceneView(container: HTMLElement): SceneView {
+export function createSceneView(container: HTMLElement, routing?: RoutingDeps): SceneView {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(window.devicePixelRatio);
   container.appendChild(renderer.domElement);
@@ -61,6 +62,8 @@ export function createSceneView(container: HTMLElement): SceneView {
   controls.maxPolarAngle = Math.PI / 2.1;
   const modes = createCameraModes(camera, controls, renderer.domElement, container);
   const clock = new THREE.Clock();
+  // Route between two picked points (routePanel.ts); clicks only pick while flying.
+  const routes = routing && createRoutePanel(container, scene, camera, renderer.domElement, routing, () => modes.mode === "fly");
 
   let running = false;
   const resize = () => {
@@ -89,6 +92,7 @@ export function createSceneView(container: HTMLElement): SceneView {
       world.getObjectByName("blocks")!.visible = buildable.checked;
       scene.add(world);
       modes.setWorld(world);
+      routes?.setWorld(world);
       scene.remove(placeholder);
       overlay.hidden = true;
       toggle.hidden = false;
@@ -105,6 +109,7 @@ export function createSceneView(container: HTMLElement): SceneView {
     showMessage(message: string) {
       removeWorld();
       modes.setWorld(undefined);
+      routes?.setWorld(undefined);
       scene.add(placeholder);
       overlay.textContent = message;
       overlay.hidden = false;

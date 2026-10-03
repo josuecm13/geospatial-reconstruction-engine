@@ -48,7 +48,7 @@ function show(view: ViewName): void {
     mapView.shown();
   } else {
     sceneView ??= import("./views/sceneView").then(({ createSceneView }) => {
-      const view = createSceneView(document.getElementById("scene-view")!);
+      const view = createSceneView(document.getElementById("scene-view")!, { api, areaId: () => selection.get().areaId });
       sceneLoader = new SceneLoader(api, selection, view, (error) => sceneErrors(error).sentence);
       return view;
     });

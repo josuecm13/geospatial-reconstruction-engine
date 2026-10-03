@@ -108,3 +108,11 @@ body:has(#map-view[hidden]) .panel { display: none; }
   position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
   padding: 6px 12px; border-radius: 4px; background: rgba(36, 46, 56, 0.85); color: #fff; font-size: 13px;
 }
+.route-panel {
+  position: absolute; top: 84px; right: 12px; width: 240px; padding: 6px 8px; border-radius: 4px;
+  background: rgba(255, 255, 255, 0.9); font-size: 13px;
+}
+.route-strategy { width: 100%; margin-top: 4px; }
+.route-output { margin-top: 4px; }
+.route-error { color: #b00020; }
+.route-warning { color: #8a5a00; }

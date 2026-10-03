@@ -73,3 +73,14 @@ The scene view SHALL offer two camera modes with one toggle (a corner button and
 #### Scenario: Switching modes
 - **WHEN** a user presses `V` in fly mode and again in walk mode
 - **THEN** the camera moves to the road start at eye height, then returns to the previous orbit view
+
+### Requirement: The client SHALL show a route between two picked points
+With the scene's "Route" toggle on, the first click on the ground or a road SHALL set the origin and the second the destination; the client SHALL then request a route for the open import area and draw it as a ribbon on the road surfaces, with a green marker at the origin and a red one at the destination. A third click SHALL start over with that click as the new origin, and Escape SHALL clear the route. The strategy picker SHALL list the strategies the server registered, read from the `unknown_routing_strategy` error's `details.registered_strategies`, and send no strategy when that list cannot be read. The result SHALL show the distance and both snap distances, and SHALL warn when a snap distance is over 25 m. Routing errors SHALL be shown by their code.
+
+#### Scenario: A point far from any road
+- **WHEN** the route comes back with an origin snap distance of 40 m
+- **THEN** the panel shows "Your origin point is 40 m from the nearest road; the route starts there."
+
+#### Scenario: No route between the points
+- **WHEN** the server answers `no_route_found`
+- **THEN** the panel shows "No route connects these points." and no ribbon is drawn
