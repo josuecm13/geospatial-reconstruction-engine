@@ -13,7 +13,7 @@ Delete this folder in the close-out brief (`12-close-out.md`). It is a working p
 |---|-------|-------|------------|-----------------|
 | 01 | [Block derivation under 15 s](01-block-derivation-perf.md) | #91 | — | Sonnet |
 | 02 | [Staged background import over SSE](02-staged-sse-import.md) | #90 | 01 (soft: faster tests) | Opus |
-| 03 | [Skip areas already imported inside the rectangle](03-skip-covered-areas.md) | new (draft) | 02 | Opus. **Decision needed first.** |
+| 03 | [Skip areas already imported inside the rectangle](03-skip-covered-areas.md) | #100 | 02 | Opus |
 | 04 | [Error reporter with the server's reason](04-error-reporter.md) | #88 | — | Haiku |
 | 05 | [Trace and manage boundaries](05-boundaries.md) | #64 | 04 | Sonnet |
 | 06 | [Low-poly 3D scene from map-data](06-scene.md) | #65 | — | Sonnet |

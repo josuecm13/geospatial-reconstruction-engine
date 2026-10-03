@@ -1,7 +1,4 @@
-# 03 — Skip areas already imported inside the rectangle (new issue, draft)
-
-> **Blocked on one decision from the user** (see "Decision needed"). Don't start until the
-> decision is recorded in this file.
+# 03 — Skip areas already imported inside the rectangle (#100)
 
 ## Problem
 
@@ -16,7 +13,7 @@ The user wants a new import to **skip the earlier areas inside it and behave lik
 part of the rectangle not already imported is built and streamed. That fits the concentric building
 batches from #90 (brief 02). The first ring starts at the edge of what's already there.
 
-## Decision needed (user)
+## Decision (made: Option A)
 
 How far does "skip" go?
 
@@ -40,9 +37,9 @@ Also to settle: does an area that only **partly** overlaps count? The recommenda
 fully covered completed areas, which is what "inner" means. A partly overlapping one is imported in
 full, as today.
 
-**Decision:** _(user fills in)_
+**Decision: Option A**, confirmed by the user on 2026-10-02. Partly overlapping areas are imported in full (the recommendation above).
 
-## Plan for Option A (rewrite if another option is chosen)
+## Plan
 
 1. **Find the inner areas.** `ImportAreaRepository.completed_areas_covered_by(bbox, exclude_id)`:
    completed areas where `ST_CoveredBy(inner.bbox, :bbox)`, excluding the area being imported.
@@ -66,7 +63,7 @@ full, as today.
    filtered by the boundary. Add `scope.composed_area_ids` to the response.
 7. **Counts** on the outer area count only its own rows (they describe what it stores). Document that.
 
-## Acceptance criteria (Option A)
+## Acceptance criteria (as filed in #100)
 
 - Importing a rectangle that fully contains a completed area stores none of that area's buildings,
   POIs, or area features, and none of its interior blocks. The road network covers the whole
@@ -88,8 +85,9 @@ full, as today.
 - Spec deltas: `import-area-api`, a new requirement **"An import SHALL skip what completed inner areas
   already hold"**, plus a modified map-data requirement for composition.
 - `docs/client-features.md`: the map-data row mentions composition.
+- `tasks.md`: add `- [x] 1.12f #100 [ingestion] Skip completed areas inside a new import's rectangle`.
 
-## Issue draft (the coordinator files it once the user confirms)
+## Issue (filed as #100)
 
 - Title: `[ingestion] Skip completed areas inside a new import's rectangle`
 - Label: `enhancement`; milestone `9 Live import and the showcase client`; sub-issue position: right

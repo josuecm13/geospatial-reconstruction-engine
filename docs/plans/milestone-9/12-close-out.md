@@ -7,7 +7,7 @@ Run only after briefs 01–11 are done (their `## Outcome` sections are filled i
 1. **Collect tangents.** Gather every brief's `## Tangents found` lines into one list, and draft an
    issue for each in the house format (`AGENTS.md` → Issue format). **Don't file them.** Put the drafts
    in the PR description under "Out of scope: drafted, not filed". The user confirms before anything
-   is created. Also include brief 03's issue draft if it hasn't been filed yet.
+   is created.
 2. **MILESTONES.md** → Milestone 9: set the status to complete, and write a completion note in the
    same style as earlier milestones' notes (what shipped, the key decisions with a pointer to
    `design.md`, and anything deferred).
