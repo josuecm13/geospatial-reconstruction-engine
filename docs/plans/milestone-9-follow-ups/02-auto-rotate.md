@@ -128,4 +128,22 @@ motion" on in the OS it starts off).
 
 ## Outcome
 
+Done as designed. `scene/autoRotate.ts` holds the pure state (with `autoRotate.test.ts`); `sceneView.ts`
+creates a `.scene-actions` row (Rotate | Download glTF | Walk), passes it to `createExportButton` and
+as the new optional fifth `toolbar` parameter of `createCameraModes`, and drives
+`controls.autoRotate` each frame, then `controls.update(delta)`. `.scene-mode` and `.scene-export` lost
+their absolute offsets. The line references held (sceneView had shifted by a few lines after briefs 01,
+08 and 05; nothing material).
+
+Decisions the brief left open: the Rotate button is hidden whenever the Walk button is (no world, and
+during a staged build), and disabled in walk mode (set each frame). `update` resets the idle clock on
+any non-fly or building frame, so a missing world does not itself delay the first rotation. The route
+panel at top 84 clears the row (top 48, about 28 px tall); not checked in a browser.
+
+Verified: `npx tsc --noEmit -p client` is clean. Tests were written but not run (CI is the gate); the
+guard tests are not mutation-checked. The button, wiring and CSS are not checked by hand (no renderer
+here). Spec requirement and the `docs/client-features.md` bullet added.
+
 ## Tangents found
+
+None.

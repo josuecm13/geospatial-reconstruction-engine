@@ -90,6 +90,17 @@ The scene view SHALL offer two camera modes with one toggle (a corner button and
 - **WHEN** a user presses `V` in fly mode and again in walk mode
 - **THEN** the camera moves to the road start at eye height, then returns to the previous orbit view
 
+### Requirement: The client SHALL rotate the scene slowly in fly mode
+In fly mode, with a finished world loaded, the scene SHALL turn slowly around the open area (one turn every two minutes). Rotation SHALL stop while the user drags or zooms, SHALL NOT run in walk mode or during a staged build, and SHALL resume five seconds after the last interaction, after leaving walk mode, or after a build ends. A "Rotate" button SHALL turn it on and off (rotating at once when turned on). Rotation SHALL start off when the browser reports `prefers-reduced-motion: reduce`.
+
+#### Scenario: Dragging the scene
+- **WHEN** a user drags the scene
+- **THEN** rotation stops, and resumes five seconds after the drag ends
+
+#### Scenario: Reduced motion
+- **WHEN** the browser reports `prefers-reduced-motion: reduce`
+- **THEN** the scene opens without rotating, and the "Rotate" button turns rotation on
+
 ### Requirement: The client SHALL show a route between two picked points
 With the scene's "Route" toggle on, the first click on the ground or a road SHALL set the origin and the second the destination; the client SHALL then request a route for the open import area and draw it as a ribbon on the road surfaces, with a green marker at the origin and a red one at the destination. A third click SHALL start over with that click as the new origin, and Escape SHALL clear the route. The strategy picker SHALL list the strategies from `GET /routing-strategies`, with the server's default pre-selected, and SHALL send no strategy when that list cannot be read. The result SHALL show the distance and both snap distances, and SHALL warn when a snap distance is over 25 m. Routing errors SHALL be shown by their code.
 

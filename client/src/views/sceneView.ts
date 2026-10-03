@@ -1,7 +1,9 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { BoundingBox, MapData } from "../api/types";
+import { prefersReducedMotion } from "../locations/flyTo";
 import { buildWorld, LAYER_ORDER } from "../scene/buildWorld";
+import { createAutoRotate, ROTATE_SPEED } from "../scene/autoRotate";
 import { createCameraModes } from "../scene/cameraModes";
 import { createExportButton } from "../scene/exportButton";
 import { createRoutePanel, type RoutingDeps } from "../scene/routePanel";
@@ -67,12 +69,29 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps): 
   camera.position.set(0, 400, 500);
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.maxPolarAngle = Math.PI / 2.1;
-  const modes = createCameraModes(camera, controls, renderer.domElement, container);
+  // The row of buttons under the layer toggle: Rotate | Download glTF | Walk, right to left.
+  const actions = Object.assign(document.createElement("div"), { className: "scene-actions" });
+  container.appendChild(actions);
+  const modes = createCameraModes(camera, controls, renderer.domElement, container, actions);
+  // Turntable rotation in fly mode; never during a staged build (the waiting wireframe spins).
+  const rotate = createAutoRotate(!prefersReducedMotion());
+  controls.autoRotateSpeed = ROTATE_SPEED;
+  controls.addEventListener("start", () => rotate.interactionStart());
+  controls.addEventListener("end", () => rotate.interactionEnd());
+  let building = false;
   const clock = new THREE.Clock();
   // Route between two picked points (routePanel.ts); clicks only pick while flying.
   const routes = routing && createRoutePanel(container, scene, camera, renderer.domElement, routing, () => modes.mode === "fly");
 
-  const exporter = createExportButton(container);
+  const exporter = createExportButton(actions);
+  const rotateButton = Object.assign(document.createElement("button"), { className: "scene-rotate", type: "button", textContent: "Rotate", hidden: true });
+  const showRotate = () => rotateButton.setAttribute("aria-pressed", String(rotate.enabled));
+  showRotate();
+  rotateButton.addEventListener("click", () => {
+    rotate.setEnabled(!rotate.enabled);
+    showRotate();
+  });
+  actions.appendChild(rotateButton);
   const staged = createStagedScene(scene, container);
 
   let running = false;
@@ -88,7 +107,13 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps): 
   const frame = () => {
     if (!running) return;
     const delta = clock.getDelta();
-    if (modes.mode === "fly") controls.update();
+    rotateButton.disabled = modes.mode !== "fly";
+    const context = { fly: modes.mode === "fly", world: !!world, building };
+    const turning = rotate.update(delta, context);
+    if (context.fly) {
+      controls.autoRotate = turning;
+      controls.update(delta);
+    }
     modes.update(delta);
     staged.update(delta);
     renderer.render(scene, camera);
@@ -109,6 +134,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps): 
       scene.remove(placeholder);
       overlay.hidden = true;
       toggle.hidden = false;
+      rotateButton.hidden = false;
       // Frame the whole world from a raised, angled viewpoint.
       const box = new THREE.Box3().setFromObject(world);
       const center = box.getCenter(new THREE.Vector3());
@@ -132,7 +158,12 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps): 
       toggle.hidden = false;
       // The export waits for the build to play out; the finished world is loaded after it.
       exporter.setBusy(true);
-      void build.handle.finished.then(() => exporter.setBusy(false));
+      rotateButton.hidden = true;
+      building = true;
+      void build.handle.finished.then(() => {
+        building = false;
+        exporter.setBusy(false);
+      });
       // Frame the rectangle, whose centre is the projection origin, from the usual raised viewpoint.
       const { width, height } = bboxMeters(bbox);
       const size = Math.max(Math.hypot(width, height), 50);
@@ -152,6 +183,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps): 
       overlay.textContent = message;
       overlay.hidden = false;
       toggle.hidden = true;
+      rotateButton.hidden = true;
     },
     clear() {
       this.showMessage(EMPTY_HINT);

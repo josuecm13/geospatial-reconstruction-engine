@@ -28,17 +28,20 @@ export interface CameraModes {
 }
 
 /** Fly (the orbit controls) and walk (first person on the ground, stopped by building walls),
- * with one toggle button and the `V` key. The button and help overlay are appended to `container`. */
+ * with one toggle button and the `V` key. The button is appended to `toolbar` and the help overlay
+ * to `container`. */
 export function createCameraModes(
   camera: THREE.PerspectiveCamera,
   orbit: OrbitControls,
   canvas: HTMLElement,
   container: HTMLElement,
+  toolbar: HTMLElement = container,
 ): CameraModes {
   const look = new PointerLockControls(camera, canvas);
   const button = Object.assign(document.createElement("button"), { className: "scene-mode", type: "button", textContent: "Walk", hidden: true });
   const help = Object.assign(document.createElement("div"), { className: "scene-help", textContent: HELP, hidden: true });
-  container.append(button, help);
+  toolbar.appendChild(button);
+  container.appendChild(help);
 
   let mode: CameraMode = "fly";
   let world: THREE.Object3D | undefined;
