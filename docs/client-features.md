@@ -135,6 +135,10 @@ Ideas, not commitments. Once one is chosen, it becomes an issue in the milestone
 ### 3D and export
 - **3D mode**: extruded footprints (M8.1 heights, with a clear placeholder when height is
   unknown), roads at real width, and blocks as terrain.
+- **Fly and walk** (#66, shipped): the scene opens in fly mode (orbit, pan, zoom). A "Walk" button
+  in its corner, or the `V` key, drops the camera to eye height (1.7 m) on the road nearest the
+  centre, facing north; click the canvas to look around, WASD or the arrows to move (Shift runs),
+  Esc releases the mouse. Building footprints stop the walker (`scene/collision.ts`, `scene/cameraModes.ts`).
 - **Generation playground** (M11): change the seed or density and watch the block repopulate.
   Pin a seed you like.
 - **Export panel**: pick the scope, mode (filter / clip), and layers, and download GeoJSON with

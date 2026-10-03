@@ -62,3 +62,14 @@ The scene view SHALL show the open area, or its selected boundary, as a low-poly
 #### Scenario: Switching boundary while the scene is shown
 - **WHEN** the selection changes to another boundary while a previous request is still loading
 - **THEN** only the response for the latest selection is drawn
+
+### Requirement: The client SHALL let a user fly over and walk through the scene
+The scene view SHALL offer two camera modes with one toggle (a corner button and the `V` key): fly, with orbit, pan, and zoom; and walk, a first-person view at 1.7 m above the ground, moving with WASD or the arrow keys at 1.4 m/s (4 m/s with Shift). Entering walk SHALL place the camera on the road nearest the centre facing north, and returning to fly SHALL restore the previous orbit view. While walking, the camera SHALL NOT pass through a building footprint; a blocked move SHALL slide along the wall where it can.
+
+#### Scenario: Walking into a building
+- **WHEN** a user walks toward a building's wall
+- **THEN** the camera stops at the wall, and moving along the wall still works
+
+#### Scenario: Switching modes
+- **WHEN** a user presses `V` in fly mode and again in walk mode
+- **THEN** the camera moves to the road start at eye height, then returns to the previous orbit view

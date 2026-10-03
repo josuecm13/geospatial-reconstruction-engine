@@ -50,6 +50,12 @@ export function buildWorld(data: MapData): THREE.Group {
   const groups = Object.fromEntries(WORLD_GROUPS.map((name) => [name, group(name)])) as Record<(typeof WORLD_GROUPS)[number], THREE.Group>;
   for (const name of WORLD_GROUPS) world.add(groups[name]);
 
+  // Kept for walking (see collision.ts), so it doesn't re-parse meshes.
+  const footprints: { id: string; ring: Local[] }[] = [];
+  const roadOutlines: Local[][] = [];
+  world.userData.footprints = footprints;
+  world.userData.roadOutlines = roadOutlines;
+
   const extent = new THREE.Box2();
   const grow = (points: Local[]) => points.forEach((p) => extent.expandByPoint(new THREE.Vector2(p.x, p.z)));
 
@@ -70,6 +76,7 @@ export function buildWorld(data: MapData): THREE.Group {
     lines.forEach(grow);
     const outlines = lines.map((line) => roadPolygon(line, feature.properties.width_meters)).filter((outline) => outline.length);
     if (!outlines.length) continue;
+    roadOutlines.push(...outlines);
     const mesh = entity("road", feature, flatGeometry(outlines.map(footprintShape)), roadMaterial(feature.properties.lane_type));
     mesh.position.y = LAYER_Y.roads;
     groups.roads.add(mesh);
@@ -88,7 +95,10 @@ export function buildWorld(data: MapData): THREE.Group {
   for (const feature of data.buildings.features) {
     const polygons = polygonsOf(feature.geometry, projection);
     if (!polygons.length) continue;
-    polygons.forEach((rings) => grow(rings[0]));
+    polygons.forEach((rings) => {
+      grow(rings[0]);
+      footprints.push({ id: feature.id, ring: rings[0] });
+    });
     const { height, defaulted } = buildingHeight(feature.properties);
     // Footprints are single outer rings; any holes are ignored.
     const shapes = polygons.map((rings) => footprintShape(rings[0]));

@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { MapData } from "../api/types";
 import { buildWorld } from "../scene/buildWorld";
+import { createCameraModes } from "../scene/cameraModes";
 import type { SceneTarget } from "../scene/sceneLoader";
 
 export interface SceneView extends SceneTarget {
@@ -58,6 +59,8 @@ export function createSceneView(container: HTMLElement): SceneView {
   camera.position.set(0, 400, 500);
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.maxPolarAngle = Math.PI / 2.1;
+  const modes = createCameraModes(camera, controls, renderer.domElement, container);
+  const clock = new THREE.Clock();
 
   let running = false;
   const resize = () => {
@@ -70,7 +73,9 @@ export function createSceneView(container: HTMLElement): SceneView {
   new ResizeObserver(resize).observe(container);
   const frame = () => {
     if (!running) return;
-    controls.update();
+    const delta = clock.getDelta();
+    if (modes.mode === "fly") controls.update();
+    modes.update(delta);
     renderer.render(scene, camera);
     requestAnimationFrame(frame);
   };
@@ -83,6 +88,7 @@ export function createSceneView(container: HTMLElement): SceneView {
       world = buildWorld(data);
       world.getObjectByName("blocks")!.visible = buildable.checked;
       scene.add(world);
+      modes.setWorld(world);
       scene.remove(placeholder);
       overlay.hidden = true;
       toggle.hidden = false;
@@ -98,6 +104,7 @@ export function createSceneView(container: HTMLElement): SceneView {
     },
     showMessage(message: string) {
       removeWorld();
+      modes.setWorld(undefined);
       scene.add(placeholder);
       overlay.textContent = message;
       overlay.hidden = false;
@@ -108,13 +115,16 @@ export function createSceneView(container: HTMLElement): SceneView {
     },
     shown() {
       resize();
+      modes.setActive(true);
       if (!running) {
+        clock.getDelta();
         running = true;
         requestAnimationFrame(frame);
       }
     },
     hidden() {
       running = false;
+      modes.setActive(false);
     },
   };
 }

@@ -20,7 +20,7 @@
 - [x] 1.12a #88 [client] Show the server's reason for an import failure
 - [x] 1.13 #64 [client] Trace a boundary over the selection and manage saved boundaries
 - [x] 1.14 #65 [client] Build a low-poly 3D scene from map-data
-- [ ] 1.15 #66 [client] Explore the scene by flying and walking
+- [x] 1.15 #66 [client] Explore the scene by flying and walking
 - [ ] 1.16 #67 [client] Staged build animation on import
 - [ ] 1.17 #68 [client] Show a route between two points in the scene
 - [ ] 1.18 #69 [client] Export the scene as glTF

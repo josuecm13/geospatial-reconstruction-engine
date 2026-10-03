@@ -58,4 +58,24 @@ brute-force check over a few random points (seeded).
 
 ## Outcome
 
+Added `scene/collision.ts` (footprint grid index, `resolveMove` with x/z sliding, `nearestRoadStart`,
+plus exported `blocked` / `circleHitsRing`) and `scene/cameraModes.ts` (`createCameraModes`: fly via
+the existing `OrbitControls`, walk via `PointerLockControls`, toggle button and `V` key, help overlay).
+`buildWorld` now sets `world.userData.footprints` (`{id, ring}`, one per outer ring) and
+`world.userData.roadOutlines`. `sceneView.ts` gained small blocks: create the modes, a `Clock` delta
+passed to `modes.update`, `modes.setWorld` in `setWorld`/`showMessage`, `modes.setActive` in
+`shown`/`hidden`. Styles for the button and help are in `style.css`. Tests: `collision.test.ts`.
+
+Decisions:
+- Walk movement is custom (heading flattened to the ground plane) instead of `PointerLockControls.moveForward`,
+  so every step goes through `resolveMove`. `PointerLockControls` supplies only mouse look and locking.
+- Loading a new world while walking returns to fly first, then the loader's framing applies; walking
+  starts nearest the world's bounding-box centre (not the projection origin), which is the scope's middle.
+- `V` and movement keys act only while the Scene tab is shown and ignore form fields; hiding the tab
+  releases pointer lock.
+- Tests not run locally (CI-only rule); only `tsc --noEmit` was run. Guards not mutation-checked.
+  `cameraModes.ts` needs WebGL/DOM pointer lock and is untested by design.
+
 ## Tangents found
+
+None.
