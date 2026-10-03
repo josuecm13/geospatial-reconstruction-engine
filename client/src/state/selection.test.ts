@@ -20,6 +20,21 @@ describe("SelectionStore", () => {
     expect(new SelectionStore(memory).get()).toEqual({ areaId: "a1", scope: { type: "import_area" } });
   });
 
+  it("closes the area without forgetting it, and notifies once", () => {
+    const memory = new MemoryStore();
+    memory.setItem(CURRENT_AREA_KEY, "a1");
+    const store = new SelectionStore(memory);
+    const seen: Selection[] = [];
+    store.subscribe((selection) => seen.push(selection));
+
+    store.closeArea();
+    store.closeArea();
+
+    expect(store.get()).toEqual({ areaId: null, scope: { type: "import_area" } });
+    expect(seen).toEqual([{ areaId: null, scope: { type: "import_area" } }]);
+    expect(memory.getItem(CURRENT_AREA_KEY)).toBe("a1");
+  });
+
   it("restores a boundary scope after a reload, but only for the area it was chosen in", () => {
     const memory = new MemoryStore();
     const first = new SelectionStore(memory);

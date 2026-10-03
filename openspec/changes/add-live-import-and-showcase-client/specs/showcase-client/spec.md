@@ -120,7 +120,7 @@ The client SHALL start an import with `background: true`, switch to the scene vi
 - **THEN** the partial build is removed, the map view is shown, and the import panel reports the event's `code`
 
 ### Requirement: The client SHALL keep each view's state in its URL
-The client SHALL be a set of pages behind a history router, with no page load between them: `/` (landing), `/locations`, and `/explore/:areaId`, and a not-found page for any other path. The explore URL SHALL carry the state that defines the view: the area in the path, and in the query `view` (`map`, the default, or `scene`), `scope` (the id of a traced boundary; absent for the whole area), and `at` (`<lat>,<lon>,<zoom>`, five decimals for latitude and longitude and two for zoom, the 2D map's camera). A query parameter that is invalid SHALL be ignored, not reported as an error. A change of area, scope, or view SHALL add a history entry, and a camera move SHALL only rewrite the current entry (debounced), so Back never steps through pans. The browser's Back and Forward SHALL restore the area, scope, and view of the entry. An old `#map` or `#scene` link on `/` SHALL lead to the explore URL of the area last opened in this browser, or to `/locations` when there is none. An explore URL for an area that does not exist SHALL show the not-found page.
+The client SHALL be a set of pages behind a history router, with no page load between them: `/` (landing), `/locations`, `/explore/:areaId`, and `/explore` (the map with no area open, where a first import starts; an import that completes there opens its area's URL), and a not-found page for any other path. The explore URL SHALL carry the state that defines the view: the area in the path, and in the query `view` (`map`, the default, or `scene`), `scope` (the id of a traced boundary; absent for the whole area), and `at` (`<lat>,<lon>,<zoom>`, five decimals for latitude and longitude and two for zoom, the 2D map's camera). A query parameter that is invalid SHALL be ignored, not reported as an error. A change of area, scope, or view SHALL add a history entry, and a camera move SHALL only rewrite the current entry (debounced), so Back never steps through pans. The browser's Back and Forward SHALL restore the area, scope, and view of the entry. An old `#map` or `#scene` link on `/` SHALL lead to the explore URL of the area last opened in this browser, or to `/locations` when there is none. An explore URL for an area that does not exist SHALL show the not-found page.
 
 #### Scenario: Pasting the URL in a new tab
 - **WHEN** a user copies `/explore/<id>?view=scene&scope=<boundary>&at=52.52970,13.40100,15.00` into a new tab
@@ -133,6 +133,10 @@ The client SHALL be a set of pages behind a history router, with no page load be
 #### Scenario: Panning does not add history
 - **WHEN** a user pans and zooms the 2D map several times
 - **THEN** the URL's `at` follows the map and the number of history entries is unchanged
+
+#### Scenario: The first import on an empty database
+- **WHEN** no area has been imported and a user chooses "Import a new place" on the landing or locations page
+- **THEN** the client opens `/explore` with the rectangle tool available, and once the import completes the URL becomes `/explore/<new area>`
 
 #### Scenario: A legacy hash link
 - **WHEN** a user opens `/#scene` with an area remembered from an earlier visit

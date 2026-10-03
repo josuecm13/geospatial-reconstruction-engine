@@ -44,6 +44,12 @@ export class SelectionStore {
     this.update({ areaId, scope: WHOLE_AREA });
   }
 
+  /** No area open (the map before a first import). The remembered area stays remembered for next time. */
+  closeArea(): void {
+    if (this.selection.areaId === null) return;
+    this.update({ areaId: null, scope: WHOLE_AREA });
+  }
+
   setScope(scope: Scope): void {
     if (!this.selection.areaId || sameScope(scope, this.selection.scope)) return;
     this.update({ ...this.selection, scope });

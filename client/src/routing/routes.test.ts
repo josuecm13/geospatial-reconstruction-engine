@@ -4,7 +4,7 @@ import { formatRoute, legacyRedirect, parseUrl, roundCamera, sameRoute, type Rou
 const base = "http://localhost:55173";
 const parse = (path: string) => parseUrl(new URL(path, base));
 
-const explore = (areaId: string, rest: Partial<Extract<Route, { page: "explore" }>> = {}): Route => ({
+const explore = (areaId: string | null, rest: Partial<Extract<Route, { page: "explore" }>> = {}): Route => ({
   page: "explore",
   areaId,
   view: "map",
@@ -18,6 +18,9 @@ describe("parseUrl", () => {
     ["/", { page: "landing" }],
     ["/locations", { page: "locations" }],
     ["/locations/", { page: "locations" }],
+    ["/explore", explore(null)],
+    ["/explore/", explore(null)],
+    ["/explore?view=scene&scope=b1", explore(null, { view: "scene" })], // no area, so no scope
     ["/explore/abc", explore("abc")],
     ["/explore/abc/", explore("abc")],
     ["/explore/abc?view=scene", explore("abc", { view: "scene" })],
@@ -59,7 +62,7 @@ describe("parseUrl", () => {
     expect(Object.is(route.at!.lat, 0)).toBe(true);
   });
 
-  it.each(["/nope", "/explore", "/explore/", "/explore/a/b", "/locations/x", "/explore/%E0%A4%A"])("%s is not found", (path) => {
+  it.each(["/nope", "/explore/a/b", "/explores", "/locations/x", "/explore/%E0%A4%A"])("%s is not found", (path) => {
     expect(parse(path)).toEqual({ page: "not-found", path: new URL(path, base).pathname });
   });
 });
@@ -69,6 +72,8 @@ describe("formatRoute", () => {
     [{ page: "landing" }, "/"],
     [{ page: "locations" }, "/locations"],
     [{ page: "not-found", path: "/nope" }, "/nope"],
+    [explore(null), "/explore"],
+    [explore(null, { at: { lat: 52.5297, lon: 13.401, zoom: 15 } }), "/explore?at=52.52970,13.40100,15.00"],
     [explore("abc"), "/explore/abc"],
     [explore("abc", { view: "scene" }), "/explore/abc?view=scene"],
     [explore("abc", { scope: "b1" }), "/explore/abc?scope=b1"],
@@ -90,6 +95,8 @@ describe("round trip", () => {
     { page: "landing" },
     { page: "locations" },
     { page: "not-found", path: "/nope" },
+    explore(null),
+    explore(null, { view: "scene" }),
     explore("abc"),
     explore("a b"),
     explore("abc", { view: "scene" }),

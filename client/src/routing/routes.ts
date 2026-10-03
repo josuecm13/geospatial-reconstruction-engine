@@ -9,7 +9,8 @@ export type ExploreView = "map" | "scene";
 
 export interface ExploreRoute {
   page: "explore";
-  areaId: string;
+  /** The open import area; null is the map with nothing open yet, where a first import starts. */
+  areaId: string | null;
   view: ExploreView;
   /** The id of the boundary the view is scoped to; null is the whole import area. */
   scope: string | null;
@@ -21,7 +22,8 @@ export type Route = { page: "landing" } | { page: "locations" } | ExploreRoute |
 
 export type PageName = Route["page"];
 
-const EXPLORE_PREFIX = "/explore/";
+const EXPLORE_PATH = "/explore";
+const EXPLORE_PREFIX = `${EXPLORE_PATH}/`;
 const LAT_LIMIT = 90;
 const LON_LIMIT = 180;
 const MAX_ZOOM = 24;
@@ -31,14 +33,14 @@ export function parseUrl(url: URL): Route {
   const path = url.pathname.length > 1 ? url.pathname.replace(/\/+$/, "") : url.pathname;
   if (path === "/") return { page: "landing" };
   if (path === "/locations") return { page: "locations" };
-  if (path.startsWith(EXPLORE_PREFIX)) {
-    const areaId = decodeSegment(path.slice(EXPLORE_PREFIX.length));
-    if (areaId) {
+  if (path === EXPLORE_PATH || path.startsWith(EXPLORE_PREFIX)) {
+    const areaId = path === EXPLORE_PATH ? null : decodeSegment(path.slice(EXPLORE_PREFIX.length));
+    if (path === EXPLORE_PATH || areaId) {
       return {
         page: "explore",
         areaId,
         view: url.searchParams.get("view") === "scene" ? "scene" : "map",
-        scope: url.searchParams.get("scope") || null,
+        scope: (areaId && url.searchParams.get("scope")) || null, // a scope only means something inside an area
         at: parseCamera(url.searchParams.get("at")),
       };
     }
@@ -60,7 +62,8 @@ export function formatRoute(route: Route): string {
       if (route.view === "scene") query.push("view=scene");
       if (route.scope) query.push(`scope=${encodeURIComponent(route.scope)}`);
       if (route.at) query.push(`at=${route.at.lat.toFixed(5)},${route.at.lon.toFixed(5)},${route.at.zoom.toFixed(2)}`);
-      return `${EXPLORE_PREFIX}${encodeURIComponent(route.areaId)}${query.length ? `?${query.join("&")}` : ""}`;
+      const path = route.areaId ? `${EXPLORE_PREFIX}${encodeURIComponent(route.areaId)}` : EXPLORE_PATH;
+      return `${path}${query.length ? `?${query.join("&")}` : ""}`;
     }
   }
 }

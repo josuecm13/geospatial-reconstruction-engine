@@ -4,7 +4,9 @@ import { IMPORT_MESSAGES } from "../importing/errorMessages";
 import { CurrentArea } from "../importing/recentImports";
 import { renderArchitecture } from "../landing/architecture";
 import { importTarget } from "../landing/importTarget";
-import { formatRoute } from "../routing/routes";
+import { renderLocationCard } from "../locations/card";
+import { toCard } from "../locations/cardModel";
+import { PreviewLoader } from "../locations/preview";
 import type { Mount } from "./types";
 
 const RECENT_LIMIT = 6;
@@ -32,23 +34,6 @@ const FACTS: readonly [string, string][] = [
   ],
   ["What it is for", "Games, simulation, and art: places you can query, fly over, walk through, and export as glTF."],
 ];
-
-/**
- * One recent location as a card. Brief 15's gallery draws richer cards; the landing renders every
- * card through this one function, so that swap is a single line.
- */
-function renderLocationCard(area: ImportArea): HTMLElement {
-  const lat = (area.bbox.min_latitude + area.bbox.max_latitude) / 2;
-  const lon = (area.bbox.min_longitude + area.bbox.max_longitude) / 2;
-  const card = link(formatRoute({ page: "explore", areaId: area.id, view: "map", scope: null, at: null }), "", "landing-card");
-  const when = area.imported_at ? new Date(area.imported_at).toLocaleDateString() : "never completed";
-  card.append(
-    element("strong", undefined, `${lat.toFixed(4)}, ${lon.toFixed(4)}`),
-    element("span", "landing-card-meta", `${area.building_count ?? 0} buildings, ${area.road_count ?? 0} roads, ${area.block_count} blocks`),
-    element("span", "landing-card-meta", when),
-  );
-  return card;
-}
 
 /** `/`: what the engine is, how it works, and the way in to the locations and to a new import. */
 export const mount: Mount<{ page: "landing" }> = (el, ctx) => {
@@ -103,13 +88,15 @@ export const mount: Mount<{ page: "landing" }> = (el, ctx) => {
   el.replaceChildren(page);
   const disposeDiagram = renderArchitecture(diagram);
 
+  // The recent places use the gallery's cards: a footprint preview, and a fly to the area when opened.
+  const previews = new PreviewLoader(api);
   status.textContent = "Loading locations…";
   api.listImportAreas({ status: "completed", limit: RECENT_LIMIT }).then(
     (list) => {
       if (disposed) return;
       areas = list;
       status.textContent = list.length ? "" : "Nothing has been imported yet.";
-      grid.replaceChildren(...list.map(renderLocationCard));
+      grid.replaceChildren(...list.map((area) => renderLocationCard(toCard(area), { previews })));
     },
     (error) => {
       if (disposed) return;
@@ -121,5 +108,6 @@ export const mount: Mount<{ page: "landing" }> = (el, ctx) => {
   return () => {
     disposed = true;
     disposeDiagram();
+    previews.dispose();
   };
 };

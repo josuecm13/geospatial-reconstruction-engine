@@ -22,7 +22,7 @@ const scopeOf = (route: ExploreRoute): Scope => (route.scope ? { type: "boundary
 const scopeId = (scope: Scope): string | null => (scope.type === "boundary" ? scope.boundaryId : null);
 
 /**
- * `/explore/:areaId`: the 2D map with its import and boundary panels, and the lazily built 3D scene.
+ * `/explore/:areaId` (or `/explore`, with nothing open yet): the 2D map with its import and boundary panels, and the lazily built 3D scene.
  * The route is the source of truth for the area, scope, view and map camera. The page stays mounted
  * while those change: it follows the route (back, forward, a pasted link) and writes its own changes
  * back, comparing before it writes so the two never loop.
@@ -51,8 +51,12 @@ export const mount: Mount<ExploreRoute> = (el, ctx) => {
 
   // The open area and scope. Set from the URL before any panel is built, so each opens what the URL names.
   const selection = new SelectionStore(localStorage);
-  selection.setArea(start.areaId);
-  selection.setScope(scopeOf(start));
+  if (start.areaId) {
+    selection.setArea(start.areaId);
+    selection.setScope(scopeOf(start));
+  } else {
+    selection.closeArea();
+  }
 
   /** Writes the selection into the route, unless the route already says it. */
   const writeRoute = (replace: boolean) => {
@@ -122,7 +126,11 @@ export const mount: Mount<ExploreRoute> = (el, ctx) => {
     const mine = ++applies;
     applying = true;
     try {
-      if (initial || selection.get().areaId !== route.areaId) {
+      if (!route.areaId) {
+        // `/explore` with nothing open: the map is where a first import starts. An import that completes
+        // opens its area, and the selection change writes that area into the URL.
+        selection.closeArea();
+      } else if (initial || selection.get().areaId !== route.areaId) {
         let area: ImportArea | undefined;
         try {
           area = await api.getImportArea(route.areaId);

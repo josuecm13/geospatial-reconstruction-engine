@@ -46,6 +46,7 @@ export const mount: Mount<{ page: "locations" }> = (el, ctx) => {
             <option value="size">Largest</option>
           </select>
         </label>
+        <a class="locations-import" href="/explore" data-link>Import a new place</a>
       </div>
     </header>
     <p class="locations-count" data-role="count" role="status" aria-live="polite"></p>
@@ -97,7 +98,7 @@ export const mount: Mount<{ page: "locations" }> = (el, ctx) => {
     }
     const total = cards.length;
     count.textContent = shown.size === total ? `${total} ${total === 1 ? "place" : "places"}` : `${shown.size} of ${total} places`;
-    if (!total) showMessage("Nothing has been imported yet. Import a place on the map and it will appear here.");
+    if (!total) showMessage("Nothing has been imported yet. Use “Import a new place” to draw a rectangle on the map, and it will appear here.");
     else if (!shown.size) showMessage(`No place matches “${state.text.trim()}”.`);
     else showMessage(null);
   };

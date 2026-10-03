@@ -26,7 +26,7 @@ describe("importTarget", () => {
     expect(importTarget([area("a"), area("b")], null)).toEqual({ page: "explore", areaId: "a", view: "map", scope: null, at: null });
   });
 
-  it("goes to the locations page when there is no area to open", () => {
-    expect(importTarget([], null)).toEqual({ page: "locations" });
+  it("opens the map with nothing open when there is no area yet", () => {
+    expect(importTarget([], null)).toEqual({ page: "explore", areaId: null, view: "map", scope: null, at: null });
   });
 });
