@@ -2,6 +2,8 @@ import "./style.css";
 import { ApiClient } from "./api/client";
 import { BoundaryPanel } from "./boundaries/boundaryPanel";
 import { ImportPanel } from "./importing/importPanel";
+import { useErrorReporter } from "./errors/errorReporter";
+import { SceneLoader } from "./scene/sceneLoader";
 import { SelectionStore } from "./state/selection";
 import { MapDataLayers } from "./views/mapDataLayers";
 import { createMapView } from "./views/mapView";
@@ -25,6 +27,13 @@ mapView.map.on("load", () => {
 // The 3D scene (and Three.js) loads only when the Scene tab is first opened, so a map-only session
 // never downloads it or creates a WebGL context for it.
 let sceneView: Promise<SceneView> | undefined;
+let sceneLoader: SceneLoader | undefined;
+const sceneErrors = useErrorReporter({
+  import_area_not_found: "That import area no longer exists. Open another one on the Map tab.",
+  boundary_not_found: "That boundary no longer exists. Pick another scope on the Map tab.",
+  http_error: "The API isn't answering. Is the server running?",
+  database_unavailable: "The server can't reach its database.",
+});
 
 function show(view: ViewName): void {
   for (const name of VIEWS) {
@@ -32,12 +41,21 @@ function show(view: ViewName): void {
     document.querySelector(`[data-view="${name}"]`)?.setAttribute("aria-current", String(name === view));
   }
   if (view === "map") {
-    void sceneView?.then((scene) => scene.hidden());
+    void sceneView?.then((scene) => {
+      scene.hidden();
+      sceneLoader?.hidden();
+    });
     mapView.shown();
   } else {
-    sceneView ??= import("./views/sceneView").then(({ createSceneView }) => createSceneView(document.getElementById("scene-view")!));
+    sceneView ??= import("./views/sceneView").then(({ createSceneView }) => {
+      const view = createSceneView(document.getElementById("scene-view")!);
+      sceneLoader = new SceneLoader(api, selection, view, (error) => sceneErrors(error).sentence);
+      return view;
+    });
     void sceneView.then((scene) => {
-      if (viewFromHash(location.hash) === "scene") scene.shown();
+      if (viewFromHash(location.hash) !== "scene") return;
+      scene.shown();
+      sceneLoader?.shown();
     });
   }
 }

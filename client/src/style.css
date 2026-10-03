@@ -90,3 +90,13 @@ body:has(#map-view[hidden]) .panel { display: none; }
 .panel button.link.danger { color: #c0392b; width: auto; }
 .boundary-entry { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .boundary-entry button.link { width: auto; }
+
+/* The 3D scene's empty-state hint and its layer toggle sit over the canvas. */
+.scene-empty {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+  padding: 6px 12px; border-radius: 4px; background: rgba(36, 46, 56, 0.85); color: #fff; font-size: 14px;
+}
+.scene-toggle {
+  position: absolute; top: 12px; right: 12px;
+  padding: 4px 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.9); font-size: 13px;
+}

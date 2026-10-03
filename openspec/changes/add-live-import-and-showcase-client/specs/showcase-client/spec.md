@@ -51,3 +51,14 @@ The map view SHALL let a user trace a shape inside the rectangle by clicking ver
 #### Scenario: Deleting the boundary in scope
 - **WHEN** a user deletes the boundary that is the current scope
 - **THEN** the scope returns to the whole area and the map layers show the whole area
+
+### Requirement: The client SHALL build a low-poly 3D scene from map-data
+The scene view SHALL show the open area, or its selected boundary, as a low-poly 3D world built from `GET /import-areas/{id}/map-data`, in meters from the response's projection origin. It SHALL draw area features and roads (once per two-way road, at `width_meters`) as flat shapes and buildings extruded to their height, and SHALL offer a toggle for the blocks' buildable area, hidden by default. A building's height SHALL be `height_meters` when known, else its levels at 3.2 m each, else a default by category; a height taken from the category default SHALL be visibly marked (a paler material). The scene SHALL reload when the selection changes while it is shown, and SHALL ignore a response that is no longer the latest request.
+
+#### Scenario: A building with no height or levels
+- **WHEN** map-data contains a building whose `height_meters` and `levels` are both null
+- **THEN** the scene draws it with its category's default height, in the paler material, flagged as defaulted
+
+#### Scenario: Switching boundary while the scene is shown
+- **WHEN** the selection changes to another boundary while a previous request is still loading
+- **THEN** only the response for the latest selection is drawn

@@ -31,16 +31,16 @@ beyond parity.
 
 | Layer / property | API status | Client | Client notes |
 |---|---|---|---|
-| Road segments: geometry, `from_node_id` / `to_node_id`, `distance_meters`, `is_vehicle_accessible` | shipped | — | |
-| Road cross-section: `lane_count`, `lane_count_provenance` (`tagged` / `defaulted`), `source_lane_count`, `lane_type` (`narrow` / `normal` / `wide`), `width_meters` | shipped | — | Draw roads at their real width. Show observed vs. defaulted values differently |
+| Road segments: geometry, `from_node_id` / `to_node_id`, `distance_meters`, `is_vehicle_accessible` | shipped | partial | 3D: flat strips at `width_meters`; a two-way road is drawn once (`client/src/scene/roadGeometry.ts`). |
+| Road cross-section: `lane_count`, `lane_count_provenance` (`tagged` / `defaulted`), `source_lane_count`, `lane_type` (`narrow` / `normal` / `wide`), `width_meters` | shipped | partial | Draw roads at their real width. Show observed vs. defaulted values differently 3D: strip width is `width_meters`, colored by `lane_type`. |
 | Street: `name`, `classification` | shipped | — | Labels, and styling by classification |
 | Logical street id on segments (`street.id`), stable across unchanged re-imports | shipped | — | Needed to select or highlight a whole street |
 | Navigable nodes | shipped | — | Usually hidden. Useful in a debug layer |
-| Blocks: boundary polygon, `area_square_meters` | shipped | — | |
-| Blocks: `buildable_area` (MultiPolygon or null), `buildable_area_square_meters`, `is_median`, `is_clipped` | shipped | — | Computed and persisted since M7.2, but `block_feature` exposes only `area_square_meters` |
-| Buildings: footprint, `category`, `block_id`, `height_meters`, `levels` | shipped | — | `height_meters` / `levels` are as the source stated, null when unknown (M8.1) |
+| Blocks: boundary polygon, `area_square_meters` | shipped | partial | 3D: not drawn (only the buildable area is). |
+| Blocks: `buildable_area` (MultiPolygon or null), `buildable_area_square_meters`, `is_median`, `is_clipped` | shipped | partial | Computed and persisted since M7.2, but `block_feature` exposes only `area_square_meters` 3D: translucent overlay, hidden until "Show buildable area" is ticked. |
+| Buildings: footprint, `category`, `block_id`, `height_meters`, `levels` | shipped | partial | `height_meters` / `levels` are as the source stated, null when unknown (M8.1) 3D: extruded to `height_meters`, else `levels` x 3.2 m, else a per-category default drawn paler (`scene/buildingHeight.ts`). |
 | POIs: point, `category`, `name` | shipped | — | |
-| Area features: polygon, `kind` | shipped | — | |
+| Area features: polygon, `kind` | shipped | partial | 3D: flat shapes, water blue and the rest green. |
 | `attribution` ("© OpenStreetMap contributors") | shipped | partial | **Required**: must always be visible |
 
 ### Spatial queries (whole import area)

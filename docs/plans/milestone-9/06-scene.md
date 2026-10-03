@@ -98,4 +98,29 @@ hand-written `MapData` fixture gives the contract's group names, in order, and m
 
 ## Outcome
 
+Built `client/src/scene/` (`projection`, `roadGeometry`, `buildingHeight`, `extrude`, `palette`,
+`buildWorld`, `sceneLoader`) with a `*.test.ts` for each, and wired `sceneView.setWorld` /
+`showMessage` / `clear`, plus the "Show buildable area" checkbox and the empty-state hint. The
+World contract is as specified; extra exports for later briefs: `WORLD_GROUPS`, `LAYER_Y`,
+`MATERIALS`/`roadMaterial` (palette), `polygonShape`/`flatGeometry`/`extrudeFootprints` (extrude).
+Building meshes also carry `userData.height`.
+
+Decisions:
+- Loading lives in `scene/sceneLoader.ts` (`SceneLoader`, with `shown()`/`hidden()`), which takes the
+  API, selection, and scene view as interfaces so its request-counter logic is unit-tested without
+  WebGL. `main.ts` creates it with the lazily imported scene view. It skips a reload when the same
+  selection is already showing.
+- Errors go through brief 04's reporter (`useErrorReporter`) with a small scene messages map in
+  `main.ts`, shown in the empty state.
+- `dedupeTwins` is generic over items and sorted-line keys, so clip-mode `MultiLineString` segments
+  deduplicate too. Roads, buildings and blocks that are Multi* become one mesh per feature.
+- Ground extent is computed from area features, roads and buildings (not blocks), plus 20 m; an
+  empty response gets a 200 m square.
+- Area features and blocks honor polygon holes; buildings ignore them, as the brief says.
+- Tests not run locally (per CI-only rule); only `tsc --noEmit` was run. No mutation checks.
+
 ## Tangents found
+
+- `docs/client-features.md` Map data rows still said Client `—` although the 2D map draws every
+  layer; this brief set the rows it touched to `partial` (3D done, 2D already) but did not audit the
+  2D claims.

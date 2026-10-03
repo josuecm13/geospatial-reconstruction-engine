@@ -1,7 +1,10 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import type { MapData } from "../api/types";
+import { buildWorld } from "../scene/buildWorld";
+import type { SceneTarget } from "../scene/sceneLoader";
 
-export interface SceneView {
+export interface SceneView extends SceneTarget {
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
   /** Starts rendering; the loop stops while the view is hidden. */
@@ -9,7 +12,10 @@ export interface SceneView {
   hidden(): void;
 }
 
-/** An empty low-poly world: sky, light, and a ground plane. Later issues add the imported city. */
+const EMPTY_HINT = "Open an import on the Map tab";
+
+/** The low-poly world of the open area: sky, light, and (once `setWorld` is called) the imported
+ * city. Before that, a placeholder ground and grid, and a hint. */
 export function createSceneView(container: HTMLElement): SceneView {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(window.devicePixelRatio);
@@ -22,10 +28,31 @@ export function createSceneView(container: HTMLElement): SceneView {
   sun.position.set(300, 500, 200);
   scene.add(sun);
 
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), new THREE.MeshLambertMaterial({ color: "#d9d4c7" }));
-  ground.rotation.x = -Math.PI / 2;
-  scene.add(ground);
-  scene.add(new THREE.GridHelper(1000, 20, "#b8b2a4", "#c8c2b4"));
+  // The placeholder world, removed once a real one is loaded.
+  const placeholder = new THREE.Group();
+  const placeholderGround = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), new THREE.MeshLambertMaterial({ color: "#d9d4c7" }));
+  placeholderGround.rotation.x = -Math.PI / 2;
+  placeholder.add(placeholderGround, new THREE.GridHelper(1000, 20, "#b8b2a4", "#c8c2b4"));
+  scene.add(placeholder);
+
+  const overlay = Object.assign(document.createElement("div"), { className: "scene-empty", textContent: EMPTY_HINT });
+  const toggle = Object.assign(document.createElement("label"), { className: "scene-toggle", hidden: true });
+  const buildable = Object.assign(document.createElement("input"), { type: "checkbox" });
+  toggle.append(buildable, " Show buildable area");
+  container.append(overlay, toggle);
+  let world: THREE.Group | undefined;
+  buildable.addEventListener("change", () => {
+    const blocks = world?.getObjectByName("blocks");
+    if (blocks) blocks.visible = buildable.checked;
+  });
+
+  const removeWorld = () => {
+    if (!world) return;
+    scene.remove(world);
+    // Materials are shared across worlds, so only geometries are released.
+    world.traverse((object) => (object as THREE.Mesh).geometry?.dispose());
+    world = undefined;
+  };
 
   const camera = new THREE.PerspectiveCamera(50, 1, 1, 5000);
   camera.position.set(0, 400, 500);
@@ -51,6 +78,34 @@ export function createSceneView(container: HTMLElement): SceneView {
   return {
     scene,
     camera,
+    setWorld(data: MapData) {
+      removeWorld();
+      world = buildWorld(data);
+      world.getObjectByName("blocks")!.visible = buildable.checked;
+      scene.add(world);
+      scene.remove(placeholder);
+      overlay.hidden = true;
+      toggle.hidden = false;
+      // Frame the whole world from a raised, angled viewpoint.
+      const box = new THREE.Box3().setFromObject(world);
+      const center = box.getCenter(new THREE.Vector3());
+      const size = Math.max(box.getSize(new THREE.Vector3()).length(), 50);
+      camera.far = Math.max(5000, size * 10);
+      camera.updateProjectionMatrix();
+      controls.target.copy(center);
+      camera.position.set(center.x, center.y + size * 0.6, center.z + size * 0.7);
+      controls.update();
+    },
+    showMessage(message: string) {
+      removeWorld();
+      scene.add(placeholder);
+      overlay.textContent = message;
+      overlay.hidden = false;
+      toggle.hidden = true;
+    },
+    clear() {
+      this.showMessage(EMPTY_HINT);
+    },
     shown() {
       resize();
       if (!running) {
