@@ -15,22 +15,22 @@ Delete this folder in the last brief (`14-close-out.md`). It is a working plan, 
 
 ## Order and dependencies
 
-| # | Brief | Issue | Depends on | Suggested model |
+| # | Brief | Issue | Depends on | Model |
 |---|-------|-------|------------|-----------------|
 | 01 | [Scene layers stop overlapping](01-scene-layers.md) | #118 | — | Sonnet |
 | 02 | [Rotate the scene automatically](02-auto-rotate.md) | #119 | — | Sonnet |
 | 03 | [Keep the camera when a staged build ends](03-keep-camera.md) | #112 | 02 (soft: same file) | Sonnet |
 | 04 | [Dispose listeners and the stream on leaving explore](04-dispose-on-leave.md) | #113 | 02 (soft: `cameraModes.ts`) | Sonnet |
-| 05 | [No popups while tracing](05-no-popups-while-tracing.md) | #114 | — | Haiku |
+| 05 | [No popups while tracing](05-no-popups-while-tracing.md) | #114 | — | Sonnet |
 | 06 | [List routing strategies](06-routing-strategies.md) | #109 | — | Sonnet |
-| 07 | [Spatial queries compose nested areas](07-compose-spatial-queries.md) | #108 | — | Opus |
+| 07 | [Spatial queries compose nested areas](07-compose-spatial-queries.md) | #108 | — | Sonnet |
 | 08 | [Inner areas' roads drawn once during a staged build](08-roads-stage-once.md) | #110 | 01 (soft: `stagedScene.ts`) | Sonnet |
-| 09 | [No duplicate blocks in two-level nesting](09-nested-blocks-once.md) | #111 | — | Opus |
+| 09 | [No duplicate blocks in two-level nesting](09-nested-blocks-once.md) | #111 | — | Sonnet |
 | 10 | [Audit raw-SQL writes followed by ORM reads](10-raw-sql-audit.md) | #115 | — | Sonnet |
-| 11 | [Faster feature persistence and turn generation](11-persist-and-turns-perf.md) | #107 | 10 (soft: same repositories) | Opus |
+| 11 | [Faster feature persistence and turn generation](11-persist-and-turns-perf.md) | #107 | 10 (soft: same repositories) | Sonnet |
 | 12 | [client-features.md matches the code](12-client-features-doc.md) | #116 | 06, 07 (their rows) | Haiku |
 | 13 | [Landing copy mentions heights](13-landing-copy.md) | #117 | — | Haiku |
-| 14 | [Close-out](14-close-out.md) | — | everything above | Haiku |
+| 14 | [Close-out](14-close-out.md) | — | everything above | coordinator |
 
 Parallelizable: at most **two briefs run at once**. The client briefs (01–05, 08) and the server
 briefs (07, 09–11) touch separate trees, so one of each can run side by side; 06 touches both (a
@@ -39,6 +39,10 @@ and 08 both touch `stagedScene.ts`, and 02, 03 and 04 all touch `sceneView.ts` o
 so run each group in order. Within the server, 07 and 09 both touch nested-area composition, and 10
 and 11 both touch the repositories, so run each pair one after the other. Brief 08's issue (#110) was
 written as a server fix; the cause is on the client (see the brief).
+
+**Choosing the model.** Give each brief the cheapest model that can do it. Haiku: docs, copy, and
+mechanical edits where the brief gives the exact change. Sonnet: anything that writes or changes code
+or tests, including fixing a red CI check. Opus is never used to implement; the coordinator reviews.
 
 ## Rules every brief follows
 
