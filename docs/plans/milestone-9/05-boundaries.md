@@ -81,4 +81,25 @@ glTF brief's concern).
 
 ## Outcome
 
+Built `client/src/boundaries/` (`boundaryGeometry`, `boundaryMessages`, `boundaryTool`, `boundaryPanel`, with
+tests for the first two) and `client/src/geo/localMeters.ts`. The panel has a Boundaries section under the import
+controls (`index.html` now splits the aside into an import section and a boundary section). `ImportPanel` loads
+`mapData(areaId, mapDataQuery(scope))`, reloads when the shared scope changes, takes an optional `afterImport`
+callback (main wires it to `BoundaryPanel.saveTraced`), and exposes `bbox` for the client-side precheck.
+Spec delta, `client-features.md` rows, and `tasks.md` 1.13 are updated. Tests were written but not run (CI is the gate);
+only `tsc --noEmit` was run.
+
+Decisions:
+- `invalid_boundary` is explained by `details.rule` through `reportBoundaryError`, a thin wrapper over brief 04's
+  reporter (the reporter itself only maps `code`, so the rule override lives in `boundaryMessages.ts`).
+- Opening a different area always starts at its whole extent; only reopening the current area keeps its remembered
+  scope. A remembered boundary that was deleted (404 `boundary_not_found`) falls back to the whole area.
+- The panel's Save button saves to the open area; a shape traced before an import is saved to the new area by
+  the import itself. If the drawn rectangle was redrawn over a different place, the server's `outside_import_area` is shown.
+- The precheck runs against the rectangle on the map (`ImportPanel.bbox`), which equals the open area's box until redrawn.
+- Not done: map clicks on engine features still open popups while tracing vertices (cosmetic), no mutation checks on
+  the geometry tests (no local test runs).
+
 ## Tangents found
+
+- `MapDataLayers` feature popups fire on clicks during boundary tracing; a tool-active guard would be a small follow-up.

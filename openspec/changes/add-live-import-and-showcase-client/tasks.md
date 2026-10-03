@@ -18,7 +18,7 @@
 - [x] 1.12d #91 [blocks] Block derivation takes minutes on a 1 km² city import
 - [x] 1.12e #90 [ingestion] Import in stages in the background and stream each stage as server-sent events
 - [x] 1.12a #88 [client] Show the server's reason for an import failure
-- [ ] 1.13 #64 [client] Trace a boundary over the selection and manage saved boundaries
+- [x] 1.13 #64 [client] Trace a boundary over the selection and manage saved boundaries
 - [ ] 1.14 #65 [client] Build a low-poly 3D scene from map-data
 - [ ] 1.15 #66 [client] Explore the scene by flying and walking
 - [ ] 1.16 #67 [client] Staged build animation on import

@@ -1,5 +1,6 @@
 import "./style.css";
 import { ApiClient } from "./api/client";
+import { BoundaryPanel } from "./boundaries/boundaryPanel";
 import { ImportPanel } from "./importing/importPanel";
 import { SelectionStore } from "./state/selection";
 import { MapDataLayers } from "./views/mapDataLayers";
@@ -13,7 +14,13 @@ const selection = new SelectionStore(localStorage);
 const mapView = createMapView(document.getElementById("map-view")!);
 mapView.map.on("load", () => {
   const layers = new MapDataLayers(mapView.map);
-  new ImportPanel(document.getElementById("import-panel")!, mapView.map, api, layers, selection);
+  // The boundary panel needs the import panel's rectangle, and the import panel saves a traced shape
+  // through the boundary panel once an import succeeds, so each is handed to the other as a callback.
+  let boundaries: BoundaryPanel | undefined;
+  const importPanel = new ImportPanel(document.getElementById("import-section")!, mapView.map, api, layers, selection, (areaId) =>
+    boundaries?.saveTraced(areaId) ?? Promise.resolve(),
+  );
+  boundaries = new BoundaryPanel(document.getElementById("boundary-section")!, mapView.map, api, selection, () => importPanel.bbox);
 });
 // The 3D scene (and Three.js) loads only when the Scene tab is first opened, so a map-only session
 // never downloads it or creates a WebGL context for it.

@@ -36,3 +36,18 @@ The map view SHALL let a user draw a rectangle by dragging and adjust it by its 
 #### Scenario: Re-importing the same rectangle
 - **WHEN** a user imports a rectangle equal to one they imported before
 - **THEN** the client asks for confirmation, warning that data OpenStreetMap no longer has will be deleted
+
+### Requirement: The client SHALL trace, save, and scope by boundaries
+The map view SHALL let a user trace a shape inside the rectangle by clicking vertices (closing it by clicking the first vertex or double-clicking, cancelling with Escape) or freehand (press, drag, release), drawn distinctly from the import rectangle. It SHALL save the shape as a named boundary of the open area, list the area's saved boundaries, select one, and delete one after confirmation. A shape traced before an import SHALL be saved to the new area right after the import succeeds; if the server rejects it, the import SHALL stand, the rejection SHALL be shown, and the shape SHALL be kept so it can be fixed and saved again. A rejection of kind `invalid_boundary` SHALL be shown as a plain-words sentence chosen by `details.rule`. A scope selector SHALL choose between the whole area and one boundary; the map layers SHALL show the map data of the chosen scope, and the chosen scope SHALL be remembered per area across a reload.
+
+#### Scenario: A self-crossing shape
+- **WHEN** a user saves a shape whose edges cross each other
+- **THEN** the client shows "The shape crosses itself." and keeps the shape on the map so it can be redrawn
+
+#### Scenario: The scope survives a reload
+- **WHEN** a user selects a saved boundary as the scope and reloads the page
+- **THEN** the open area comes back scoped to that boundary, and the map layers show only its map data
+
+#### Scenario: Deleting the boundary in scope
+- **WHEN** a user deletes the boundary that is the current scope
+- **THEN** the scope returns to the whole area and the map layers show the whole area

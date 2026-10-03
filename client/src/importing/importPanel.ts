@@ -1,12 +1,13 @@
 import type * as maplibregl from "maplibre-gl";
 import type { ApiClient } from "../api/client";
-import type { BoundingBox, ImportArea } from "../api/types";
+import type { BoundingBox, ImportArea, MapData } from "../api/types";
 import { areaSquareMeters, bboxProblem, formatSquareKilometers, MAX_AREA_SQUARE_METERS, roundBbox } from "../geo/bbox";
 import type { MapDataLayers } from "../views/mapDataLayers";
 import { renderReportedError, useErrorReporter } from "../errors/errorReporter";
 import { IMPORT_MESSAGES } from "./errorMessages";
 import { RectangleTool } from "./rectangleTool";
-import type { SelectionStore } from "../state/selection";
+import { ApiError } from "../api/client";
+import { mapDataQuery, sameScope, type Scope, type SelectionStore } from "../state/selection";
 import { describeArea, findByBbox } from "./recentImports";
 
 /** How many completed areas the panel lists. */
@@ -31,6 +32,8 @@ export class ImportPanel {
     recent: HTMLElement;
   };
   private busy = false;
+  /** The area and scope whose map data is on the map now. */
+  private shown: { areaId: string; scope: Scope } | null = null;
 
   constructor(
     container: HTMLElement,
@@ -38,6 +41,8 @@ export class ImportPanel {
     private readonly api: ApiClient,
     private readonly layers: MapDataLayers,
     private readonly selection: SelectionStore,
+    /** Runs after an import succeeds and its area is open, for example to save a traced boundary. */
+    private readonly afterImport: (areaId: string) => Promise<void> = async () => {},
   ) {
     container.innerHTML = `
       <h2>Import a place</h2>
@@ -62,9 +67,19 @@ export class ImportPanel {
       this.tool.startDrawing();
     });
     this.el.importButton.addEventListener("click", () => void this.importSelection());
+    // Map layers follow the shared scope: choosing a boundary (or the whole area) reloads them.
+    this.selection.subscribe((selection) => {
+      const shown = this.shown;
+      if (shown && selection.areaId === shown.areaId && !sameScope(selection.scope, shown.scope)) void this.reloadMapData(selection.scope);
+    });
     void this.refreshAreas();
     const current = this.selection.get().areaId;
     if (current) void this.open(current, { quiet: true });
+  }
+
+  /** The rectangle on the map: the one being drawn, or the open area's. */
+  get bbox(): BoundingBox | null {
+    return this.tool.bbox;
   }
 
   private selectionChanged(bbox: BoundingBox | null): void {
@@ -97,6 +112,7 @@ export class ImportPanel {
       const area = await this.api.importArea(bbox);
       await this.open(area.id, { area });
       void this.refreshAreas();
+      await this.afterImport(area.id);
     } catch (error) {
       this.showError(error);
     } finally {
@@ -110,8 +126,20 @@ export class ImportPanel {
   async open(areaId: string, options: { area?: ImportArea; quiet?: boolean } = {}): Promise<void> {
     try {
       const area = options.area ?? (await this.api.getImportArea(areaId));
-      const data = await this.api.mapData(areaId);
+      // Another area starts at its whole extent; only reopening the current area keeps its scope.
+      const current = this.selection.get();
+      let scope: Scope = areaId === current.areaId ? current.scope : { type: "import_area" };
+      let data: MapData;
+      try {
+        data = await this.api.mapData(areaId, mapDataQuery(scope));
+      } catch (error) {
+        // A remembered boundary that was deleted since: fall back to the whole area.
+        if (!(error instanceof ApiError && error.code === "boundary_not_found" && scope.type === "boundary")) throw error;
+        scope = { type: "import_area" };
+        data = await this.api.mapData(areaId);
+      }
       this.layers.show(data);
+      this.shown = { areaId, scope };
       this.tool.show(area.bbox, true);
       this.map.fitBounds(
         [
@@ -121,11 +149,29 @@ export class ImportPanel {
         { padding: 60, duration: options.quiet ? 0 : 800 },
       );
       this.selection.setArea(areaId);
+      this.selection.setScope(scope);
       this.setStatus(summary(area), "ok");
       this.selectionChanged(area.bbox);
       this.renderAreas();
     } catch (error) {
       if (!options.quiet) this.showError(error);
+    }
+  }
+
+  /** Redraws the open area's map data for another scope. */
+  private async reloadMapData(scope: Scope): Promise<void> {
+    const shown = this.shown;
+    if (!shown) return;
+    try {
+      const data = await this.api.mapData(shown.areaId, mapDataQuery(scope));
+      // Ignore the answer if the user moved on while it was loading.
+      const now = this.selection.get();
+      if (now.areaId !== shown.areaId || !sameScope(now.scope, scope)) return;
+      this.layers.show(data);
+      this.shown = { areaId: shown.areaId, scope };
+    } catch (error) {
+      if (error instanceof ApiError && error.code === "boundary_not_found") this.selection.setScope({ type: "import_area" });
+      else this.showError(error);
     }
   }
 
