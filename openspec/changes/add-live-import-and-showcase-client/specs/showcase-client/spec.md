@@ -27,11 +27,15 @@ The client SHALL switch between a 2D map view and a 3D scene view. Every page lo
 - **THEN** the map view is shown, and no 3D scene is built until the user opens the scene view
 
 ### Requirement: The client SHALL select a rectangle of up to 1 km² and import it live
-The map view SHALL let a user draw a rectangle by dragging and adjust it by its corners, SHALL show its area in km² while drawing using the same rule as the server, and SHALL disable import while the rectangle exceeds 1 km². Importing SHALL call the API without a payload, show elapsed progress, and then draw the area's map data: roads at their generated width, buildings distinguishing known from unknown heights, blocks, area features, and points of interest, each describable by clicking. Errors SHALL be shown by a sentence chosen by their code; the server's message and OpenStreetMap links appear only when the client's debug flag is on. Importing a rectangle already imported SHALL first warn that re-import reconciles and may delete data.
+The map view SHALL let a user draw a rectangle by dragging and adjust it by dragging (inside to move it without changing its size, an edge to resize along one axis, a corner to resize both, by pointer events so touch works, with the cursor naming each part), SHALL show its area in km² while drawing or dragging using the same rule as the server together with its width and height, SHALL show the over-limit style before the drag is released, SHALL restore the previous rectangle when Escape cancels a drag, and SHALL disable import while the rectangle exceeds 1 km². Importing SHALL call the API without a payload, show elapsed progress, and then draw the area's map data: roads at their generated width, buildings distinguishing known from unknown heights, blocks, area features, and points of interest, each describable by clicking. Errors SHALL be shown by a sentence chosen by their code; the server's message and OpenStreetMap links appear only when the client's debug flag is on. Importing a rectangle already imported SHALL first warn that re-import reconciles and may delete data.
 
 #### Scenario: A rectangle over the limit
 - **WHEN** a user draws a rectangle the server would measure at over 1 km²
 - **THEN** the area readout marks it too large and import is disabled
+
+#### Scenario: Moving the rectangle
+- **WHEN** a user drags inside the rectangle
+- **THEN** the rectangle moves with its width and height unchanged, a label shows its size and area while dragging, and Escape before release puts it back where it was
 
 #### Scenario: Re-importing the same rectangle
 - **WHEN** a user imports a rectangle equal to one they imported before

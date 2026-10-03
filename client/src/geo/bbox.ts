@@ -12,10 +12,17 @@ function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number)
   return 2 * EARTH_RADIUS_METERS * Math.asin(Math.sqrt(h));
 }
 
-/** Width along the south edge times height along the west edge, as the server measures it. */
+/** Width along the south edge and height along the west edge, as the server measures them. */
+export function bboxSizeMeters(bbox: BoundingBox): { width: number; height: number } {
+  return {
+    width: haversineMeters(bbox.min_latitude, bbox.min_longitude, bbox.min_latitude, bbox.max_longitude),
+    height: haversineMeters(bbox.min_latitude, bbox.min_longitude, bbox.max_latitude, bbox.min_longitude),
+  };
+}
+
+/** Width times height, as the server measures it. */
 export function areaSquareMeters(bbox: BoundingBox): number {
-  const width = haversineMeters(bbox.min_latitude, bbox.min_longitude, bbox.min_latitude, bbox.max_longitude);
-  const height = haversineMeters(bbox.min_latitude, bbox.min_longitude, bbox.max_latitude, bbox.min_longitude);
+  const { width, height } = bboxSizeMeters(bbox);
   return width * height;
 }
 

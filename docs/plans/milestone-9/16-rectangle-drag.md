@@ -42,4 +42,24 @@ scenario "moving the rectangle". `client-features.md` note.
 
 ## Outcome
 
+- `client/src/importing/rectangleDrag.ts` (pure): `hitTest`, `applyDrag`, `describeSize`, plus `sizeLabel`,
+  `cursorFor` and `metersPerPixel`. Works in local meters around the rectangle's centre. Hit priority is
+  corner, then edge, then inside, nearest wins on tiny rectangles. A side dragged past its opposite flips;
+  an axis never goes under 10 m (a drag landing exactly on the opposite side grows in the direction the
+  side was dragged from).
+- `geo/bbox.ts`: new `bboxSizeMeters`, which `areaSquareMeters` now uses, so the label's width and height
+  are measured the way the server measures them.
+- `rectangleTool.ts` now uses pointer events on the map canvas with `setPointerCapture`, and
+  `touch-action: none` on the canvas so a touch drag is not cancelled as a browser pan. The 12 px handle
+  radius becomes meters with `metersPerPixel` (512 px tiles). `dragPan`/`boxZoom` are disabled only while a
+  drag is active. Public API (`bbox`, `startDrawing`, `show`) is unchanged; `importPanel.ts` is untouched.
+- The DOM corner `Marker`s are gone: corners (large) and edge midpoints (small) are a `circle` layer, which
+  shows what is draggable and takes the over-limit colour. The `.corner-handle` CSS became `.selection-label`.
+- Drawing a first rectangle also goes through pointer events; Escape during that drag removes the
+  half-drawn rectangle and leaves drawing armed.
+- Tests: `rectangleDrag.test.ts`, expected values computed by hand at the equator (1 degree = 111194.93 m).
+  Type check passes; the suites were not run locally (CI is the gate), so the tests are not mutation-checked.
+  Nothing was exercised in a browser: the pointer wiring in `rectangleTool.ts` is untested by design (needs a map).
+- Docs: spec delta (modified requirement plus "Moving the rectangle" scenario), `client-features.md` row, task 1.18d ticked.
+
 ## Tangents found
