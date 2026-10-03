@@ -1,7 +1,5 @@
-import { ApiError } from "../api/client";
-
-/** A user-facing sentence for each import failure, chosen by the contract `code`, never the raw message. */
-const IMPORT_MESSAGES: Record<string, string> = {
+/** A user-facing sentence for each import failure, chosen by the contract `code`, never the raw message (the error reporter adds that only when its debug flag is on). */
+export const IMPORT_MESSAGES: Record<string, string> = {
   invalid_bounding_box: "That rectangle can't be imported: it must be larger than zero and at most 1 km².",
   invalid_request: "The import request was malformed. This is a client bug.",
   payload_outside_bounding_box: "Some of the returned map data lies outside the rectangle, so nothing was imported.",
@@ -14,10 +12,3 @@ const IMPORT_MESSAGES: Record<string, string> = {
   http_error: "The API isn't answering. Is the server running?",
   network_error: "The API can't be reached. Is the server running?",
 };
-
-export function importErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    return IMPORT_MESSAGES[error.code] ?? `The import failed (${error.code}).`;
-  }
-  return "The import failed unexpectedly.";
-}

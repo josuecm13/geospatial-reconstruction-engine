@@ -315,6 +315,11 @@ class OSMIngestionService:
         must lie inside it, since a point has no edge to cross.
         """
         offending: list[str] = []
+        offending_refs: list[str] = []
+
+        def reject(source_id: str, osm_type: str) -> None:
+            offending.append(source_id)
+            offending_refs.append(f"{osm_type}/{source_id}")
 
         def envelope_intersects(node_ids: tuple[str, ...]) -> bool:
             lats = [records.nodes[node_id].latitude for node_id in node_ids]
@@ -328,14 +333,14 @@ class OSMIngestionService:
 
         for road in records.roads:
             if not envelope_intersects(road.node_ids):
-                offending.append(road.source_id)
+                reject(road.source_id, "way")
         for feature in (*records.buildings, *records.areas):
             if not envelope_intersects(feature.node_ids):
-                offending.append(feature.source_id)
+                reject(feature.source_id, "way")
         for poi in records.pois:
             if poi.footprint_node_ids:
                 if not envelope_intersects(poi.footprint_node_ids):
-                    offending.append(poi.source_id)
+                    reject(poi.source_id, "way")
                 continue
             point = poi.point
             inside = (
@@ -343,13 +348,14 @@ class OSMIngestionService:
                 and bbox.min_corner.longitude <= point.longitude <= bbox.max_corner.longitude
             )
             if not inside:
-                offending.append(poi.source_id)
+                reject(poi.source_id, "node")
 
         if offending:
             raise PayloadOutsideBoundingBox(
                 "payload contains features outside the import bounding box: "
                 + ", ".join(offending[:10]),
                 source_ids=offending,
+                source_refs=offending_refs,
             )
 
     @staticmethod

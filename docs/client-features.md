@@ -88,6 +88,12 @@ truncated and nothing was changed), `upstream_unavailable` (Overpass unreachable
 `no_navigable_node`, `no_route_found`, `unknown_routing_strategy`, `not_found`,
 `method_not_allowed`, `database_unavailable`, `configuration_error`, `internal_error`.
 
+Every view reports failures through `useErrorReporter` (`client/src/errors/errorReporter.ts`): a sentence
+per code, never the raw message. Flip `DEBUG_ERRORS` in that file while debugging to also show the
+server's message and links to the OSM elements it names, for `ingestion_failed`,
+`payload_outside_bounding_box` (whose `details` carry `source_ids` and typed `source_refs` such as
+`way/123`) and `source_incomplete`.
+
 ## 2. UI brainstorm
 
 Ideas, not commitments. Once one is chosen, it becomes an issue in the milestone it belongs to.

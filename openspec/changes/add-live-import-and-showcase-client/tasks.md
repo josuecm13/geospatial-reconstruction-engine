@@ -16,7 +16,7 @@
 - [x] 1.12b #92 [api] List import areas
 - [x] 1.12c #93 [client] Open on the map and build the 3D scene only when its tab is opened
 - [x] 1.12d #91 [blocks] Block derivation takes minutes on a 1 km² city import
-- [ ] 1.12a #88 [client] Show the server's reason for an import failure
+- [x] 1.12a #88 [client] Show the server's reason for an import failure
 - [ ] 1.13 #64 [client] Trace a boundary over the selection and manage saved boundaries
 - [ ] 1.14 #65 [client] Build a low-poly 3D scene from map-data
 - [ ] 1.15 #66 [client] Explore the scene by flying and walking

@@ -22,9 +22,11 @@ class MalformedRestriction(IngestionError):
 class PayloadOutsideBoundingBox(IngestionError):
     """A supported feature in the payload does not belong to the declared bounding box."""
 
-    def __init__(self, message: str, source_ids: list[str]):
+    def __init__(self, message: str, source_ids: list[str], source_refs: list[str]):
         super().__init__(message)
         self.source_ids = source_ids
+        # The same features, typed as "way/123" or "node/9", so a client can link to them.
+        self.source_refs = source_refs
 
 
 @dataclass(frozen=True)

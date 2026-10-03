@@ -77,7 +77,7 @@ def test_payload_outside_bounding_box(client):
     assert response.status_code == 422
     error = response.json()["error"]
     assert error["code"] == "payload_outside_bounding_box"
-    assert error["details"] == {"source_ids": ["9001"]}
+    assert error["details"] == {"source_ids": ["9001"], "source_refs": ["node/9001"]}
 
 
 def test_payload_too_large_creates_no_area(client, db_session):

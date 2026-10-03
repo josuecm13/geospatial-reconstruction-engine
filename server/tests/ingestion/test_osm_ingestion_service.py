@@ -546,6 +546,7 @@ def test_poi_area_entirely_outside_the_box_is_still_rejected(db_session):
         OSMIngestionService(db_session).import_fixture(_bbox(), _poi_area_payload(0.001))
 
     assert error.value.source_ids == ["10"]
+    assert error.value.source_refs == ["way/10"]
 
 
 def test_poi_node_outside_the_box_is_still_rejected(db_session):

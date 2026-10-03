@@ -82,4 +82,22 @@ export function renderReportedError(target: HTMLElement, report: ReportedError):
 
 ## Outcome
 
+- `client/src/errors/errorReporter.ts` has `useErrorReporter`, `renderReportedError`, `osmRefsOf`, the
+  `DEBUG_ERRORS` flag (off) and the exported `CODES_WITH_REASON` set. `renderReportedError` uses DOM
+  APIs only; the reason goes in a `span.error-reason` and each ref is an `<a target="_blank" rel="noreferrer">`
+  appended after it (spans and links rather than a `<ul>`, because the status element is a `<p>`).
+- `importPanel.ts` reports all three failure paths through it. `importErrorMessage` is gone, and its
+  test cases moved to `errorReporter.test.ts`, with the fallbacks reworded for any context
+  (`The request failed (<code>).`, `Something failed unexpectedly.`). `IMPORT_MESSAGES` is now exported
+  from `errorMessages.ts`.
+- Server: `PayloadOutsideBoundingBox` carries `source_refs` (`way/<id>`, `node/<id>`), and the 422 puts it
+  in `details` beside `source_ids`. Roads, buildings, area features, and POIs mapped as areas are
+  `way`; POIs mapped as nodes are `node`. Tests updated in `test_import_areas.py` and
+  `test_osm_ingestion_service.py`.
+- Decision: a bare id in `details.source_ids` with no type in `source_refs` and none in the message gets
+  no link, rather than a guessed `way`. The server now always sends refs, so this only affects older servers.
+- Spec delta (both requirements plus a scenario per flag state), `docs/client-features.md` error contract,
+  and `tasks.md` 1.12a are updated.
+- Guard tests are not mutation-checked (no local test runs). Checked locally: `tsc --noEmit` only.
+
 ## Tangents found

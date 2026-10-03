@@ -3,13 +3,15 @@ import type { ApiClient } from "../api/client";
 import type { BoundingBox, ImportArea } from "../api/types";
 import { areaSquareMeters, bboxProblem, formatSquareKilometers, MAX_AREA_SQUARE_METERS, roundBbox } from "../geo/bbox";
 import type { MapDataLayers } from "../views/mapDataLayers";
-import { importErrorMessage } from "./errorMessages";
+import { renderReportedError, useErrorReporter } from "../errors/errorReporter";
+import { IMPORT_MESSAGES } from "./errorMessages";
 import { RectangleTool } from "./rectangleTool";
 import type { SelectionStore } from "../state/selection";
 import { describeArea, findByBbox } from "./recentImports";
 
 /** How many completed areas the panel lists. */
 const LISTED_AREAS = 50;
+const reportError = useErrorReporter(IMPORT_MESSAGES);
 
 export const REIMPORT_WARNING =
   "This rectangle was imported before. Importing it again reconciles it with OpenStreetMap as it is " +
@@ -96,7 +98,7 @@ export class ImportPanel {
       await this.open(area.id, { area });
       void this.refreshAreas();
     } catch (error) {
-      this.setStatus(importErrorMessage(error), "error");
+      this.showError(error);
     } finally {
       window.clearInterval(timer);
       this.busy = false;
@@ -123,7 +125,7 @@ export class ImportPanel {
       this.selectionChanged(area.bbox);
       this.renderAreas();
     } catch (error) {
-      if (!options.quiet) this.setStatus(importErrorMessage(error), "error");
+      if (!options.quiet) this.showError(error);
     }
   }
 
@@ -133,7 +135,9 @@ export class ImportPanel {
       this.areas = await this.api.listImportAreas({ status: "completed", limit: LISTED_AREAS });
       this.renderAreas();
     } catch (error) {
-      this.el.recent.replaceChildren(Object.assign(document.createElement("li"), { textContent: importErrorMessage(error), className: "hint" }));
+      const item = Object.assign(document.createElement("li"), { className: "hint" });
+      renderReportedError(item, reportError(error));
+      this.el.recent.replaceChildren(item);
     }
   }
 
@@ -154,6 +158,11 @@ export class ImportPanel {
           })
         : [Object.assign(document.createElement("li"), { textContent: "None yet", className: "hint" })]),
     );
+  }
+
+  private showError(error: unknown): void {
+    renderReportedError(this.el.status, reportError(error));
+    this.el.status.dataset.state = "error";
   }
 
   private setStatus(text: string, state: "ok" | "busy" | "error"): void {
