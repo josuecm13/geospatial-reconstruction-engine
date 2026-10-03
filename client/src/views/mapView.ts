@@ -16,12 +16,16 @@ export interface MapView {
   shown(): void;
 }
 
+/** Where the map opens before any area is: Santo Domingo de Heredia, Costa Rica (longitude, latitude). */
+export const DEFAULT_CENTER: [number, number] = [-84.0856, 9.9786];
+export const DEFAULT_ZOOM = 15;
+
 export function createMapView(container: HTMLElement): MapView {
   const map = new maplibregl.Map({
     container,
     style: BASEMAP_STYLE,
-    center: [13.401, 52.5297],
-    zoom: 15,
+    center: DEFAULT_CENTER,
+    zoom: DEFAULT_ZOOM,
     attributionControl: false,
   });
   // Expanded, never collapsed: the OpenStreetMap attribution must always be visible.
