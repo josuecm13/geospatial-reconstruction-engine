@@ -571,7 +571,7 @@ Completion note:
 
 ## Milestone 9 — Live import and the showcase client
 
-Status: **planned**
+Status: **complete**
 
 The client is the engine's showcase, not a verification surface: choose a real place on a 2D map,
 trace the shape that matters, import it live, watch it being built, explore it as a stylized
@@ -666,6 +666,26 @@ Acceptance checks:
 - Switching the view to a traced boundary visibly narrows the rendered data, while switching back
   to the import area restores the full set — demonstrating the trim is a view, not a deletion.
 - The exported glTF opens in a standard viewer.
+
+Completion:
+
+1. Shipped: live Overpass import (every real-data gap filed and fixed), a client with a 2D rectangle
+   picker you can move and resize, boundary tracing and scoping, a low-poly 3D scene, fly and walk,
+   a route between two points, glTF export, a staged build animation fed by a background import,
+   and a landing page, a locations gallery and URLs that carry the view. `docs/runbook.md` and
+   `docs/walkthrough.md` cover running it. Importing a 1 km² city area is now one background job
+   that streams its stages, and block derivation on it takes about 11 s, down from 208 s.
+2. Verification: CI on every commit (`pytest`, `openspec validate --all --strict`, `npm test`,
+   `npm run build`). Suites were not run locally and guard tests were not mutation-checked. The
+   derivation speed-up was compared with `main` on a stored Berlin Mitte area: same block ids,
+   boundaries, buildable areas, flags and building links.
+3. Decisions: recorded in the change's `design.md`. They cover the materialized derivation CTEs,
+   the background job registry and its event stream, single-transaction stages and rings,
+   skipping completed areas inside a new rectangle (option A), the World contract, the routing
+   strategy probe, and the URL as the client's source of truth.
+4. Deferred: generated block content (Milestone 11) and its `generated` stage and scene group;
+   terrain elevation (Milestone 13); a `GET /routing-strategies` endpoint; spatial queries that
+   compose nested areas. Known gaps are listed as drafted issues in PR #99.
 
 ## The raw layer and the content layer
 

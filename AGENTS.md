@@ -43,14 +43,15 @@ elsewhere. See `HOW_TO_RUN.md` for the full setup and what to do in your shell a
 
 ## Status
 
-This project is intentionally incomplete. Through Milestone 8, it has domain persistence, OSM
+This project is intentionally incomplete. Through Milestone 9, it has domain persistence, OSM
 fixture ingestion (with automatic block derivation and reconciling re-import), spatial queries,
 road graph traversal, routing, a full HTTP API in front of all of it, logical streets with
 generated cross-sections (lanes, lane type, width), buildable blocks (buildable area, median
 and edge-block flags, stable ids), and traced boundaries (named shapes over an import area,
 scoped queries, and GeoJSON export in filter and clip modes with local projection metadata).
-Milestone 8.1 (building heights from source), Milestone 9 (live import and the showcase client),
-and the generated-content milestones remain unbuilt. Don't pull those in prematurely; see `MILESTONES.md` for current status and what's next.
+Milestone 9 added live Overpass import, background imports that stream their stages, and the
+showcase client (2D picker, boundary tracing, a 3D scene you can fly and walk, routes, glTF export).
+The generated-content milestones (11 and 12) remain unbuilt. Don't pull those in prematurely; see `MILESTONES.md` for current status and what's next.
 
 ## Conventions
 

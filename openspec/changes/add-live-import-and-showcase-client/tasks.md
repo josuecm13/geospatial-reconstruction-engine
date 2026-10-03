@@ -30,4 +30,4 @@
 - [x] 1.18c #103 [client] Locations gallery with previews and an animated fly-to on open
 - [x] 1.18d #104 [client] Move and resize the selection rectangle by dragging
 - [x] 1.19 #70 [docs] Walkthrough and runbook for a real import
-- [ ] 1.20 Close out: MILESTONES.md status, tracking issue, archive the change
+- [x] 1.20 Close out: MILESTONES.md status, tracking issue, archive the change

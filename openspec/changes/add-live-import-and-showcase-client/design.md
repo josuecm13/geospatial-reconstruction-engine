@@ -40,3 +40,46 @@ side meshes.
   is preferred over `(nwr(bbox);>;);`, which recurses into relation members and grows the payload.
 - **Query shape (#61).** Only the relations the adapter reads are requested (`restriction`,
   `multipolygon`), so route relations don't bloat the response.
+- **Fast block derivation (#91).** Derivation on a 1 km² city area went from 208 s to about 11 s. The
+  planner was inlining single-reference CTEs (the candidate faces' buffered road unions, and the
+  buildable-area `cut`) and recomputing them per face and per column, so both are `AS MATERIALIZED`.
+  The per-face segment lookup is one set-based query. Output is unchanged except the order of
+  segments whose `ST_LineLocatePoint` is equal, which now breaks ties by segment id. Block ids
+  hash the set of segment ids, so they don't depend on it.
+- **Background imports (#90).** `POST /import-areas` with `background: true` creates the area, starts
+  a job in an in-process registry (a pool of two, results kept ten minutes), and answers 202 with
+  `events_url`. `GET /import-areas/{id}/events` is server-sent events that replay everything the job
+  has published, or what follows `Last-Event-ID`, and then follow it live; subscribers never affect
+  the job. A second import of an area that is running answers 409 `import_in_progress`. The registry
+  is in memory, so a restart forgets running jobs (`import_job_not_found`).
+- **One transaction, stages announced after the flush.** The whole import is one all-or-nothing
+  transaction, so a failure leaves the area as it was. Stages are announced once their rows are
+  flushed, in the order `fetched`, `ground`, `roads`, `blocks`, `buildings`, then `completed` or
+  `failed`; `generated` is reserved for Milestone 11. The service emits through a callback and
+  doesn't know JSON; the API layer maps stages to payloads with the `map-data` mappers. The cost is
+  that the stages arrive in a burst after persisting, so the client paces the animation.
+- **Buildings stream in rings.** Buildings are batched by distance from the centre of the area, and
+  `ring` is the index of the non-empty ring, so empty rings leave no gap. The client reveals blocks
+  after the last ring, because buildings link to blocks and the server finishes blocks first.
+- **Nested areas (#100), option A.** The road network stays whole, so routing and blocks work across
+  the rectangle. Buildings, POIs, area features and interior blocks of completed areas fully
+  covered by the new rectangle are skipped, not stored twice, and the sweep removes earlier copies
+  on re-import. A block is dropped when an inner box covers its boundary, not by its representative
+  point, so a block straddling an inner edge is kept. Block ids are assigned over all faces before
+  covered ones are dropped, so a survivor is never renumbered. `map-data` of the outer area composes
+  the inner areas' features (deduplicated by source id) and their unclipped blocks that no outer
+  block covers, and `scope.composed_area_ids` says which. Partly overlapping areas import in full.
+- **The World contract.** The client builds the scene from `map-data` in local meters (x east, z
+  south, y up) in the response's projection. One `world` group holds `ground`, `area_features`,
+  `roads`, `blocks`, `buildings` and `generated`, and meshes are named `<layer>:<entity id>`. Fly,
+  walk, route and glTF export all build on it, and the export strips per-mesh properties down to
+  `layer` and `id`.
+- **The strategy probe.** There is no endpoint that lists routing strategies, so the client sends one
+  route request with a bogus strategy and reads `registered_strategies` from the 422 details. Any
+  other failure leaves only the server default.
+- **Pages and URL state.** The client is vanilla TypeScript with a small history router: `/`,
+  `/locations`, and `/explore/:areaId?view=&scope=&at=`. The URL is the source of truth for the open
+  area, scope and view, so a pasted link restores them. Three.js and MapLibre load only on the
+  pages that need them.
+- **Errors show the server's reason behind one flag.** `DEBUG_ERRORS` in the client is off by
+  default and the same in every build; with it on, the server's message and OSM references appear.
