@@ -60,11 +60,15 @@ The map view SHALL let a user trace a shape inside the rectangle by clicking ver
 - **THEN** the scope returns to the whole area and the map layers show the whole area
 
 ### Requirement: The client SHALL build a low-poly 3D scene from map-data
-The scene view SHALL show the open area, or its selected boundary, as a low-poly 3D world built from `GET /import-areas/{id}/map-data`, in meters from the response's projection origin. It SHALL draw area features and roads (once per two-way road, at `width_meters`) as flat shapes and buildings extruded to their height, and SHALL offer a toggle for the blocks' buildable area, hidden by default. A building's height SHALL be `height_meters` when known, else its levels at 3.2 m each, else a default by category; a height taken from the category default SHALL be visibly marked (a paler material). The scene SHALL reload when the selection changes while it is shown, and SHALL ignore a response that is no longer the latest request.
+The scene view SHALL show the open area, or its selected boundary, as a low-poly 3D world built from `GET /import-areas/{id}/map-data`, in meters from the response's projection origin. It SHALL draw area features and roads (once per two-way road, at `width_meters`) as flat shapes and buildings extruded to their height, and SHALL offer a toggle for the blocks' buildable area, hidden by default. The flat layers SHALL draw in a fixed order that doesn't depend on camera distance: the ground, then area features (water over green), then roads (wider lane types over narrower), then the buildable overlay. A building's height SHALL be `height_meters` when known, else its levels at 3.2 m each, else a default by category; a height taken from the category default SHALL be visibly marked (a paler material). The scene SHALL reload when the selection changes while it is shown, and SHALL ignore a response that is no longer the latest request.
 
 #### Scenario: A building with no height or levels
 - **WHEN** map-data contains a building whose `height_meters` and `levels` are both null
 - **THEN** the scene draws it with its category's default height, in the paler material, flagged as defaulted
+
+#### Scenario: Zoomed out over a junction of a wide and a normal road
+- **WHEN** the camera is zoomed out to its farthest over an area with a wide road crossing a normal one
+- **THEN** the junction shows the wide road whole, with no flicker
 
 #### Scenario: Switching boundary while the scene is shown
 - **WHEN** the selection changes to another boundary while a previous request is still loading

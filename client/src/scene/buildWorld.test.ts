@@ -1,18 +1,18 @@
 import type * as THREE from "three";
 import { describe, expect, it } from "vitest";
 import type { Feature, MapData, Position } from "../api/types";
-import { buildWorld } from "./buildWorld";
+import { buildWorld, groundPlane, LAYER_ORDER } from "./buildWorld";
 import { MATERIALS } from "./palette";
 
 const D = 0.0001; // about 11 m
 const square = (lon: number, lat: number): Position[][] => [[[lon, lat], [lon + D, lat], [lon + D, lat + D], [lon, lat + D], [lon, lat]]];
 const fc = <P>(features: Feature<P>[]) => ({ type: "FeatureCollection" as const, features });
-const road = (id: string, coordinates: [number, number][]) =>
+const road = (id: string, coordinates: [number, number][], streetId = "street-1", laneType = "normal") =>
   ({
     type: "Feature",
     id,
     geometry: { type: "LineString", coordinates },
-    properties: { street: { id: "street-1", name: null, classification: "residential" }, width_meters: 6, lane_type: "normal" },
+    properties: { street: { id: streetId, name: null, classification: "residential" }, width_meters: 6, lane_type: laneType },
   }) as never;
 
 const data: MapData = {
@@ -20,7 +20,7 @@ const data: MapData = {
   scope: { type: "import_area", id: "area-1", composed_area_ids: [] },
   mode: "filter",
   projection: { origin: { latitude: 10, longitude: -84 }, meters_per_degree_latitude: 110_000, meters_per_degree_longitude: 109_000 },
-  road_segments: fc([road("r1", [[-84, 10], [-83.999, 10]]), road("r2", [[-83.999, 10], [-84, 10]])]), // r2 is r1's reverse twin
+  road_segments: fc([road("r1", [[-84, 10], [-83.999, 10]]), road("r2", [[-83.999, 10], [-84, 10]]), road("r3", [[-84, 10.001], [-83.999, 10.001]], "street-2", "wide")]), // r2 is r1's reverse twin
   navigable_nodes: fc([]),
   blocks: fc([
     {
@@ -35,7 +35,9 @@ const data: MapData = {
     { type: "Feature", id: "bu2", geometry: { type: "Polygon", coordinates: square(-84, 10.0004) }, properties: { category: "house", block_id: null, height_meters: 12, levels: null, import_area_id: "area-1" } },
   ]),
   pois: fc([]),
-  area_features: fc([{ type: "Feature", id: "a1", geometry: { type: "Polygon", coordinates: square(-84, 9.9998) }, properties: { kind: "water", import_area_id: "area-1" } }]),
+  area_features: fc([{ type: "Feature", id: "a1", geometry: { type: "Polygon", coordinates: square(-84, 9.9998) }, properties: { kind: "water", import_area_id: "area-1" } },
+    { type: "Feature", id: "a2", geometry: { type: "Polygon", coordinates: square(-84, 9.9996) }, properties: { kind: "park", import_area_id: "area-1" } },
+  ]),
 };
 
 describe("buildWorld", () => {
@@ -50,13 +52,13 @@ describe("buildWorld", () => {
 
   it("names entity meshes <layer>:<id> and records their properties", () => {
     expect(names("buildings")).toEqual(["building:bu1", "building:bu2"]);
-    expect(names("area_features")).toEqual(["area_feature:a1"]);
+    expect(names("area_features")).toEqual(["area_feature:a1", "area_feature:a2"]);
     expect(names("blocks")).toEqual(["block:b1"]);
     expect(world.getObjectByName("building:bu2")!.userData).toMatchObject({ layer: "building", id: "bu2", properties: { height_meters: 12 } });
   });
 
   it("draws a two-way road once", () => {
-    expect(names("roads")).toEqual(["road:r1"]);
+    expect(names("roads")).toEqual(["road:r1", "road:r3"]);
   });
 
   it("marks a building with no height or levels as defaulted, with the paler shared material", () => {
@@ -71,5 +73,38 @@ describe("buildWorld", () => {
 
   it("hides the buildable-area overlay by default", () => {
     expect(world.getObjectByName("blocks")!.visible).toBe(false);
+  });
+
+  it("draws the flat layers in a fixed order that doesn't depend on the depth buffer", () => {
+    const order = (name: string) => world.getObjectByName(name)!.renderOrder;
+    const ground = world.getObjectByName("ground:plane")!.renderOrder;
+    expect(ground).toBe(LAYER_ORDER.ground);
+    expect(order("area_feature:a2")).toBe(LAYER_ORDER.green);
+    expect(order("area_feature:a1")).toBe(LAYER_ORDER.water);
+    expect(order("road:r1")).toBe(LAYER_ORDER.roadNormal);
+    expect(order("road:r3")).toBe(LAYER_ORDER.roadWide);
+    expect(order("block:b1")).toBe(LAYER_ORDER.blocks);
+    expect(order("building:bu1")).toBe(0);
+    const sequence = [ground, order("area_feature:a2"), order("area_feature:a1"), order("road:r1"), order("road:r3"), order("block:b1")];
+    expect([...sequence].sort((a, b) => a - b)).toEqual(sequence);
+    expect(new Set(sequence).size).toBe(sequence.length);
+    expect(Math.max(...sequence)).toBeLessThan(0);
+  });
+
+  it("gives the flat materials no depth write, and the building materials one", () => {
+    for (const key of ["ground", "green", "water", "roadNormal", "roadWide", "roadNarrow", "buildable"] as const) {
+      expect(MATERIALS[key].depthWrite, key).toBe(false);
+    }
+    expect(MATERIALS.buildingMeasured.depthWrite).toBe(true);
+    expect(MATERIALS.buildingDefaulted.depthWrite).toBe(true);
+    expect(MATERIALS.buildable.transparent).toBe(true);
+    expect(MATERIALS.buildable.opacity).toBe(0.45);
+  });
+
+  it("builds the ground plane in the first render slot", () => {
+    const ground = groundPlane(-10, 10, -5, 5);
+    expect(ground.name).toBe("ground:plane");
+    expect(ground.renderOrder).toBe(LAYER_ORDER.ground);
+    expect(ground.material).toBe(MATERIALS.ground);
   });
 });

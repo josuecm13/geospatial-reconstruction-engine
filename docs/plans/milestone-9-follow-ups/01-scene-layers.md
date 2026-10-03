@@ -151,4 +151,12 @@ the commit body.
 
 ## Outcome
 
+Done as designed. `palette.ts`: a `decal` helper gives the ground, green, water, three road and buildable materials `depthWrite: false` (buildings unchanged). `buildWorld.ts`: exported `LAYER_ORDER` and `groundPlane`, `renderOrder` set on area features (water over green), roads (by lane type) and blocks; `LAYER_Y` kept, comment updated. `stagedScene.ts`'s `groundFor` now calls `groundPlane`. The placeholder ground in `sceneView.ts` has `depthWrite: false` and `LAYER_ORDER.ground`. Tests added to `buildWorld.test.ts` (fixture gained a park and a wide road); showcase-client spec edited; no client-features row change.
+
+Verified: the brief's code claims matched (line numbers, `LAYER_Y`, the shared ground code, the false "blocks fade in" note). `npx tsc --noEmit -p client` passes. Guards are not mutation-checked (no local test runs).
+
+Not done: the in-browser visual check (far, near, walk, buildable overlay, placeholder, staged import, route). No browser was run, so #118 stays open for the user to verify by eye.
+
 ## Tangents found
+
+None.

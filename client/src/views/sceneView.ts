@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { BoundingBox, MapData } from "../api/types";
-import { buildWorld } from "../scene/buildWorld";
+import { buildWorld, LAYER_ORDER } from "../scene/buildWorld";
 import { createCameraModes } from "../scene/cameraModes";
 import { createExportButton } from "../scene/exportButton";
 import { createRoutePanel, type RoutingDeps } from "../scene/routePanel";
@@ -38,8 +38,9 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps): 
 
   // The placeholder world, removed once a real one is loaded.
   const placeholder = new THREE.Group();
-  const placeholderGround = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), new THREE.MeshLambertMaterial({ color: "#d9d4c7" }));
+  const placeholderGround = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), new THREE.MeshLambertMaterial({ color: "#d9d4c7", depthWrite: false }));
   placeholderGround.rotation.x = -Math.PI / 2;
+  placeholderGround.renderOrder = LAYER_ORDER.ground;
   placeholder.add(placeholderGround, new THREE.GridHelper(1000, 20, "#b8b2a4", "#c8c2b4"));
   scene.add(placeholder);
 

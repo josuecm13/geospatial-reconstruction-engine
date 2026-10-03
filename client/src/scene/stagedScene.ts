@@ -2,8 +2,7 @@ import * as THREE from "three";
 import type { BoundingBox, FeatureCollection, MapData, Projection } from "../api/types";
 import { metersPerDegree } from "../geo/localMeters";
 import { Animator } from "./buildAnimation";
-import { buildWorld, WORLD_GROUPS } from "./buildWorld";
-import { MATERIALS } from "./palette";
+import { buildWorld, groundPlane, WORLD_GROUPS } from "./buildWorld";
 import { toLocal } from "./projection";
 import type { RevealStep } from "./stagedBuild";
 
@@ -63,11 +62,7 @@ function groundFor(bbox: BoundingBox, projection: Projection): THREE.Mesh {
   const b = toLocal(projection, [bbox.max_longitude, bbox.max_latitude]);
   const [minX, maxX] = [Math.min(a.x, b.x) - GROUND_MARGIN, Math.max(a.x, b.x) + GROUND_MARGIN];
   const [minZ, maxZ] = [Math.min(a.z, b.z) - GROUND_MARGIN, Math.max(a.z, b.z) + GROUND_MARGIN];
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(maxX - minX, maxZ - minZ), MATERIALS.ground);
-  ground.rotation.x = -Math.PI / 2;
-  ground.position.set((minX + maxX) / 2, 0, (minZ + maxZ) / 2);
-  ground.name = "ground:plane";
-  return ground;
+  return groundPlane(minX, maxX, minZ, maxZ);
 }
 
 const meshesOf = (objects: THREE.Object3D[]): THREE.Mesh[] => objects.filter((o): o is THREE.Mesh => (o as THREE.Mesh).isMesh);
