@@ -41,7 +41,7 @@ beyond parity.
 | Buildings: footprint, `category`, `block_id`, `height_meters`, `levels` | shipped | partial | `height_meters` / `levels` are as the source stated, null when unknown (M8.1) 3D: extruded to `height_meters`, else `levels` x 3.2 m, else a per-category default drawn paler (`scene/buildingHeight.ts`). |
 | POIs: point, `category`, `name` | shipped | — | |
 | Area features: polygon, `kind` | shipped | partial | 3D: flat shapes, water blue and the rest green. |
-| Composition of nested areas: the completed import areas inside the rectangle (`scope.composed_area_ids`) add their buildings, POIs, area features, and whole blocks; every feature of those layers names its owner in `properties.import_area_id`, and no source id appears twice | shipped | — | Treat the response as one place. The area's counts cover only its own rows |
+| Composition of nested areas: the completed import areas inside the rectangle (`scope.composed_area_ids`) add their buildings, POIs, area features, and whole blocks; every feature of those layers names its owner in `properties.import_area_id`, no source id appears twice, and no block appears twice | shipped | — | Treat the response as one place. The area's counts cover only its own rows |
 | `attribution` ("© OpenStreetMap contributors") | shipped | partial | **Required**: must always be visible |
 
 ### Spatial queries (whole import area)

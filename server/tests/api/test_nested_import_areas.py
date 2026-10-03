@@ -19,6 +19,9 @@ LAT0, LON0, STEP = 10.100, -84.200, 0.001
 OUTER_BBOX = {"min_latitude": 10.0995, "min_longitude": -84.2005, "max_latitude": 10.1035, "max_longitude": -84.1965}
 # Covers the centre block (rows 1-2, columns 1-2) and cuts through the eight around it.
 INNER_BBOX = {"min_latitude": 10.1008, "min_longitude": -84.1992, "max_latitude": 10.1022, "max_longitude": -84.1978}
+# Between the two: covers the inner box (and so the centre block whole), lies inside the outer one,
+# and meets only the grid's rows and columns 1-2, like the inner box.
+MIDDLE_BBOX = {"min_latitude": 10.1003, "min_longitude": -84.1997, "max_latitude": 10.1027, "max_longitude": -84.1973}
 # Contains the inner box but reaches past the outer one's east edge: only partly overlaps it.
 PARTIAL_BBOX = {"min_latitude": 10.1008, "min_longitude": -84.1992, "max_latitude": 10.1022, "max_longitude": -84.1950}
 
@@ -236,6 +239,87 @@ def test_a_partly_overlapping_area_is_imported_in_full(client):
     body = client.get(f"/import-areas/{outer['id']}/map-data").json()
     assert body["scope"]["composed_area_ids"] == []
     assert partial["id"] not in {feature["properties"]["import_area_id"] for feature in body["buildings"]["features"]}
+
+
+def _import_middle(client) -> dict:
+    return _import(client, MIDDLE_BBOX, _payload(inner_only=True))
+
+
+def _centre_blocks(body) -> list[dict]:
+    """The blocks lying wholly inside the inner box: the grid's centre block."""
+    return [block for block in body["blocks"]["features"] if all(_inside(INNER_BBOX, *point) for point in _ring(block))]
+
+
+def _assert_each_block_once(body, centre_owner) -> None:
+    blocks = body["blocks"]["features"]
+    assert len(blocks) == 9
+    assert len({json.dumps(sorted(map(tuple, _ring(block)))) for block in blocks}) == 9, "no two blocks share a shape"
+    centre = _centre_blocks(body)
+    assert len(centre) == 1
+    assert centre[0]["properties"]["import_area_id"] == centre_owner
+
+
+def test_a_middle_area_imported_before_its_inner_area_composes_each_block_once(client):
+    middle = _import_middle(client)
+    inner = _import_inner(client)
+    outer = _import_outer(client)
+
+    body = client.get(f"/import-areas/{outer['id']}/map-data").json()
+
+    assert body["scope"]["composed_area_ids"] == [middle["id"], inner["id"]]
+    _assert_each_block_once(body, centre_owner=middle["id"])
+
+
+def test_a_middle_area_then_the_outer_then_the_inner_composes_each_block_once(client):
+    middle = _import_middle(client)
+    outer = _import_outer(client)
+    inner = _import_inner(client)
+
+    body = client.get(f"/import-areas/{outer['id']}/map-data").json()
+
+    assert body["scope"]["composed_area_ids"] == [middle["id"], inner["id"]]
+    _assert_each_block_once(body, centre_owner=middle["id"])
+
+
+def test_two_level_nesting_composes_each_block_once_after_reimporting_the_middle(client):
+    middle = _import_middle(client)
+    inner = _import_inner(client)
+    outer = _import_outer(client)
+
+    again = _import_middle(client)
+
+    assert again["id"] == middle["id"]
+    body = client.get(f"/import-areas/{outer['id']}/map-data").json()
+    # The re-imported middle area skips the inner area's faces, so the inner copy is the only one.
+    _assert_each_block_once(body, centre_owner=inner["id"])
+
+
+def test_two_level_nesting_imported_outside_in_composes_each_block_once(client):
+    """Passed before the multi-level rule too: the outer area, imported first, holds every block."""
+    outer = _import_outer(client)
+    _import_middle(client)
+    _import_inner(client)
+
+    body = client.get(f"/import-areas/{outer['id']}/map-data").json()
+
+    _assert_each_block_once(body, centre_owner=outer["id"])
+
+
+def test_a_boundary_scope_over_two_level_nesting_returns_the_centre_block_once(client):
+    middle = _import_middle(client)
+    _import_inner(client)
+    outer = _import_outer(client)
+    ring = [[-84.19895, 10.1011], [-84.1981, 10.1011], [-84.1981, 10.1019], [-84.19895, 10.1019], [-84.19895, 10.1011]]
+    boundary = client.post(
+        f"/import-areas/{outer['id']}/boundaries", json={"name": "centre", "geometry": {"type": "Polygon", "coordinates": [ring]}}
+    )
+    assert boundary.status_code == 201, boundary.text
+
+    body = client.get(f"/import-areas/{outer['id']}/map-data", params={"boundary_id": boundary.json()["id"]}).json()
+
+    blocks = body["blocks"]["features"]
+    assert len(blocks) == 1
+    assert blocks[0]["properties"]["import_area_id"] == middle["id"]
 
 
 def _nearby(client, area_id, latitude, longitude, radius_meters, kind, **params) -> list[dict]:

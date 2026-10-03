@@ -135,4 +135,30 @@ by reasoning (the M-before-I ones).
 
 ## Outcome
 
+Done. The brief's code claims held (`list_composable` at `block.py:40-58`, the face drop at
+`block_derivation.py:146-154`, the inline `composed_area_ids` in `get_map_data`, which brief 07 has
+since moved into the `composed_import_area_ids` dependency without changing it).
+
+- **Fix** (`server/app/persistence/repositories/block.py`). `list_composable` keeps its signature
+  and gains a second correlated `NOT EXISTS`, `held_by_a_more_outer_inner`, as sketched: an
+  unclipped block of another composed area whose bbox covers this block's area's bbox, and whose
+  boundary covers this block's point on surface. Equal boxes break the tie on the lower area id.
+  `owner`/`other_owner` are aliased `ImportAreaModel`s inside the subquery. I checked the compiled
+  PostgreSQL SQL: both subqueries correlate to the outer `blocks` row. Nothing changes at import time.
+- **Tests** (`server/tests/api/test_nested_import_areas.py`). `MIDDLE_BBOX` as the brief proposed.
+  Checked by hand: it covers `INNER_BBOX` and the centre block, lies inside `OUTER_BBOX`, and only
+  grid rows/columns 1-2 intersect it, so `_payload(inner_only=True)` passes
+  `_validate_within_bounding_box` (all ways intersect it, and the one node POI lies inside). Five
+  tests: M→I→O and M→O→I (9 blocks, unique shapes, centre owned by M, composed ids `[M, I]`), the
+  M re-import (centre owned by I), O→M→I (centre owned by O), and a boundary scope over the centre
+  (one block, owned by M). Not run locally; CI is the gate. Not mutation-checked. By reasoning, the
+  M→I→O, M→O→I and boundary tests fail on the old code (10 blocks, or 2 in scope). The O→M→I test
+  and the re-import test pass on the old code too. The re-import test is an M-before-I order, but
+  after the re-import M no longer holds the centre, so the old code had nothing to duplicate.
+- **Docs.** `import-area-api` spec: the composition sentence and a two-level scenario.
+  `architecture.md` "Nested import areas": the outermost holder wins. `client-features.md`: "and no
+  block appears twice" in the composition row.
+
 ## Tangents found
+
+- None.

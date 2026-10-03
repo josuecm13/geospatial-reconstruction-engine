@@ -1,12 +1,12 @@
 import uuid
 from collections import defaultdict
 
-from sqlalchemy import exists, func, select
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.orm import Session, aliased
 
 from app.domain.block import Block
 from app.persistence.geometry import geom_to_multipolygon, geom_to_polygon, polygon_to_geom
-from app.persistence.models import BlockBoundarySegmentModel, BlockModel
+from app.persistence.models import BlockBoundarySegmentModel, BlockModel, ImportAreaModel
 
 
 class BlockRepository:
@@ -43,17 +43,40 @@ class BlockRepository:
         An inner area's clipped blocks are only the inside part of a block that straddles its
         edge, which the outer area stores whole. And an outer area imported before an inner one
         still holds every block, so a block is left out wherever an outer block covers it.
+
+        With several levels of nesting, two inner areas can both hold the same block whole (a
+        middle area imported before its own inner area). The outermost holder wins, as it does
+        for features: a block is also left out where an unclipped block of another inner area
+        whose bounding box covers this block's area's box covers it. Two areas with equal boxes
+        cover each other, so between them the lower area id wins.
         """
         if not inner_area_ids:
             return []
+        point = func.ST_PointOnSurface(BlockModel.boundary)
         outer = aliased(BlockModel)
         held_by_outer = exists().where(
             outer.import_area_id == outer_area_id,
-            func.ST_Covers(outer.boundary, func.ST_PointOnSurface(BlockModel.boundary)),
+            func.ST_Covers(outer.boundary, point),
+        )
+        owner, other_owner, other = aliased(ImportAreaModel), aliased(ImportAreaModel), aliased(BlockModel)
+        held_by_a_more_outer_inner = exists().where(
+            other.import_area_id.in_(inner_area_ids),
+            other.import_area_id != BlockModel.import_area_id,
+            other.is_clipped.is_(False),
+            other_owner.id == other.import_area_id,
+            owner.id == BlockModel.import_area_id,
+            func.ST_CoveredBy(owner.bbox, other_owner.bbox),
+            or_(~func.ST_Equals(owner.bbox, other_owner.bbox), other.import_area_id < BlockModel.import_area_id),
+            func.ST_Covers(other.boundary, point),
         )
         return self._list(
             select(BlockModel)
-            .where(BlockModel.import_area_id.in_(inner_area_ids), BlockModel.is_clipped.is_(False), ~held_by_outer)
+            .where(
+                BlockModel.import_area_id.in_(inner_area_ids),
+                BlockModel.is_clipped.is_(False),
+                ~held_by_outer,
+                ~held_by_a_more_outer_inner,
+            )
             .order_by(BlockModel.import_area_id, BlockModel.id)
         )
 

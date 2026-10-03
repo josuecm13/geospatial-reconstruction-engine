@@ -141,7 +141,9 @@ features, and whole (unclipped) blocks that it doesn't hold itself, each feature
 `fetched` event carries `inner_area_ids`, so a client can show those areas at once. The spatial
 queries compose the same way: radius and bounding-box queries over buildings, POIs, and area
 features, and the footprint area, answer over the rows `map-data` shows (each source id once, the
-area's own copy first), while node and segment queries stay on the area's own network. An area's counts
+area's own copy first), while node and segment queries stay on the area's own network. With several
+levels of nesting (a middle area imported before its own inner area, so both hold a block whole), the
+outermost holder of a block wins, as it does for features, and no block is composed twice. An area's counts
 describe only the rows it stores. No table changes: nesting is derived from the stored `bbox`es.
 
 ## Incremental delivery
