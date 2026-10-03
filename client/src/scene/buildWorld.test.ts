@@ -17,7 +17,7 @@ const road = (id: string, coordinates: [number, number][]) =>
 
 const data: MapData = {
   attribution: "© OpenStreetMap contributors",
-  scope: { type: "import_area", id: "area-1" },
+  scope: { type: "import_area", id: "area-1", composed_area_ids: [] },
   mode: "filter",
   projection: { origin: { latitude: 10, longitude: -84 }, meters_per_degree_latitude: 110_000, meters_per_degree_longitude: 109_000 },
   road_segments: fc([road("r1", [[-84, 10], [-83.999, 10]]), road("r2", [[-83.999, 10], [-84, 10]])]), // r2 is r1's reverse twin
@@ -27,15 +27,15 @@ const data: MapData = {
       type: "Feature",
       id: "b1",
       geometry: { type: "Polygon", coordinates: square(-84, 10) },
-      properties: { area_square_meters: 100, buildable_area: { type: "Polygon", coordinates: square(-84, 10) }, buildable_area_square_meters: 90, is_median: false, is_clipped: false },
+      properties: { area_square_meters: 100, buildable_area: { type: "Polygon", coordinates: square(-84, 10) }, buildable_area_square_meters: 90, is_median: false, is_clipped: false, import_area_id: "area-1" },
     },
   ]),
   buildings: fc([
-    { type: "Feature", id: "bu1", geometry: { type: "Polygon", coordinates: square(-84, 10.0002) }, properties: { category: "house", block_id: null, height_meters: null, levels: null } },
-    { type: "Feature", id: "bu2", geometry: { type: "Polygon", coordinates: square(-84, 10.0004) }, properties: { category: "house", block_id: null, height_meters: 12, levels: null } },
+    { type: "Feature", id: "bu1", geometry: { type: "Polygon", coordinates: square(-84, 10.0002) }, properties: { category: "house", block_id: null, height_meters: null, levels: null, import_area_id: "area-1" } },
+    { type: "Feature", id: "bu2", geometry: { type: "Polygon", coordinates: square(-84, 10.0004) }, properties: { category: "house", block_id: null, height_meters: 12, levels: null, import_area_id: "area-1" } },
   ]),
   pois: fc([]),
-  area_features: fc([{ type: "Feature", id: "a1", geometry: { type: "Polygon", coordinates: square(-84, 9.9998) }, properties: { kind: "water" } }]),
+  area_features: fc([{ type: "Feature", id: "a1", geometry: { type: "Polygon", coordinates: square(-84, 9.9998) }, properties: { kind: "water", import_area_id: "area-1" } }]),
 };
 
 describe("buildWorld", () => {
