@@ -763,6 +763,54 @@ Open question: what "popular" means operationally. OSM carries no popularity mea
 `wikidata` presence, and cuisine tags are the available proxies, and which of them counts needs
 deciding before anything is built on it.
 
+## Milestone 13 — Terrain elevation
+
+Status: **planned**
+
+Gives an import area a ground that is not flat: elevation samples for the rectangle, served through
+the API, with the scene's roads, blocks, and buildings sitting on it and walk mode following it.
+Until now the engine models the plan view only, and the scene draws everything on a flat ground at
+height zero (Milestone 8 kept terrain out of scope on purpose; this is the milestone that takes it on).
+
+Deliverables:
+
+- An elevation source chosen and documented, with its licence and required attribution (see the open
+  question below).
+- Elevation for an import area's rectangle fetched at import time, stored apart from the OSM-observed
+  tables, and refreshed by a re-import like the rest of the area. It is observed data from another
+  source, not generated content, and it follows the raw/content layer rule: nothing about it is written
+  into the OSM tables.
+- An API capability that returns the area's elevation as a regular grid with its origin, spacing, and
+  vertical datum, in the same local projection as map-data, plus a point lookup (elevation at a
+  coordinate) so routes and exports can carry heights.
+- The scene draws a terrain mesh from that grid, drapes roads and blocks on it, stands each building on
+  the ground under its footprint, and keeps walk mode at eye height above the ground.
+- glTF export includes the terrain, and an area with no elevation still renders flat.
+
+Acceptance checks:
+
+- An import of a hilly rectangle serves an elevation grid whose values match the source within its
+  stated accuracy at checked points.
+- Importing never fails because elevation is unavailable: the area is imported flat and says so.
+- Roads and buildings in the scene follow the terrain, with no building floating or buried at its
+  corners beyond a documented tolerance, and walking up a slope changes the camera height.
+- Re-importing a rectangle replaces its elevation without touching the observed rows.
+- CI makes no live network call: elevation is served from a fixture.
+- The source's attribution is visible wherever the terrain is.
+
+Open questions, to decide before anything is built:
+
+- **Which source.** Candidates are open global elevation datasets (SRTM, Copernicus DEM) and tile
+  services built from them. They differ in resolution (about 30 m for the global ones), licence, and
+  whether they need a key. At 30 m a 1 km² rectangle holds only a few dozen samples per side, so this
+  decides whether the terrain looks like ground or like a coarse blanket.
+- **How it is stored.** A sampled grid per import area (simple, version with the area) or PostGIS
+  raster support (a heavier dependency for one consumer).
+- **What a building's base height is.** The lowest corner, the centroid, or a flattened pad, and what
+  that does to buildings on a slope.
+- **Whether roads follow the terrain exactly**, or are smoothed so a road does not roller-coaster over
+  sampling noise.
+
 ## Backlog
 
 Open work is tracked as GitHub issues, grouped by GitHub milestones that mirror the sections above:
