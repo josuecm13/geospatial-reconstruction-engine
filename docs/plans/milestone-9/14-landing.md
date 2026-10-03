@@ -43,4 +43,29 @@ Spec delta: "The client SHALL open on a landing page that explains the engine". 
 
 ## Outcome
 
+Built as briefed. `client/src/pages/landing.ts` (hero with the two actions, three-fact explainer, diagram, recent locations),
+`client/src/landing/architectureModel.ts` (pure stage and edge data, with its test), `architecture.ts` (hand-built SVG, side card,
+`layout(columns)` with a test), `importTarget.ts` (with test). Styles are under `.landing` at the end of `style.css`. Tests were
+written with hand-computed expectations, not run (CI is the gate); `tsc --noEmit -p client` is clean; guards not mutation-checked.
+Nothing was seen in a browser.
+
+**Decisions**
+
+- Diagram layout: 3 columns (two rows, an elbow arrow between rows) from 720 px up, one column stacked on a phone, redrawn on a
+  `matchMedia` change so the text never shrinks below readable. The side card sits beside the diagram from 1100 px and below it
+  under that; the facts grid collapses to one column under 720 px. The card follows the last stage hovered, focused, clicked or
+  Enter/Space'd and never clears, so its doc link stays reachable; with none chosen it shows a hint.
+- "Import a new place": explore always names an area (no route opens the map with no area), so the button opens the area last
+  opened in this browser (`CurrentArea`), else the most recent listed one, else goes to `/locations` (`importTarget`). This is not
+  the "map with no area" the brief describes; see the tangent.
+- Locations block asks for `status=completed`, `limit=6`, and renders every card through the local `renderLocationCard`, so brief 15's
+  card renderer replaces it in one line. The cards show the centre coordinate, counts and date; the API has no place names.
+- The brief lists "buildings with heights" among the outputs; heights from source are Milestone 8.1 and unbuilt, so the copy says
+  "buildings".
+- Doc links point at `docs/*.md` sections on `main` on GitHub, `_blank` with `noopener`.
+
 ## Tangents found
+
+- There is no way into the import panel with no area open: `/explore/:areaId` requires an area, so a fresh database (no areas) has
+  no route to the rectangle tool, and the landing's primary button can only lead to the (empty) locations page. Needs an explore
+  route (or mode) with no area, e.g. `/explore` or `/explore/new`, in `routing/routes.ts` and `pages/explore.ts`.

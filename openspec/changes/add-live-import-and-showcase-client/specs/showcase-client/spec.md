@@ -137,3 +137,18 @@ The client SHALL be a set of pages behind a history router, with no page load be
 #### Scenario: A legacy hash link
 - **WHEN** a user opens `/#scene` with an area remembered from an earlier visit
 - **THEN** the client replaces the URL with `/explore/<that area>?view=scene`
+
+### Requirement: The client SHALL open on a landing page that explains the engine
+The client SHALL serve a landing page at `/` that says what the engine takes in (an OpenStreetMap rectangle of up to 1 km²), what it produces (streets with lanes and widths, buildable blocks, buildings, and a routable graph), and what it is for. It SHALL draw the pipeline (Overpass, ingestion, PostGIS domain, derivation, HTTP API, this client) as an interactive diagram in which hovering, focusing, or activating a stage shows what the stage produces and links to its documentation, and every stage SHALL be reachable by keyboard. It SHALL show the most recent completed import areas from `GET /import-areas` as cards that open the area, a link to the full locations page, and a primary action to import a new place. The explanation and the diagram SHALL render when the API is unreachable, and the locations block SHALL then show the error reporter's sentence. The layout SHALL fit down to a phone width.
+
+#### Scenario: Reading a stage
+- **WHEN** a user tabs to the "Derivation" stage of the diagram
+- **THEN** the side card shows what derivation produces and a link to its documentation
+
+#### Scenario: The API is down
+- **WHEN** a user opens `/` while the API is unreachable
+- **THEN** the explanation and the diagram are shown, and the locations block shows the sentence for `network_error` or `http_error`
+
+#### Scenario: Opening a recent location
+- **WHEN** a user selects a recent location's card
+- **THEN** the client navigates, with no page load, to `/explore/<that area>`

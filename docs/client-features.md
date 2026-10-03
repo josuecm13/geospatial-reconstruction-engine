@@ -77,7 +77,8 @@ beyond parity.
 
 | Capability | API status | Client | Client notes |
 |---|---|---|---|
-| Pages behind a history router: `/` landing, `/locations`, `/explore/:areaId`, not found | n/a | done | `client/src/routing/` (`routes.ts` codec, `router.ts`, `store.ts`) and `client/src/pages/`. Landing and locations are placeholders until #102 and #103 |
+| Pages behind a history router: `/` landing, `/locations`, `/explore/:areaId`, not found | n/a | done | `client/src/routing/` (`routes.ts` codec, `router.ts`, `store.ts`) and `client/src/pages/`. The landing page is built (#102, below); locations is a placeholder until #103 |
+| Landing page at `/`: what the engine is, the pipeline as an interactive SVG diagram (hover, focus or tap a stage for what it produces and a doc link), the six most recent completed areas from `GET /import-areas`, "See all locations", and "Import a new place" | shipped | done | `client/src/pages/landing.ts`, `client/src/landing/` (`architectureModel.ts` is the stage data, `architecture.ts` draws it). Renders without the API: the locations block then shows the error reporter's sentence. "Import a new place" opens the last-opened (else most recent) area on the map, since explore always names an area; with none it goes to the locations page |
 | View state in the URL: `view`, `scope`, and the 2D map's `at=<lat>,<lon>,<zoom>`; Back and Forward restore area, scope and view; camera moves rewrite the entry. Old `#map` / `#scene` links redirect | n/a | done | `client/src/pages/explore.ts` keeps the `SelectionStore` and the route in step. The scene camera is not in the URL |
 
 ### Later milestones (planned)
