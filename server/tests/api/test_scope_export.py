@@ -97,8 +97,8 @@ def test_whole_area_equals_a_boundary_covering_the_whole_rectangle(client, neigh
     area_export = _map_data(client, neighborhood)
     boundary_export = _map_data(client, neighborhood, boundary_id=whole)
 
-    assert area_export.pop("scope") == {"type": "import_area", "id": neighborhood}
-    assert boundary_export.pop("scope") == {"type": "boundary", "id": whole}
+    assert area_export.pop("scope") == {"type": "import_area", "id": neighborhood, "composed_area_ids": []}
+    assert boundary_export.pop("scope") == {"type": "boundary", "id": whole, "composed_area_ids": []}
     assert area_export == boundary_export
 
 
