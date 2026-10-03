@@ -15,7 +15,7 @@ from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from sqlalchemy.exc import InterfaceError, OperationalError
+from sqlalchemy.exc import IntegrityError, InterfaceError, OperationalError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import JSONResponse
 
@@ -52,8 +52,37 @@ def _response(status_code: int, code: str, message: str, details: dict[str, Any]
     return JSONResponse(status_code=status_code, content=build_error_body(code, message, details))
 
 
+_DATABASE_UNAVAILABLE = (503, "database_unavailable", "the database is currently unavailable", None)
+
+
 def _database_unavailable() -> JSONResponse:
-    return _response(503, "database_unavailable", "the database is currently unavailable")
+    return _response(*_DATABASE_UNAVAILABLE)
+
+
+def describe_error(exc: Exception) -> tuple[int, str, str, dict[str, Any] | None]:
+    """`(status, code, message, details)` for an exception the import path can raise: the one
+    mapping behind both the HTTP error handlers and a background import's `failed` event."""
+    if isinstance(exc, ApiError):
+        return exc.status_code, exc.code, exc.message, exc.details
+    if isinstance(exc, PayloadOutsideBoundingBox):
+        return 422, "payload_outside_bounding_box", str(exc), {"source_ids": exc.source_ids, "source_refs": exc.source_refs}
+    if isinstance(exc, InvalidBoundingBox):
+        return 422, "invalid_bounding_box", str(exc), None
+    if isinstance(exc, UpstreamUnavailable):
+        return 503, "upstream_unavailable", str(exc), {"upstream_status": exc.status}
+    if isinstance(exc, IncompleteSourceResponse):
+        return 422, "source_incomplete", str(exc), None
+    if isinstance(exc, OSMIngestionError):
+        if isinstance(exc.__cause__, (OperationalError, InterfaceError)):
+            return _DATABASE_UNAVAILABLE
+        return 422, "ingestion_failed", str(exc), None
+    if isinstance(exc, IntegrityError):
+        return 409, "import_conflict", "a concurrent request already created this import area", None
+    if isinstance(exc, (OperationalError, InterfaceError)):
+        return _DATABASE_UNAVAILABLE
+    if isinstance(exc, MissingEnvironmentVariable):
+        return 500, "configuration_error", "the server is misconfigured", None
+    return 500, "internal_error", "an unexpected error occurred", None
 
 
 def register_error_handlers(app: FastAPI) -> None:
@@ -76,11 +105,11 @@ def register_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(PayloadOutsideBoundingBox)
     async def handle_payload_outside_bbox(request: Request, exc: PayloadOutsideBoundingBox) -> JSONResponse:
-        return _response(422, "payload_outside_bounding_box", str(exc), {"source_ids": exc.source_ids, "source_refs": exc.source_refs})
+        return _response(*describe_error(exc))
 
     @app.exception_handler(InvalidBoundingBox)
     async def handle_invalid_bounding_box(request: Request, exc: InvalidBoundingBox) -> JSONResponse:
-        return _response(422, "invalid_bounding_box", str(exc))
+        return _response(*describe_error(exc))
 
     @app.exception_handler(InvalidTracedBoundary)
     async def handle_invalid_traced_boundary(request: Request, exc: InvalidTracedBoundary) -> JSONResponse:
@@ -96,21 +125,18 @@ def register_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(UpstreamUnavailable)
     async def handle_upstream_unavailable(request: Request, exc: UpstreamUnavailable) -> JSONResponse:
-        return _response(503, "upstream_unavailable", str(exc), {"upstream_status": exc.status})
+        return _response(*describe_error(exc))
 
     @app.exception_handler(IncompleteSourceResponse)
     async def handle_incomplete_source(request: Request, exc: IncompleteSourceResponse) -> JSONResponse:
-        return _response(422, "source_incomplete", str(exc))
+        return _response(*describe_error(exc))
 
     @app.exception_handler(OSMIngestionError)
     async def handle_ingestion_error(request: Request, exc: OSMIngestionError) -> JSONResponse:
         # PayloadOutsideBoundingBox is a subclass of OSMIngestionError, but
         # Starlette dispatches to the most specific registered handler first
         # (via the exception's MRO), so that case never reaches this one.
-        cause = exc.__cause__
-        if isinstance(cause, (OperationalError, InterfaceError)):
-            return _database_unavailable()
-        return _response(422, "ingestion_failed", str(exc))
+        return _response(*describe_error(exc))
 
     @app.exception_handler(NoNavigableNodeError)
     async def handle_no_navigable_node(request: Request, exc: NoNavigableNodeError) -> JSONResponse:

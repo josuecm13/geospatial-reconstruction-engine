@@ -24,6 +24,8 @@ beyond parity.
 | Created / updated / removed counts on import | `POST /import-areas` | planned (#6) | — | Show a diff summary after a re-import |
 | Skipped turn restrictions on import (`skipped_restriction_count`: malformed or unresolvable in OSM) | `POST /import-areas` | shipped | — | Mention it in the import summary when it isn't zero |
 | Live Overpass import: omit `payload` and the box is fetched live | `POST /import-areas` | shipped | done | The main entry point. Takes seconds, so show progress. `upstream_unavailable` (503) means retry later |
+| Background import: `background: true` answers 202 with an `events_url`, runs the import in the server, and refuses a second import of the same area (409 `import_in_progress`) | `POST /import-areas` | shipped | — | The staged build animation (brief 08) starts the import this way |
+| Import progress as server-sent events, one per stage (`fetched`, `ground`, `roads`, `blocks`, `buildings` by ring, then `completed` or `failed`), resumable with `Last-Event-ID` | `GET /import-areas/{id}/events` | shipped | — | Draw each stage as it arrives. A `failed` event leaves the area as it was. 404 `import_job_not_found` once a job is gone (kept ten minutes) |
 
 ### Map data (`GET /import-areas/{id}/map-data`)
 
@@ -85,7 +87,7 @@ Every non-2xx response is `{"error": {"code", "message", "details"}}`. The clien
 `payload_outside_bounding_box`, `ingestion_failed`, `source_incomplete` (the source response was
 truncated and nothing was changed), `upstream_unavailable` (Overpass unreachable or busy), `import_area_not_found`, `import_area_not_ready`, `import_conflict`, `building_not_found`, `invalid_boundary` (with
 `details.rule`), `boundary_name_conflict`, `boundary_not_found`, `invalid_spatial_query`,
-`no_navigable_node`, `no_route_found`, `unknown_routing_strategy`, `not_found`,
+`import_in_progress`, `import_job_not_found`, `no_navigable_node`, `no_route_found`, `unknown_routing_strategy`, `not_found`,
 `method_not_allowed`, `database_unavailable`, `configuration_error`, `internal_error`.
 
 Every view reports failures through `useErrorReporter` (`client/src/errors/errorReporter.ts`): a sentence

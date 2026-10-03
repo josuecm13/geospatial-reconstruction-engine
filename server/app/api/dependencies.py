@@ -12,7 +12,8 @@ from __future__ import annotations
 
 import os
 import uuid
-from collections.abc import Generator
+from collections.abc import Callable, Generator
+from contextlib import AbstractContextManager, contextmanager
 
 from fastapi import Depends, Query
 from sqlalchemy import create_engine
@@ -24,6 +25,7 @@ from app.config.settings import load_settings
 from app.domain.enums import ImportStatus
 from app.domain.import_area import ImportArea
 from app.domain.traced_boundary import TracedBoundary
+from app.ingestion.jobs import ImportJobRegistry, get_registry
 from app.ingestion.overpass import DEFAULT_OVERPASS_URL, OverpassClient
 from app.persistence.repositories.import_area import ImportAreaRepository
 from app.persistence.repositories.traced_boundary import TracedBoundaryRepository
@@ -39,15 +41,42 @@ def get_engine() -> Engine:
     return _engine
 
 
-def get_session() -> Generator[Session, None, None]:
+def _sessions() -> sessionmaker:
     global _session_factory
     if _session_factory is None:
         _session_factory = sessionmaker(bind=get_engine())
-    session = _session_factory()
+    return _session_factory
+
+
+def get_session() -> Generator[Session, None, None]:
+    session = _sessions()()
     try:
         yield session
     finally:
         session.close()
+
+
+SessionScope = Callable[[], AbstractContextManager[Session]]
+
+
+@contextmanager
+def _job_session_scope() -> Generator[Session, None, None]:
+    session = _sessions()()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+def get_job_session_scope() -> SessionScope:
+    """Where a background import gets its own session: it outlives the request that started it.
+    Tests override this with the test session."""
+    return _job_session_scope
+
+
+def get_import_jobs() -> ImportJobRegistry:
+    """The process-wide registry of background imports. Tests override it to control execution."""
+    return get_registry()
 
 
 def import_area(import_area_id: uuid.UUID, session: Session = Depends(get_session)) -> ImportArea:

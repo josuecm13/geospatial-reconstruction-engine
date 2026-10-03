@@ -72,6 +72,13 @@ class ImportAreaCreate(BaseModel):
     bbox: BoundingBoxIn
     # Omitted: the box is fetched live from Overpass.
     payload: dict[str, Any] | None = None
+    # True: answer 202 at once and stream the import's stages from `events_url`.
+    background: bool = False
+
+
+class ImportStartedOut(BaseModel):
+    import_area_id: uuid.UUID
+    events_url: str
 
 
 class ImportAreaListOut(BaseModel):

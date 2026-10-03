@@ -130,4 +130,36 @@ persisting job state across restarts, and the client side (brief 08).
 
 ## Outcome
 
+- **Emit late, persist as today** (the brief's simpler option). `_persist` upserts everything in its
+  existing order and announces stages afterwards: `ground` right after the sweep (so stale rows never
+  go out), `roads` after turns, `blocks` after derivation, and `buildings` after they are linked to
+  their blocks. `fetched` goes out once the payload is parsed and validated.
+- **Layering.** The service doesn't know JSON. It calls `emit(stage, **info)` once a stage is flushed
+  (`StageEmitter` type in `service.py`), and `app/api/background_import.py` maps it, reading the rows back
+  through the job's own session (same transaction, so uncommitted rows are visible) with the `map-data`
+  mappers. `ground` carries `area_features` and `pois`; `buildings` carries `ring` and `buildings`.
+- `OSMIngestionService.import_staged(bbox, payload, emit)` shares `_persist` with `import_fixture`
+  (which passes the no-op emitter and skips the ring batching entirely). It doesn't catch-and-mark-failed:
+  the job rolls back. Non-ingestion exceptions are wrapped in `OSMIngestionError` like the synchronous path,
+  so a block-derivation crash is `ingestion_failed`.
+- `describe_error(exc)` in `app/api/errors.py` is the extracted mapping; the HTTP handlers for the import
+  errors now call it, and the `failed` event uses it. `IntegrityError` maps to `import_conflict` there too.
+- `app/ingestion/jobs.py`: `ImportJob`, `StageEvent`, `ImportJobRegistry` (thread pool of 2, ten-minute
+  retention, `ImportAlreadyRunning`). `get_import_jobs` and `get_job_session_scope` are the overridable
+  dependencies. `app/domain/rings.py`: `ring_batches` (with an optional `tie_break` key, because a generic
+  item has no id) and `mean_vertex`. `ImportAreaRepository.find` is new, so the 409 check doesn't create an area.
+- **`BuildingRepository.list_for_import_area` now uses `populate_existing`.** `link_to_containing_block`
+  updates with raw SQL, so listing buildings in the same session straight afterwards returned the old
+  (null) `block_id`. That would have put wrong `block_id`s in the `buildings` events.
+- `ring` in a `buildings` event is the index of the non-empty ring (0, 1, 2, …), not the distance bucket,
+  so empty rings leave no gap.
+- Tests: `test_rings.py` (pure) and `test_background_import.py` (stage order and content, ring coverage,
+  replay, failure leaving the area untouched, failed fetch, 409 for both paths, invalid rectangle, 404s).
+  Not run locally; guards are not mutation-checked. Checked locally: `py_compile` and loading the app.
+- Not done: nothing from the brief. The keep-alive comment line and the 0.25 s poll are not tested.
+
 ## Tangents found
+
+- `BuildingRepository.link_to_containing_block` updates through raw SQL, so any caller that lists buildings
+  from the same session afterwards gets stale `block_id`s unless it refreshes. Fixed for the one listing
+  this brief needed; other repositories that mix raw SQL and ORM reads may have the same trap.

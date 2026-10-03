@@ -59,8 +59,12 @@ class BuildingRepository:
         return result.rowcount
 
     def list_for_import_area(self, import_area_id) -> list[Building]:
+        # populate_existing: link_to_containing_block updates rows with raw SQL, which leaves
+        # already-loaded models in this session with their old block_id.
         models = self.session.execute(
-            select(BuildingModel).where(BuildingModel.import_area_id == import_area_id)
+            select(BuildingModel)
+            .where(BuildingModel.import_area_id == import_area_id)
+            .execution_options(populate_existing=True)
         ).scalars().all()
         return [self._to_domain(model) for model in models]
 

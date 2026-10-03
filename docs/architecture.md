@@ -100,6 +100,19 @@ Every error response uses one JSON shape with a machine-readable `code` (`app/ap
 
 The client (`client/`, Milestone 9) is the engine's showcase: MapLibre GL is the 2D surface for choosing a place, tracing a boundary, and importing it; Three.js renders the built world as a stylized low-poly scene from `map-data` and its local projection, and exports it as glTF. It consumes the API's representation and never re-derives the domain; scene and mesh geometry are built client-side only.
 
+### Background imports
+
+`POST /import-areas` with `background: true` hands the import to an in-process job registry
+(`server/app/ingestion/jobs.py`): a small thread pool, one job per import area, no broker. A job
+keeps an append-only list of stage events that subscribers replay and follow over server-sent events
+(`GET /import-areas/{id}/events`); finished jobs stay for ten minutes. The registry holds nothing
+durable, which is safe because of one rule: **a job is one transaction**. `OSMIngestionService.import_staged`
+runs the same steps as the synchronous import and flushes after each stage, announcing it as it goes,
+but commits only at the very end. Until then every other reader (`map-data`, the area's status) sees
+the previous committed state, and a failure or a restart simply rolls everything back: the area is not
+marked failed, and its data and counts stay as they were. The stages are read back through the job's own
+session and mapped with the same mappers as `map-data`.
+
 ## Incremental delivery
 
 1. Establish the chosen runtime, Docker Compose PostGIS service, environment sample, migrations, and bounding-box validation tests.

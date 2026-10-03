@@ -44,8 +44,12 @@ class ImportAreaRepository:
             select(func.count()).select_from(BlockModel).where(BlockModel.import_area_id == import_area_id)
         )
 
-    def get_or_create(self, provider: str, bbox: BoundingBox) -> ImportArea:
-        existing = self.session.execute(
+    def find(self, provider: str, bbox: BoundingBox) -> ImportArea | None:
+        existing = self._find_model(provider, bbox)
+        return self._to_domain(existing) if existing is not None else None
+
+    def _find_model(self, provider: str, bbox: BoundingBox) -> ImportAreaModel | None:
+        return self.session.execute(
             select(ImportAreaModel).where(
                 ImportAreaModel.provider == provider,
                 ImportAreaModel.min_longitude == bbox.min_corner.longitude,
@@ -55,6 +59,8 @@ class ImportAreaRepository:
             )
         ).scalar_one_or_none()
 
+    def get_or_create(self, provider: str, bbox: BoundingBox) -> ImportArea:
+        existing = self._find_model(provider, bbox)
         if existing is not None:
             return self._to_domain(existing)
 

@@ -14,6 +14,29 @@ The API SHALL expose `GET /import-areas` returning import areas most recently im
 - **WHEN** a client re-imports a completed area with a payload whose `remark` reports a runtime error
 - **THEN** the response is a 422 error with code `source_incomplete`, and the area's map data is still returned as before
 
+### Requirement: The API SHALL import in the background and stream stages as server-sent events
+`POST /import-areas` SHALL accept an optional `background: true`. The bounding box SHALL be validated as for a synchronous import, and the API SHALL answer 202 with `import_area_id` and `events_url` (`/import-areas/{id}/events`), then fetch (when no payload was posted) and import inside a job. While a background job runs for an area, a second import of that area, synchronous or background, SHALL be refused with a 409 error with code `import_in_progress`, whose details hold `import_area_id` and `events_url`. `GET /import-areas/{id}/events` SHALL stream one server-sent event per stage, each with an increasing `id`, the stage as `event`, and a JSON `data` carrying the area's `projection`: `fetched` (`element_count`), `ground` (`area_features`, `pois`), `roads` (`road_segments`, with generated cross-sections), `blocks`, `buildings` once per ring of 100 m around the rectangle's centre, nearest first (`ring`, `buildings`), and then `completed` (the import area) or `failed` (`code`, `message`, `details`, the code the synchronous import would have returned). The job SHALL run as one transaction committed only after every stage succeeds. The stream SHALL replay what the job has published, honoring `Last-Event-ID`, then follow it live and end after `completed` or `failed`; subscribers SHALL NOT affect the job. A job is kept for ten minutes after it ends. Without a job, the stream SHALL be a 404 error with code `import_job_not_found`.
+
+#### Scenario: Stages arrive in dependency order
+- **WHEN** a client posts a background import and opens the events stream
+- **THEN** it receives `fetched`, `ground`, `roads`, `blocks`, one or more `buildings`, and `completed`, with ids 1, 2, 3, … and each stage's features
+
+#### Scenario: Buildings arrive from the centre outward
+- **WHEN** an area's buildings lie at several distances from the rectangle's centre
+- **THEN** the `buildings` events carry ascending `ring` values, every building exactly once, and together they equal the buildings in the area's map data
+
+#### Scenario: Resuming a stream
+- **WHEN** a client reconnects with `Last-Event-ID: 2` after the job ended
+- **THEN** it receives exactly the events with ids 3 onward
+
+#### Scenario: A failure leaves the area as it was
+- **WHEN** a stage fails during a background import of an area that already has a completed import
+- **THEN** the stream ends with a `failed` event, and the area's status, counts, and map data are exactly what they were before
+
+#### Scenario: A second import while one runs
+- **WHEN** a client imports an area whose background import is still running
+- **THEN** the response is a 409 error with code `import_in_progress` naming the area and its `events_url`
+
 ## MODIFIED Requirements
 
 ### Requirement: The API SHALL import fixture data for a bounding box

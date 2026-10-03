@@ -9,11 +9,12 @@ from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.domain.area_feature import AreaFeature
-from app.domain.bounding_box import BoundingBox
+from app.domain.bounding_box import BoundingBox, Coordinate
 from app.domain.building import Building
 from app.domain.enums import RestrictionKind
 from app.domain.import_area import ImportArea
 from app.domain.poi import PointOfInterest
+from app.domain.rings import mean_vertex, ring_batches
 from app.domain.road_graph import NavigableNode, Road, RoadSegment, Street
 from app.domain.street_grouping import GroupableWay, group_ways_into_streets, street_id_for
 from app.domain.turn_movement import TurnMovement
@@ -46,6 +47,15 @@ StepTimer = Callable[[str], AbstractContextManager[None]]
 
 def _untimed(step: str) -> AbstractContextManager[None]:
     return nullcontext()
+
+# Called as `emit(stage, **info)` once a stage's rows are written (flushed, not committed), so the
+# listener can read them back through the same session. The stages, in order: `fetched`, `ground`,
+# `roads`, `blocks`, then `buildings` once per ring of buildings. The listener maps `info` to JSON.
+StageEmitter = Callable[..., None]
+
+
+def _no_emit(stage: str, **info) -> None:
+    pass
 
 
 @dataclass(frozen=True)
@@ -99,7 +109,7 @@ class OSMIngestionService:
                 raise
             raise OSMIngestionError(f"OSM import failed: {error}") from error
 
-    def _persist(self, import_area: ImportArea, records: ImportRecords) -> ImportResult:
+    def _persist(self, import_area: ImportArea, records: ImportRecords, emit: StageEmitter = _no_emit) -> ImportResult:
         area_id = import_area.id
         streets = StreetRepository(self.session)
         roads = RoadRepository(self.session)
@@ -184,11 +194,13 @@ class OSMIngestionService:
             touched_poi_ids=touched_poi_ids,
             touched_area_feature_ids=touched_area_feature_ids,
         )
+        emit("ground")
 
         # 5. Turn candidates/restrictions, generated only over the now-reconciled segments.
         with self.step_timer("turns"):
             skipped_turns = self._persist_turns(records, segments_by_way, persisted_nodes)
         skipped_restrictions = [*records.skipped_restrictions, *skipped_turns]
+        emit("roads")
         if skipped_restrictions:
             logger.warning(
                 "import area %s: skipped %d turn restriction(s) that are malformed or can't be resolved inside the import: %s",
@@ -198,8 +210,11 @@ class OSMIngestionService:
         # 6. Derive fresh blocks and link buildings over the reconciled network.
         with self.step_timer("block derivation"):
             blocks = block_service.derive_for_import_area(area_id)
+        emit("blocks")
         with self.step_timer("link buildings"):
             linked_building_count = BuildingRepository(self.session).link_to_containing_block(area_id)
+        if emit is not _no_emit:  # the synchronous import has no listener to batch for
+            self._emit_building_rings(import_area, emit)
 
         # 7. Counts are read back from storage, so they always equal what map data returns.
         counts = self._counts_for_area(area_id)
@@ -230,6 +245,44 @@ class OSMIngestionService:
             skipped_restriction_count=len(skipped_restrictions),
             **counts,
         )
+
+    def import_staged(self, bbox: BoundingBox, payload: dict, emit: StageEmitter, provider: str = "osm") -> ImportResult:
+        """`import_fixture` for a background import: the same steps in the same single transaction,
+        announcing each stage through `emit` as its rows are written.
+
+        Nothing is committed until every stage has succeeded, and a failure leaves the session for
+        the caller to roll back: unlike `import_fixture`, the area is not marked failed, so its status
+        and data stay as they were. The area row must already exist and be committed.
+        """
+        ensure_complete(payload)
+        area_repo = ImportAreaRepository(self.session)
+        import_area = area_repo.get_or_create(provider, bbox)
+        try:
+            area_repo.mark_importing(import_area.id)
+            records = self.adapter.parse(with_way_nodes_from_geometry(payload))
+            self._validate_within_bounding_box(bbox, records)
+            emit("fetched", element_count=len(payload.get("elements", [])))
+            result = self._persist(import_area, records, emit)
+            self.session.commit()
+            return result
+        except OSMIngestionError:
+            raise
+        except Exception as error:
+            raise OSMIngestionError(f"OSM import failed: {error}") from error
+
+    def _emit_building_rings(self, import_area: ImportArea, emit: StageEmitter) -> None:
+        """One `buildings` event per ring of buildings around the rectangle's centre, nearest first."""
+        bbox = import_area.bbox
+        center = Coordinate(
+            latitude=(bbox.min_corner.latitude + bbox.max_corner.latitude) / 2,
+            longitude=(bbox.min_corner.longitude + bbox.max_corner.longitude) / 2,
+        )
+        buildings = BuildingRepository(self.session).list_for_import_area(import_area.id)
+        batches = ring_batches(
+            buildings, center, lambda building: mean_vertex(building.geom), tie_break=lambda building: str(building.id)
+        )
+        for ring, batch in enumerate(batches):
+            emit("buildings", ring=ring, buildings=batch)
 
     def _sweep(
         self,
