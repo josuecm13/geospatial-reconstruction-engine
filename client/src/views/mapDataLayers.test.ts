@@ -28,9 +28,11 @@ describe("MapDataLayers popups", () => {
 
   it("opens a popup on a click, but not while popups are disabled, and again once re-enabled", () => {
     const addTo = vi.spyOn(maplibregl.Popup.prototype, "addTo").mockReturnThis();
-    const remove = vi.spyOn(maplibregl.Popup.prototype, "remove").mockReturnThis();
     const { map, click } = fakeMap();
     const layers = new MapDataLayers(map);
+    // MapLibre defines `remove` per instance (an arrow-function field), not on the prototype.
+    const popup = (layers as unknown as { popup: maplibregl.Popup }).popup;
+    const remove = vi.spyOn(popup, "remove").mockReturnValue(popup);
     click();
     expect(addTo).toHaveBeenCalledTimes(1);
     layers.setPopupsEnabled(false);
