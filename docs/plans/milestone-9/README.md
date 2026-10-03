@@ -21,11 +21,15 @@ Delete this folder in the close-out brief (`12-close-out.md`). It is a working p
 | 08 | [Staged build animation](08-staged-build.md) | #67 | 02, 06 | Sonnet |
 | 09 | [Route between two points](09-route.md) | #68 | 04, 06 | Sonnet |
 | 10 | [glTF export](10-gltf-export.md) | #69 | 06 | Sonnet |
+| 13 | [Pages and URL state](13-pages-and-url-state.md) | #101 | 05–10 | Sonnet |
+| 14 | [Landing page and architecture](14-landing.md) | #102 | 13 | Sonnet |
+| 15 | [Locations gallery and fly-to](15-locations.md) | #103 | 13 | Sonnet |
+| 16 | [Move and resize the rectangle](16-rectangle-drag.md) | #104 | — | Sonnet |
 | 11 | [Runbook and walkthrough](11-runbook.md) | #70 | everything above | Haiku (prose) + a human for screenshots |
 | 12 | [Close-out](12-close-out.md) | #27 | everything above | Haiku |
 
 Parallelizable: **01, 04, 06** have no dependencies and touch disjoint files. After 06 lands,
-07, 09 and 10 can run in parallel. 02 → 03 and 02 + 06 → 08 are strict chains.
+07, 09 and 10 can run in parallel. The UX briefs (13–16) come before the runbook (11) and close-out (12): 16 any time, 13 after 05–10, then 14 and 15 in parallel. At most two briefs run at once. 02 → 03 and 02 + 06 → 08 are strict chains.
 
 ## Rules every brief follows
 

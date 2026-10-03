@@ -24,5 +24,9 @@
 - [ ] 1.16 #67 [client] Staged build animation on import
 - [ ] 1.17 #68 [client] Show a route between two points in the scene
 - [ ] 1.18 #69 [client] Export the scene as glTF
+- [ ] 1.18a #101 [client] Pages and URL state: landing, locations, and explore routes
+- [ ] 1.18b #102 [client] Landing page that explains the project and its architecture
+- [ ] 1.18c #103 [client] Locations gallery with previews and an animated fly-to on open
+- [ ] 1.18d #104 [client] Move and resize the selection rectangle by dragging
 - [ ] 1.19 #70 [docs] Walkthrough and runbook for a real import
 - [ ] 1.20 Close out: MILESTONES.md status, tracking issue, archive the change
