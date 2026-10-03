@@ -185,6 +185,7 @@ main > .page.landing { padding: 0; background: #f4f1ea; }
   .landing .landing-hero h2 { font-size: 26px; }
   .landing .landing-facts { grid-template-columns: 1fr; gap: 16px; }
   .landing .landing-inner { padding: 0 16px; }
+}
 
 /* --- Locations gallery: the card (shared with the landing page) and the page's own layout under .locations --- */
 .visually-hidden {
