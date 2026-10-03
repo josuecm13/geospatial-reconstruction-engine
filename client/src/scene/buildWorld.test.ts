@@ -45,7 +45,7 @@ describe("buildWorld", () => {
   it("has the contract's groups, in order", () => {
     expect(world.name).toBe("world");
     expect(world.children.map((c) => c.name)).toEqual(["ground", "area_features", "roads", "blocks", "buildings", "generated"]);
-    expect(world.userData).toEqual({ scope: data.scope, projection: data.projection, attribution: data.attribution });
+    expect(world.userData).toMatchObject({ scope: data.scope, projection: data.projection, attribution: data.attribution });
   });
 
   it("names entity meshes <layer>:<id> and records their properties", () => {

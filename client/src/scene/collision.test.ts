@@ -21,7 +21,8 @@ describe("resolveMove", () => {
 
   it("blocks a corner clipped within the radius", () => {
     expect(blocked(index, { x: 10.2, z: 10.2 })).toBe(true);
-    expect(resolveMove(index, { x: 11, z: 11 }, { x: 10.2, z: 10.2 })).toEqual({ x: 11, z: 11 });
+    // The diagonal step is refused; moving along x alone ends 1.02 m from the corner, which is free.
+    expect(resolveMove(index, { x: 11, z: 11 }, { x: 10.2, z: 10.2 })).toEqual({ x: 10.2, z: 11 });
   });
 
   it("leaves a far-away move untouched", () => {
