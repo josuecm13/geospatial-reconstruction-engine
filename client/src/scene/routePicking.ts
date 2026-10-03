@@ -1,4 +1,4 @@
-import type { Position } from "../api/types";
+import type { Position, RoutingStrategies } from "../api/types";
 
 /** Snap distances above this are warned about: the route starts at the nearest road, not the click. */
 export const LARGE_SNAP_METERS = 25;
@@ -44,6 +44,25 @@ export function snapWarning(which: "origin" | "destination", meters: number): st
   if (meters <= LARGE_SNAP_METERS) return null;
   const verb = which === "origin" ? "starts" : "ends";
   return `Your ${which} point is ${Math.round(meters)} m from the nearest road; the route ${verb} there.`;
+}
+
+/** The value of the picker's "server default" option: no `strategy` is sent. */
+export const SERVER_DEFAULT = "";
+
+export interface StrategyOption {
+  value: string;
+  label: string;
+  selected: boolean;
+}
+
+/**
+ * The strategy picker's options: every registered strategy with the server's default pre-selected,
+ * or, when the list couldn't be read, a single "server default" option that sends no `strategy`.
+ */
+export function strategyOptions(listing: RoutingStrategies | null): StrategyOption[] {
+  if (!listing || listing.strategies.length === 0) return [{ value: SERVER_DEFAULT, label: "server default", selected: true }];
+  const preselect = listing.strategies.includes(listing.default) ? listing.default : listing.strategies[0];
+  return listing.strategies.map((name) => ({ value: name, label: name, selected: name === preselect }));
 }
 
 export const ROUTING_MESSAGES: Record<string, string> = {

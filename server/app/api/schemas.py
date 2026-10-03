@@ -178,6 +178,11 @@ class RouteRequest(BaseModel):
     strategy: str | None = None
 
 
+class RoutingStrategiesOut(BaseModel):
+    strategies: list[str]
+    default: str
+
+
 class RouteOut(BaseModel):
     node_ids: list[uuid.UUID]
     segment_ids: list[uuid.UUID]

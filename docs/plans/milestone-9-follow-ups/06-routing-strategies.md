@@ -116,4 +116,32 @@ Decisions:
 
 ## Outcome
 
+Done. The brief's file and line references held against the code.
+
+- **Server.** `GET /routing-strategies` in `route_planning.py` returns `RoutingStrategiesOut`
+  (`schemas.py`). A new `registered_strategy_names()` in `app/routing/strategies.py` is read by both
+  the endpoint and `UnknownRoutingStrategy`, so the list and the 422 details can't drift. The 422
+  contract is unchanged.
+- **Client.** `RoutingStrategies` type in `types.ts`; `ApiClient.routingStrategies()` calls the
+  endpoint, caches the first success for the client's lifetime, and returns `null` (uncached) on
+  failure. `PROBE_STRATEGY` and the probe are gone. `routePanel.ts` loads the list once, when the
+  toggle is first turned on (a `strategiesLoaded` flag plus an in-flight guard replace
+  `strategiesFor`; `setWorld` no longer reloads). A `null` answer is retried on the next toggle-on.
+- **Decisions.** The option-building logic is a pure `strategyOptions(listing)` in
+  `routePicking.ts` (with `SERVER_DEFAULT` moved there), tested in `routePicking.test.ts`. It
+  pre-selects `default`, falling back to the first name if `default` isn't in the list. A selection
+  equal to the default sends its name explicitly, as before.
+- **Correction to the brief.** The second server test can't do without an imported area: the 422
+  `unknown_routing_strategy` is raised only after the `completed_import_area` dependency passes, so
+  that half of the test imports the routing fixture. The listing half needs none.
+- **Verified.** `python -m py_compile` on the changed server files; `npx tsc --noEmit -p client`
+  clean. Tests (two server, three client API, two `strategyOptions`) written but not run locally;
+  CI is the gate. Guards not mutation-checked.
+- **Docs.** `route-api` spec gains the listing requirement; `showcase-client` spec's route
+  requirement now names `GET /routing-strategies`; `client-features.md` Routing has the new row and
+  the "Named strategy" row's note updated; `architecture.md` endpoint list has the bullet.
+  `HOW_TO_RUN.md` left unchanged (optional).
+
 ## Tangents found
+
+- None.

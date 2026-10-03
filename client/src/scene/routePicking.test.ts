@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "../api/client";
 import { useErrorReporter } from "../errors/errorReporter";
-import { LARGE_SNAP_METERS, ROUTING_MESSAGES, clear, failed, formatDistance, IDLE, pick, snapWarning, succeeded } from "./routePicking";
+import { LARGE_SNAP_METERS, ROUTING_MESSAGES, SERVER_DEFAULT, clear, failed, formatDistance, IDLE, pick, snapWarning, strategyOptions, succeeded } from "./routePicking";
 
 const A: [number, number] = [13.4, 52.5];
 const B: [number, number] = [13.41, 52.51];
@@ -53,5 +53,18 @@ describe("route summary", () => {
     const report = useErrorReporter(ROUTING_MESSAGES);
     expect(report(new ApiError(422, "no_route_found", "x")).sentence).toBe("No route connects these points.");
     expect(report(new ApiError(422, "no_navigable_node", "x")).sentence).toBe("There's no road near that point.");
+  });
+});
+
+describe("strategy options", () => {
+  it("lists every registered strategy with the server's default pre-selected", () => {
+    expect(strategyOptions({ strategies: ["distance", "fewest_turns"], default: "fewest_turns" })).toEqual([
+      { value: "distance", label: "distance", selected: false },
+      { value: "fewest_turns", label: "fewest_turns", selected: true },
+    ]);
+  });
+
+  it("offers only the server default, sending no strategy, when the list can't be read", () => {
+    expect(strategyOptions(null)).toEqual([{ value: SERVER_DEFAULT, label: "server default", selected: true }]);
   });
 });

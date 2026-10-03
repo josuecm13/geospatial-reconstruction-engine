@@ -93,6 +93,8 @@ Implemented HTTP endpoints (Milestone 7):
   square meters.
 - `POST /import-areas/{id}/routes` — origin, destination, an optional named strategy; returns a
   `Route` or a meaningful no-route/no-navigable-node response.
+- `GET /routing-strategies` — the registered routing strategy names and the default; global, not
+  scoped to an import area.
 - `POST`/`GET /import-areas/{id}/boundaries`, `GET`/`DELETE /import-areas/{id}/boundaries/{boundary_id}`
   (Milestone 8) — create, list, fetch, and delete named traced boundaries, as GeoJSON features.
 

@@ -59,7 +59,8 @@ beyond parity.
 | Capability | Endpoint | API status | Client | Client notes |
 |---|---|---|---|---|
 | Route A → B: nodes, segments, geometry, total distance | `POST …/routes` | shipped | shipped: Scene tab, Route toggle and two clicks (`client/src/scene/routePanel.ts`, `routeLayer.ts`) | |
-| Named strategy (today only `distance`, the default). An unknown name returns the registered list | `POST …/routes` | shipped | shipped: picker read from `registered_strategies` (`ApiClient.routingStrategies`) | Build the strategy picker from `details.registered_strategies` so it isn't hardcoded |
+| Named strategy (today only `distance`, the default). An unknown name returns the registered list | `POST …/routes` | shipped | shipped: picker read from `GET /routing-strategies` (`ApiClient.routingStrategies`) | |
+| List registered strategies and the default | `GET /routing-strategies` | shipped | done | The route picker |
 | Snap info: origin and destination node, and snap distance | `POST …/routes` | shipped | shipped: snap distances shown, warning over 25 m (`routePicking.ts`) | Show the snap offset. Warn when it's large |
 | Turn restrictions honored | shipped (implicit) | — | Explain a detour ("no left turn here") |
 

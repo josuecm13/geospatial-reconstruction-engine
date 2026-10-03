@@ -132,6 +132,12 @@ export interface Route {
   destination_snap_distance_meters: number;
 }
 
+/** `GET /routing-strategies`: the registered names (sorted) and the one used when a route names none. */
+export interface RoutingStrategies {
+  strategies: string[];
+  default: string;
+}
+
 /** Every error code the API can return (docs/client-features.md → Errors). */
 export type ErrorCode =
   | "invalid_request"
