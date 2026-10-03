@@ -81,4 +81,10 @@ buildings (no popup), cancel with Esc and click a building (popup), then trace f
 
 ## Outcome
 
+Done as designed. `MapDataLayers.setPopupsEnabled` (disabled: `describe` returns, an open popup is removed, and `mouseenter` stops setting the pointer cursor). `BoundaryPanel` takes an optional last constructor parameter `onTracingChange`, called from `traceChanged()`; `explore.ts` wires it to `layers.setPopupsEnabled(!tracing)`. Code line references matched.
+
+Test: `mapDataLayers.test.ts` adds a fake-map case (click opens, disabled suppresses and removes, re-enabled opens). Decision the brief left open: the file now runs under `// @vitest-environment jsdom` (the popup content builder needs `document`), and `Popup.prototype.addTo`/`remove` are mocked rather than spied through. Spec requirement and scenario and the client-features row updated. `npx tsc --noEmit -p client` passes. Not mutation-checked, not run locally (CI is the gate). The manual check of the panel wiring (vertex trace, Esc, freehand) was not done.
+
 ## Tangents found
+
+None.

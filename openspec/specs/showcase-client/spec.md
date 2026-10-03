@@ -45,7 +45,12 @@ The map view SHALL let a user draw a rectangle by dragging and adjust it by drag
 - **THEN** the client asks for confirmation, warning that data OpenStreetMap no longer has will be deleted
 
 ### Requirement: The client SHALL trace, save, and scope by boundaries
-The map view SHALL let a user trace a shape inside the rectangle by clicking vertices (closing it by clicking the first vertex or double-clicking, cancelling with Escape) or freehand (press, drag, release), drawn distinctly from the import rectangle. It SHALL save the shape as a named boundary of the open area, list the area's saved boundaries, select one, and delete one after confirmation. A shape traced before an import SHALL be saved to the new area right after the import succeeds; if the server rejects it, the import SHALL stand, the rejection SHALL be shown, and the shape SHALL be kept so it can be fixed and saved again. A rejection of kind `invalid_boundary` SHALL be shown as a plain-words sentence chosen by `details.rule`. A scope selector SHALL choose between the whole area and one boundary; the map layers SHALL show the map data of the chosen scope, and the chosen scope SHALL be remembered per area across a reload.
+The map view SHALL let a user trace a shape inside the rectangle by clicking vertices (closing it by clicking the first vertex or double-clicking, cancelling with Escape) or freehand (press, drag, release), drawn distinctly from the import rectangle. It SHALL save the shape as a named boundary of the open area, list the area's saved boundaries, select one, and delete one after confirmation. A shape traced before an import SHALL be saved to the new area right after the import succeeds; if the server rejects it, the import SHALL stand, the rejection SHALL be shown, and the shape SHALL be kept so it can be fixed and saved again. A rejection of kind `invalid_boundary` SHALL be shown as a plain-words sentence chosen by `details.rule`. A scope selector SHALL choose between the whole area and one boundary; the map layers SHALL show the map data of the chosen scope, and the chosen scope SHALL be remembered per area across a reload. While a trace is active, clicking the map SHALL NOT open a feature's description, and one already open SHALL close.
+
+#### Scenario: Clicking a building while tracing
+- **WHEN** a user places a vertex on a building while tracing
+- **THEN** the vertex is added and no description opens
+- **AND** once tracing ends or is cancelled, clicking a building describes it again
 
 #### Scenario: A self-crossing shape
 - **WHEN** a user saves a shape whose edges cross each other

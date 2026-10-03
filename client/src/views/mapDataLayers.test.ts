@@ -1,5 +1,47 @@
-import { describe, expect, it } from "vitest";
-import { featureRows } from "./mapDataLayers";
+// @vitest-environment jsdom
+import * as maplibregl from "maplibre-gl";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { featureRows, MapDataLayers } from "./mapDataLayers";
+
+/** A map that only records its layer click handlers. */
+function fakeMap() {
+  const handlers = new Map<string, (event: unknown) => void>();
+  const map = {
+    addSource() {},
+    addLayer() {},
+    getCanvas: () => ({ style: {} as Record<string, string> }),
+    on(type: string, id: string, handler: (event: unknown) => void) {
+      handlers.set(`${type}:${id}`, handler);
+    },
+  };
+  const click = () =>
+    handlers.get("click:engine-buildings")!({
+      features: [{ layer: { id: "engine-buildings" }, properties: {} }],
+      lngLat: { lng: 0, lat: 0 },
+      originalEvent: { defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } },
+    });
+  return { map: map as unknown as maplibregl.Map, click };
+}
+
+describe("MapDataLayers popups", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("opens a popup on a click, but not while popups are disabled, and again once re-enabled", () => {
+    const addTo = vi.spyOn(maplibregl.Popup.prototype, "addTo").mockReturnThis();
+    const remove = vi.spyOn(maplibregl.Popup.prototype, "remove").mockReturnThis();
+    const { map, click } = fakeMap();
+    const layers = new MapDataLayers(map);
+    click();
+    expect(addTo).toHaveBeenCalledTimes(1);
+    layers.setPopupsEnabled(false);
+    expect(remove).toHaveBeenCalled();
+    click();
+    expect(addTo).toHaveBeenCalledTimes(1);
+    layers.setPopupsEnabled(true);
+    click();
+    expect(addTo).toHaveBeenCalledTimes(2);
+  });
+});
 
 describe("featureRows", () => {
   it("describes a road from MapLibre's flattened properties", () => {
