@@ -1,3 +1,5 @@
+from collections.abc import Iterable
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -6,6 +8,7 @@ from app.domain.geometry import linestring_length_meters
 from app.domain.road_graph import NavigableNode, Road, RoadSegment, RoadSegmentWithStreet, Street
 from app.persistence.geometry import geom_to_linestring, geom_to_point, linestring_to_geom, point_to_geom
 from app.persistence.models import NavigableNodeModel, RoadModel, RoadSegmentModel, StreetModel
+from app.persistence.repositories.batching import chunked
 
 
 class StreetRepository:
@@ -13,28 +16,39 @@ class StreetRepository:
         self.session = session
 
     def upsert(self, street: Street) -> Street:
-        model = self.session.execute(
-            select(StreetModel).where(
-                StreetModel.import_area_id == street.import_area_id,
-                StreetModel.source_id == street.source_id,
-            )
-        ).scalar_one_or_none()
+        return self.upsert_many(street.import_area_id, [street])[street.source_id]
 
-        if model is None:
-            model = StreetModel(
-                id=street.id,
-                import_area_id=street.import_area_id,
-                source_id=street.source_id,
-                name=street.name,
-                classification=street.classification,
-            )
-            self.session.add(model)
-        else:
-            model.name = street.name
-            model.classification = street.classification
+    def upsert_many(self, import_area_id, items: Iterable[Street]) -> dict[str, Street]:
+        """By source id. One SELECT of the existing rows, add or mutate, one flush. Two items with
+        the same source id update the same row, as sequential upserts would."""
+        items = list(items)
+        models: dict[str, StreetModel] = {}
+        for source_ids in chunked({item.source_id for item in items}):
+            for model in self.session.execute(
+                select(StreetModel).where(
+                    StreetModel.import_area_id == import_area_id, StreetModel.source_id.in_(source_ids)
+                )
+            ).scalars():
+                models[model.source_id] = model
+
+        for street in items:
+            model = models.get(street.source_id)
+            if model is None:
+                model = StreetModel(
+                    id=street.id,
+                    import_area_id=street.import_area_id,
+                    source_id=street.source_id,
+                    name=street.name,
+                    classification=street.classification,
+                )
+                self.session.add(model)
+                models[street.source_id] = model
+            else:
+                model.name = street.name
+                model.classification = street.classification
 
         self.session.flush()
-        return self._to_domain(model)
+        return {source_id: self._to_domain(model) for source_id, model in models.items()}
 
     @staticmethod
     def _to_domain(model: StreetModel) -> Street:
@@ -52,30 +66,39 @@ class RoadRepository:
         self.session = session
 
     def upsert(self, road: Road) -> Road:
-        model = self.session.execute(
-            select(RoadModel).where(
-                RoadModel.import_area_id == road.import_area_id,
-                RoadModel.source_id == road.source_id,
-            )
-        ).scalar_one_or_none()
+        return self.upsert_many(road.import_area_id, [road])[road.source_id]
 
-        geom = linestring_to_geom(road.geom)
-        if model is None:
-            model = RoadModel(
-                import_area_id=road.import_area_id,
-                street_id=road.street_id,
-                source_id=road.source_id,
-                classification=road.classification,
-                geom=geom,
-            )
-            self.session.add(model)
-        else:
-            model.street_id = road.street_id
-            model.classification = road.classification
-            model.geom = geom
+    def upsert_many(self, import_area_id, items: Iterable[Road]) -> dict[str, Road]:
+        """By source id. One SELECT of the existing rows, add or mutate, one flush. Two items with
+        the same source id update the same row, as sequential upserts would."""
+        items = list(items)
+        models: dict[str, RoadModel] = {}
+        for source_ids in chunked({item.source_id for item in items}):
+            for model in self.session.execute(
+                select(RoadModel).where(RoadModel.import_area_id == import_area_id, RoadModel.source_id.in_(source_ids))
+            ).scalars():
+                models[model.source_id] = model
+
+        for road in items:
+            geom = linestring_to_geom(road.geom)
+            model = models.get(road.source_id)
+            if model is None:
+                model = RoadModel(
+                    import_area_id=road.import_area_id,
+                    street_id=road.street_id,
+                    source_id=road.source_id,
+                    classification=road.classification,
+                    geom=geom,
+                )
+                self.session.add(model)
+                models[road.source_id] = model
+            else:
+                model.street_id = road.street_id
+                model.classification = road.classification
+                model.geom = geom
 
         self.session.flush()
-        return self._to_domain(model)
+        return {source_id: self._to_domain(model) for source_id, model in models.items()}
 
     @staticmethod
     def _to_domain(model: RoadModel) -> Road:
@@ -94,26 +117,33 @@ class NavigableNodeRepository:
         self.session = session
 
     def upsert(self, node: NavigableNode) -> NavigableNode:
-        model = self.session.execute(
-            select(NavigableNodeModel).where(
-                NavigableNodeModel.import_area_id == node.import_area_id,
-                NavigableNodeModel.source_id == node.source_id,
-            )
-        ).scalar_one_or_none()
+        return self.upsert_many(node.import_area_id, [node])[node.source_id]
 
-        geom = point_to_geom(node.point)
-        if model is None:
-            model = NavigableNodeModel(
-                import_area_id=node.import_area_id,
-                source_id=node.source_id,
-                geom=geom,
-            )
-            self.session.add(model)
-        else:
-            model.geom = geom
+    def upsert_many(self, import_area_id, items: Iterable[NavigableNode]) -> dict[str, NavigableNode]:
+        """By source id. One SELECT of the existing rows, add or mutate, one flush. Two items with
+        the same source id update the same row, as sequential upserts would."""
+        items = list(items)
+        models: dict[str, NavigableNodeModel] = {}
+        for source_ids in chunked({item.source_id for item in items}):
+            for model in self.session.execute(
+                select(NavigableNodeModel).where(
+                    NavigableNodeModel.import_area_id == import_area_id, NavigableNodeModel.source_id.in_(source_ids)
+                )
+            ).scalars():
+                models[model.source_id] = model
+
+        for node in items:
+            geom = point_to_geom(node.point)
+            model = models.get(node.source_id)
+            if model is None:
+                model = NavigableNodeModel(import_area_id=node.import_area_id, source_id=node.source_id, geom=geom)
+                self.session.add(model)
+                models[node.source_id] = model
+            else:
+                model.geom = geom
 
         self.session.flush()
-        return self._to_domain(model)
+        return {source_id: self._to_domain(model) for source_id, model in models.items()}
 
     def get(self, node_id) -> NavigableNode | None:
         model = self.session.get(NavigableNodeModel, node_id)
@@ -140,36 +170,47 @@ class RoadSegmentRepository:
         self.session = session
 
     def upsert(self, segment: RoadSegment) -> RoadSegment:
-        model = self.session.execute(
-            select(RoadSegmentModel).where(
-                RoadSegmentModel.road_id == segment.road_id,
-                RoadSegmentModel.from_node_id == segment.from_node_id,
-                RoadSegmentModel.to_node_id == segment.to_node_id,
-            )
-        ).scalar_one_or_none()
+        return self.upsert_many([segment])[0]
 
-        geom = linestring_to_geom(segment.geom)
-        distance_meters = linestring_length_meters(segment.geom)
+    def upsert_many(self, items: Iterable[RoadSegment]) -> list[RoadSegment]:
+        """Keyed on (road, from node, to node). One SELECT of the existing rows of the batch's
+        roads, add or mutate, one flush. Returns one segment per input, in input order; two items
+        with the same key update the same row, as sequential upserts would."""
+        items = list(items)
+        models: dict[tuple, RoadSegmentModel] = {}
+        for road_ids in chunked({item.road_id for item in items}):
+            for model in self.session.execute(
+                select(RoadSegmentModel).where(RoadSegmentModel.road_id.in_(road_ids))
+            ).scalars():
+                models[(model.road_id, model.from_node_id, model.to_node_id)] = model
 
-        if model is None:
-            model = RoadSegmentModel(
-                road_id=segment.road_id,
-                from_node_id=segment.from_node_id,
-                to_node_id=segment.to_node_id,
-                geom=geom,
-                distance_meters=distance_meters,
-                lane_count=segment.lane_count,
-                is_vehicle_accessible=segment.is_vehicle_accessible,
-            )
-            self.session.add(model)
-        else:
-            model.geom = geom
-            model.distance_meters = distance_meters
-            model.lane_count = segment.lane_count
-            model.is_vehicle_accessible = segment.is_vehicle_accessible
+        keys = []
+        for segment in items:
+            key = (segment.road_id, segment.from_node_id, segment.to_node_id)
+            keys.append(key)
+            geom = linestring_to_geom(segment.geom)
+            distance_meters = linestring_length_meters(segment.geom)
+            model = models.get(key)
+            if model is None:
+                model = RoadSegmentModel(
+                    road_id=segment.road_id,
+                    from_node_id=segment.from_node_id,
+                    to_node_id=segment.to_node_id,
+                    geom=geom,
+                    distance_meters=distance_meters,
+                    lane_count=segment.lane_count,
+                    is_vehicle_accessible=segment.is_vehicle_accessible,
+                )
+                self.session.add(model)
+                models[key] = model
+            else:
+                model.geom = geom
+                model.distance_meters = distance_meters
+                model.lane_count = segment.lane_count
+                model.is_vehicle_accessible = segment.is_vehicle_accessible
 
         self.session.flush()
-        return self._to_domain(model)
+        return [self._to_domain(models[key]) for key in keys]
 
     def list_for_import_area(self, import_area_id) -> list[RoadSegment]:
         models = self.session.execute(

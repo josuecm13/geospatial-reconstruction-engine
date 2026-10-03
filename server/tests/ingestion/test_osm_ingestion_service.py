@@ -600,6 +600,27 @@ def test_restriction_that_does_not_resolve_to_one_turn_is_skipped(db_session):
     assert _prohibited_movements(db_session) == 1
 
 
+def test_two_restrictions_at_the_same_via_node_both_hold(db_session):
+    # The fixture's own no_left_turn (100 -> 102) is at node 2; a second one, 101 -> 100, is too.
+    payload = _with_extra_restriction(
+        [{"type": "way", "ref": 101, "role": "from"}, {"type": "node", "ref": 2, "role": "via"}, {"type": "way", "ref": 100, "role": "to"}],
+        {"restriction": "no_right_turn"},
+    )
+
+    result = OSMIngestionService(db_session).import_fixture(_bbox(), payload)
+
+    assert result.skipped_restriction_count == 0
+    prohibited = db_session.execute(
+        select(TurnMovementModel.restriction_kind, TurnMovementModel.allowed).where(
+            TurnMovementModel.restriction_kind != RestrictionKind.NONE
+        )
+    ).all()
+    assert sorted((RestrictionKind(kind).value, allowed) for kind, allowed in prohibited) == [
+        (RestrictionKind.NO_LEFT_TURN.value, False),
+        (RestrictionKind.NO_RIGHT_TURN.value, False),
+    ]
+
+
 def test_an_import_with_only_valid_restrictions_skips_none(db_session):
     result = OSMIngestionService(db_session).import_fixture(_bbox(), json.loads(FIXTURE.read_text()))
 

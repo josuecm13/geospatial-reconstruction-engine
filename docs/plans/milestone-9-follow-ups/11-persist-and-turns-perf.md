@@ -146,4 +146,52 @@ or push further. Record the before and after numbers either way.
 
 ## Outcome
 
+Done as designed. Every repository got `upsert_many` and `upsert` is now a one-element call to it.
+The prefetch is an `IN (...)` over the batch's own keys, chunked at 5000 by the new
+`repositories/batching.py`, rather than the whole area, so a single `upsert` costs what it did. The
+segment batch prefetches by `road_id`. Nodes, buildings, POIs, area features, streets and roads
+return a dict by source id; segments return a list in input order. `_persist` runs in phases
+(nodes, streets, roads, segments, then the features) with one flush each; `segments_by_way` is
+built as before. `turn_candidates(node_id, incoming, outgoing)` is a pure function in
+`app/domain/turn_movement.py`; `generate_candidates` delegates to it. `_persist_turns` builds the
+candidates from `segments_by_way` grouped by node (segments de-duplicated by id), applies the
+restrictions in memory in order against a per-node `(incoming, outgoing)` dict, and writes once
+with `TurnMovementRepository.persist_many` (`persist_candidates` now calls it). No Core
+`ON CONFLICT`, so no raw write.
+
+Measured on the dev PostGIS (`benchmark_import.py`, Berlin Mitte, same machine, one run each):
+
+| Step | Before | After |
+|---|---|---|
+| persist features | 12.3 s | 2.5 s |
+| turns | 8.9 s | 2.6 s |
+| block derivation | 9.1 s | 8.8 s (untouched) |
+| total | 30.6 s | 14.3 s |
+
+(The brief's 24.0 s and 12.9 s were an earlier, slower measurement; this machine gave 12.3 s and
+8.9 s before the change.) I did not profile with `cProfile`.
+
+Output unchanged: a throwaway `/tmp` snapshot script imported the payload twice (import, then
+re-import) in a rolled-back transaction and dumped nodes, streets, roads, segments, turn
+movements, buildings, POIs and area features by natural key, plus the `ImportResult` counts. The
+JSON from before and after the change is byte-identical. The Mitte payload has no turn
+restrictions, so I also ran the `osm_neighborhood` fixture with two restrictions at one via node
+the same way: both are applied (`no_left_turn` and `no_right_turn`, both not allowed, 0 skipped).
+
+Tests written: `upsert_many` create/update/duplicate-key for every repository; `persist_many`
+idempotence; `tests/domain/test_turn_movement.py` for `turn_candidates`; and
+`test_two_restrictions_at_the_same_via_node_both_hold` in the ingestion tests (no existing test had
+two restrictions at one via node). No test suite was run locally (CI is the gate), and the guards
+are not mutation-checked.
+
+Not done: `docs/architecture.md` doesn't describe how rows are persisted, so it needs no change.
+Duplicate way source ids within one payload: the roads batch collapses them to one row, as before,
+but the segments are built from the last such way only, where the old loop upserted both ways'
+segments. The adapter yields one record per way id, so this doesn't arise.
+
 ## Tangents found
+
+- Block derivation is now the largest step (8.8 s of 14.3 s on Mitte); it is the next speed-up
+  candidate.
+- `RoadSegmentRepository.upsert` and the other single-item `upsert` methods have no callers in
+  `app/` any more besides tests; they remain as the one-element form.

@@ -1,13 +1,14 @@
 import uuid
+from collections.abc import Iterable
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.domain.enums import MovementKind, RestrictionKind
-from app.domain.geometry import bearing_degrees, classify_turn
-from app.domain.turn_movement import TurnMovement
-from app.persistence.geometry import geom_to_linestring
+from app.domain.turn_movement import TurnMovement, turn_candidates
 from app.persistence.models import RoadSegmentModel, TurnMovementModel
+from app.persistence.repositories.batching import chunked
+from app.persistence.repositories.road_graph import RoadSegmentRepository
 
 
 class TurnMovementRepository:
@@ -28,38 +29,31 @@ class TurnMovementRepository:
             select(RoadSegmentModel).where(RoadSegmentModel.from_node_id == intersection_node_id)
         ).scalars().all()
 
-        candidates = []
-        for incoming in incoming_segments:
-            incoming_line = geom_to_linestring(incoming.geom)
-            incoming_bearing = bearing_degrees(incoming_line[-2], incoming_line[-1])
-
-            for outgoing in outgoing_segments:
-                outgoing_line = geom_to_linestring(outgoing.geom)
-                outgoing_bearing = bearing_degrees(outgoing_line[0], outgoing_line[1])
-
-                candidates.append(
-                    TurnMovement(
-                        id=None,
-                        intersection_node_id=intersection_node_id,
-                        incoming_segment_id=incoming.id,
-                        outgoing_segment_id=outgoing.id,
-                        movement_kind=classify_turn(incoming_bearing, outgoing_bearing),
-                        allowed=True,
-                        restriction_kind=RestrictionKind.NONE,
-                    )
-                )
-
-        return candidates
+        return turn_candidates(
+            intersection_node_id,
+            [RoadSegmentRepository._to_domain(model) for model in incoming_segments],
+            [RoadSegmentRepository._to_domain(model) for model in outgoing_segments],
+        )
 
     def persist_candidates(self, movements: list[TurnMovement]) -> list[TurnMovement]:
+        return self.persist_many(movements)
+
+    def persist_many(self, movements: Iterable[TurnMovement]) -> list[TurnMovement]:
+        """Keyed on (incoming segment, outgoing segment). One SELECT of the existing movements of
+        the batch's incoming segments, add or mutate, one flush. Returns one movement per input,
+        in input order; two inputs with the same pair update the same row."""
+        movements = list(movements)
+        models: dict[tuple, TurnMovementModel] = {}
+        for incoming_ids in chunked({movement.incoming_segment_id for movement in movements}):
+            for model in self.session.execute(
+                select(TurnMovementModel).where(TurnMovementModel.incoming_segment_id.in_(incoming_ids))
+            ).scalars():
+                models[(model.incoming_segment_id, model.outgoing_segment_id)] = model
+
         persisted_models = []
         for movement in movements:
-            model = self.session.execute(
-                select(TurnMovementModel).where(
-                    TurnMovementModel.incoming_segment_id == movement.incoming_segment_id,
-                    TurnMovementModel.outgoing_segment_id == movement.outgoing_segment_id,
-                )
-            ).scalar_one_or_none()
+            key = (movement.incoming_segment_id, movement.outgoing_segment_id)
+            model = models.get(key)
 
             if model is None:
                 model = TurnMovementModel(
@@ -71,6 +65,7 @@ class TurnMovementRepository:
                     restriction_kind=movement.restriction_kind,
                 )
                 self.session.add(model)
+                models[key] = model
             else:
                 model.intersection_node_id = movement.intersection_node_id
                 model.movement_kind = movement.movement_kind

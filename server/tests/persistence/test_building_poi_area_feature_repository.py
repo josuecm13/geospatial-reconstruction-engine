@@ -49,6 +49,47 @@ def test_building_upsert_is_idempotent(db_session):
     assert first.category == BuildingCategory.RESIDENTIAL
 
 
+def test_feature_upsert_many_creates_then_updates_in_place_and_keys_by_source_id(db_session):
+    area = _import_area_id(db_session)
+    buildings, pois, areas = (
+        BuildingRepository(db_session), PointOfInterestRepository(db_session), AreaFeatureRepository(db_session)
+    )
+    building_batch = [
+        Building(None, area, f"way/b{i}", BuildingCategory.RESIDENTIAL, _square_ring(30.0, -97.8, 30.0001, -97.7999))
+        for i in range(2)
+    ]
+    poi_batch = [PointOfInterest(None, area, f"node/p{i}", PoiCategory.SHOPPING, Coordinate(30.0, -97.8), "Shop") for i in range(2)]
+    area_batch = [
+        AreaFeature(None, area, f"way/a{i}", AreaFeatureKind.PARK, _square_ring(30.0, -97.8, 30.0001, -97.7999))
+        for i in range(2)
+    ]
+
+    first = (buildings.upsert_many(area, building_batch), pois.upsert_many(area, poi_batch), areas.upsert_many(area, area_batch))
+    second = (buildings.upsert_many(area, building_batch), pois.upsert_many(area, poi_batch), areas.upsert_many(area, area_batch))
+
+    for created, updated, prefix in zip(first, second, ("way/b", "node/p", "way/a")):
+        assert set(created) == {f"{prefix}0", f"{prefix}1"}
+        assert {k: v.id for k, v in created.items()} == {k: v.id for k, v in updated.items()}
+    assert len(buildings.list_for_import_area(area)) == 2
+    assert len(pois.list_for_import_area(area)) == 2
+    assert len(areas.list_for_import_area(area)) == 2
+
+
+def test_feature_upsert_many_with_the_same_key_twice_leaves_one_row(db_session):
+    area = _import_area_id(db_session)
+    buildings = BuildingRepository(db_session)
+    ring = _square_ring(30.0, -97.8, 30.0001, -97.7999)
+
+    result = buildings.upsert_many(area, [
+        Building(None, area, "way/b", BuildingCategory.RESIDENTIAL, ring),
+        Building(None, area, "way/b", BuildingCategory.COMMERCIAL, ring),
+    ])
+
+    assert list(result) == ["way/b"]
+    assert result["way/b"].category == BuildingCategory.COMMERCIAL
+    assert len(buildings.list_for_import_area(area)) == 1
+
+
 def test_poi_upsert_is_idempotent(db_session):
     import_area_id = _import_area_id(db_session)
     repo = PointOfInterestRepository(db_session)

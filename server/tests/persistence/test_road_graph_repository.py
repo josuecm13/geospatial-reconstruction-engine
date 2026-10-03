@@ -198,3 +198,94 @@ def test_street_upsert_is_idempotent(db_session):
 
     assert first.id == second.id
     assert first.name == "Main St"
+
+
+def _node(import_area_id, source_id, lat, lon):
+    return NavigableNode(id=None, import_area_id=import_area_id, source_id=source_id, point=Coordinate(lat, lon))
+
+
+def test_node_and_road_upsert_many_create_then_update_in_place(db_session):
+    area = _import_area_id(db_session)
+    nodes = NavigableNodeRepository(db_session)
+    roads = RoadRepository(db_session)
+    batch = [_node(area, "node/a", 30.0, -97.8), _node(area, "node/b", 30.001, -97.8)]
+    road_batch = [
+        Road(None, area, f"way/{i}", RoadClassification.RESIDENTIAL, (Coordinate(30.0, -97.8), Coordinate(30.001, -97.8)))
+        for i in range(2)
+    ]
+
+    first_nodes, first_roads = nodes.upsert_many(area, batch), roads.upsert_many(area, road_batch)
+    moved = [_node(area, "node/a", 30.002, -97.8), _node(area, "node/b", 30.001, -97.8)]
+    second_nodes, second_roads = nodes.upsert_many(area, moved), roads.upsert_many(area, road_batch)
+
+    assert set(first_nodes) == {"node/a", "node/b"} and set(first_roads) == {"way/0", "way/1"}
+    assert {k: v.id for k, v in first_nodes.items()} == {k: v.id for k, v in second_nodes.items()}
+    assert {k: v.id for k, v in first_roads.items()} == {k: v.id for k, v in second_roads.items()}
+    assert second_nodes["node/a"].point == Coordinate(30.002, -97.8)
+    assert len(nodes.list_for_import_area(area)) == 2
+
+
+def test_upsert_many_with_the_same_key_twice_leaves_one_row(db_session):
+    area = _import_area_id(db_session)
+    nodes = NavigableNodeRepository(db_session)
+
+    result = nodes.upsert_many(area, [_node(area, "node/a", 30.0, -97.8), _node(area, "node/a", 30.003, -97.8)])
+
+    assert list(result) == ["node/a"]
+    assert result["node/a"].point == Coordinate(30.003, -97.8)
+    assert len(nodes.list_for_import_area(area)) == 1
+
+
+def test_street_upsert_many_keeps_the_supplied_ids_and_updates_in_place(db_session):
+    area = _import_area_id(db_session)
+    repo = StreetRepository(db_session)
+    street = Street(None, area, "street/1", "Main St", RoadClassification.RESIDENTIAL)
+
+    first = repo.upsert_many(area, [street])
+    renamed = Street(None, area, "street/1", "High St", RoadClassification.RESIDENTIAL)
+    second = repo.upsert_many(area, [renamed])
+
+    assert first["street/1"].id == second["street/1"].id
+    assert second["street/1"].name == "High St"
+
+
+def test_segment_upsert_many_returns_one_per_input_and_updates_in_place(db_session):
+    area = _import_area_id(db_session)
+    road = RoadRepository(db_session).upsert(
+        Road(None, area, "way/1", RoadClassification.RESIDENTIAL, (Coordinate(30.0, -97.8), Coordinate(30.001, -97.8)))
+    )
+    nodes = NavigableNodeRepository(db_session).upsert_many(
+        area, [_node(area, "node/a", 30.0, -97.8), _node(area, "node/b", 30.001, -97.8)]
+    )
+    a, b = nodes["node/a"], nodes["node/b"]
+    forward = RoadSegment(None, road.id, a.id, b.id, (a.point, b.point), lane_count=2)
+    backward = RoadSegment(None, road.id, b.id, a.id, (b.point, a.point), lane_count=1)
+    repo = RoadSegmentRepository(db_session)
+
+    first = repo.upsert_many([forward, backward])
+    second = repo.upsert_many([forward, backward])
+
+    assert [s.id for s in first] == [s.id for s in second]
+    assert first[0].id != first[1].id
+    assert [s.lane_count for s in second] == [2, 1]
+    assert len(repo.list_for_import_area(area)) == 2
+
+
+def test_segment_upsert_many_with_the_same_key_twice_leaves_one_row(db_session):
+    area = _import_area_id(db_session)
+    road = RoadRepository(db_session).upsert(
+        Road(None, area, "way/1", RoadClassification.RESIDENTIAL, (Coordinate(30.0, -97.8), Coordinate(30.001, -97.8)))
+    )
+    nodes = NavigableNodeRepository(db_session).upsert_many(
+        area, [_node(area, "node/a", 30.0, -97.8), _node(area, "node/b", 30.001, -97.8)]
+    )
+    a, b = nodes["node/a"], nodes["node/b"]
+    repo = RoadSegmentRepository(db_session)
+
+    result = repo.upsert_many([
+        RoadSegment(None, road.id, a.id, b.id, (a.point, b.point), lane_count=1),
+        RoadSegment(None, road.id, a.id, b.id, (a.point, b.point), lane_count=3),
+    ])
+
+    assert result[0].id == result[1].id
+    assert [s.lane_count for s in repo.list_for_import_area(area)] == [3]
