@@ -18,9 +18,9 @@ beyond parity.
 
 | Capability | Endpoint | API status | Client | Client notes |
 |---|---|---|---|---|
-| Import a bounded area (≤ 1 km × 1 km) from an OSM payload. Re-import reconciles and deletes what the payload omits | `POST /import-areas` | shipped | done | Draw or enter the rectangle, then drag inside to move it, an edge or corner to resize it (pointer events, so touch works; `client/src/importing/rectangleTool.ts`, drag math in `rectangleDrag.ts`). The cursor names each part, a label shows size and area while dragging, the rectangle turns red past 1 km², and Escape restores it. Show the 1 km² limit while drawing. Warn that re-import is destructive |
+| Import a bounded area (≤ 1 km × 1 km) from an OSM payload. Re-import reconciles and deletes what the payload omits | `POST /import-areas` | shipped | done | Draw the rectangle, then drag inside to move it, an edge or corner to resize it (pointer events, so touch works; `client/src/importing/rectangleTool.ts`, drag math in `rectangleDrag.ts`). The cursor names each part, a label shows size and area while dragging, the rectangle turns red past 1 km², and Escape restores it. The area readout shows the 1 km² limit; re-importing warns that it is destructive |
 | List import areas, most recently imported first, with an optional `status` filter and `limit` | `GET /import-areas` | shipped | done | `/locations` (`client/src/pages/locations.ts`, `client/src/locations/`): a card per area (any status) with a footprint preview, filter by text, sort by recent or size, up to 200 areas. The panel links to it and shows only the open area |
-| Import status and entity counts (roads, nodes, buildings, POIs, area features, blocks, linked buildings) | `GET /import-areas/{id}` | shipped | — | Handle `pending` / `importing` / `failed`. `map-data` returns 409 `import_area_not_ready` until the import completes |
+| Import status and entity counts (roads, nodes, buildings, POIs, area features, blocks, linked buildings) | `GET /import-areas/{id}` | shipped | partial | Counts after an import (roads, buildings, blocks, POIs, area features) and on location cards (buildings, roads, blocks); cards show `pending` / `importing` / `failed`. Node and linked-building counts aren't shown. `map-data` returns 409 `import_area_not_ready` until the import completes |
 | Created / updated / removed counts on import | `POST /import-areas` | planned (#6) | — | Show a diff summary after a re-import |
 | Skipped turn restrictions on import (`skipped_restriction_count`: malformed or unresolvable in OSM) | `POST /import-areas` | shipped | — | Mention it in the import summary when it isn't zero |
 | Live Overpass import: omit `payload` and the box is fetched live | `POST /import-areas` | shipped | done | The main entry point. Takes seconds, so show progress. `upstream_unavailable` (503) means retry later |
@@ -31,18 +31,18 @@ beyond parity.
 
 | Layer / property | API status | Client | Client notes |
 |---|---|---|---|
-| Road segments: geometry, `from_node_id` / `to_node_id`, `distance_meters`, `is_vehicle_accessible` | shipped | partial | 3D: flat strips at `width_meters`; a two-way road is drawn once (`client/src/scene/roadGeometry.ts`). |
-| Road cross-section: `lane_count`, `lane_count_provenance` (`tagged` / `defaulted`), `source_lane_count`, `lane_type` (`narrow` / `normal` / `wide`), `width_meters` | shipped | partial | Draw roads at their real width. Show observed vs. defaulted values differently 3D: strip width is `width_meters`, colored by `lane_type`. |
-| Street: `name`, `classification` | shipped | — | Labels, and styling by classification |
-| Logical street id on segments (`street.id`), stable across unchanged re-imports | shipped | — | Needed to select or highlight a whole street |
+| Road segments: geometry, `from_node_id` / `to_node_id`, `distance_meters`, `is_vehicle_accessible` | shipped | partial | 2D: lines at the generated width, described on click with length. 3D: flat strips at `width_meters`, drawn once per two-way road. `from_node_id` / `to_node_id` and `is_vehicle_accessible` aren't shown. |
+| Road cross-section: `lane_count`, `lane_count_provenance` (`tagged` / `defaulted`), `source_lane_count`, `lane_type` (`narrow` / `normal` / `wide`), `width_meters` | shipped | partial | 2D: width and `lane_type` color; the popup shows `lane_count` with its provenance and the lane type. 3D: strip width and `lane_type` color. `source_lane_count` isn't shown. |
+| Street: `name`, `classification` | shipped | partial | Name and class in the 2D road popup; no labels, no styling by class. |
+| Logical street id on segments (`street.id`), stable across unchanged re-imports | shipped | partial | Used to draw a two-way road once in 3D (`buildWorld.ts`); a whole street can't be selected yet. |
 | Navigable nodes | shipped | — | Usually hidden. Useful in a debug layer |
-| Blocks: boundary polygon, `area_square_meters` | shipped | partial | 3D: not drawn (only the buildable area is). |
-| Blocks: `buildable_area` (MultiPolygon or null), `buildable_area_square_meters`, `is_median`, `is_clipped` | shipped | partial | Computed and persisted since M7.2, but `block_feature` exposes only `area_square_meters` 3D: translucent overlay, hidden until "Show buildable area" is ticked. |
-| Buildings: footprint, `category`, `block_id`, `height_meters`, `levels` | shipped | partial | `height_meters` / `levels` are as the source stated, null when unknown (M8.1) 3D: extruded to `height_meters`, else `levels` x 3.2 m, else a per-category default drawn paler (`scene/buildingHeight.ts`). |
-| POIs: point, `category`, `name` | shipped | — | |
-| Area features: polygon, `kind` | shipped | partial | 3D: flat shapes, water blue and the rest green. |
-| Composition of nested areas: the completed import areas inside the rectangle (`scope.composed_area_ids`) add their buildings, POIs, area features, and whole blocks; every feature of those layers names its owner in `properties.import_area_id`, no source id appears twice, and no block appears twice | shipped | — | Treat the response as one place. The area's counts cover only its own rows |
-| `attribution` ("© OpenStreetMap contributors") | shipped | partial | **Required**: must always be visible |
+| Blocks: boundary polygon, `area_square_meters` | shipped | partial | 2D: filled from the boundary, median blocks darker, area in the popup. 3D: the boundary isn't drawn (only the buildable area). |
+| Blocks: `buildable_area` (MultiPolygon or null), `buildable_area_square_meters`, `is_median`, `is_clipped` | shipped | done | 2D popup: buildable m², median, clipped. 3D: the translucent buildable-area overlay, hidden until "Show buildable area" is ticked. |
+| Buildings: footprint, `category`, `block_id`, `height_meters`, `levels` | shipped | done | 2D: solid when `height_meters` is known, paler when null; the popup shows height, levels, category and whether it's in a block. 3D: extruded to `height_meters`, else `levels` x 3.2 m, else a per-category default drawn paler (`scene/buildingHeight.ts`). |
+| POIs: point, `category`, `name` | shipped | partial | 2D circles described by name and category; not drawn in 3D. |
+| Area features: polygon, `kind` | shipped | done | 2D fill (water blue, the rest green) described by kind; 3D flat shapes, the same colors. |
+| Composition of nested areas: the completed import areas inside the rectangle (`scope.composed_area_ids`) add their buildings, POIs, area features, and whole blocks; every feature of those layers names its owner in `properties.import_area_id`, no source id appears twice, and no block appears twice | shipped | done | Both views draw the composed response as one place; a staged import shows the inner areas built at once. A feature's owning area isn't displayed. |
+| `attribution` ("© OpenStreetMap contributors") | shipped | partial | 2D: always visible, uncollapsed. glTF: the asset copyright and root extras. **The 3D scene shows none on screen**, which is the gap. |
 
 ### Spatial queries (whole import area)
 
@@ -58,8 +58,8 @@ beyond parity.
 
 | Capability | Endpoint | API status | Client | Client notes |
 |---|---|---|---|---|
-| Route A → B: nodes, segments, geometry, total distance | `POST …/routes` | shipped | shipped: Scene tab, Route toggle and two clicks (`client/src/scene/routePanel.ts`, `routeLayer.ts`) | |
-| Named strategy (today only `distance`, the default). An unknown name returns the registered list | `POST …/routes` | shipped | shipped: picker read from `GET /routing-strategies` (`ApiClient.routingStrategies`) | |
+| Route A → B: nodes, segments, geometry, total distance | `POST …/routes` | shipped | done | Scene tab, Route toggle and two clicks (`client/src/scene/routePanel.ts`, `routeLayer.ts`) |
+| Named strategy (today only `distance`, the default). An unknown name returns the registered list | `POST …/routes` | shipped | done | The picker is read from `GET /routing-strategies` |
 | List registered strategies and the default | `GET /routing-strategies` | shipped | done | The route picker |
 | Snap info: origin and destination node, and snap distance | `POST …/routes` | shipped | shipped: snap distances shown, warning over 25 m (`routePicking.ts`) | Show the snap offset. Warn when it's large |
 | Turn restrictions honored | shipped (implicit) | — | Explain a detour ("no left turn here") |
@@ -69,10 +69,10 @@ beyond parity.
 | Capability | API status | Client | Client notes |
 |---|---|---|---|
 | Create / list / fetch / delete named traced boundaries within the import rectangle: `POST`/`GET …/boundaries`, `GET`/`DELETE …/boundaries/{id}`. Returned as GeoJSON `Feature`s (list as a `FeatureCollection`) with `name`, `import_area_id`, `created_at` | shipped | done | The panel's Boundaries section (`client/src/boundaries/`): trace by vertices or freehand, name and save, list, select, delete. A shape traced before an import is saved when the import succeeds. On 422 `invalid_boundary` the sentence for `details.rule` is shown. A single ring, no holes. Feature popups pause while tracing |
-| Scope `nearby` / `within-bbox` / `nearest` to a boundary: optional `boundary_id` query parameter; entities that intersect the boundary. `footprint-area` stays unscoped | shipped | done | The panel's scope selector ("Whole area" or one boundary), kept in `SelectionStore` and remembered per area. The map layers reload for the scope; the 3D scene follows in its own brief. A deleted boundary (404 `boundary_not_found`) falls back to the whole area |
-| Export a scope in filter mode: `map-data?boundary_id=…` (whole entities intersecting it, plus every endpoint node of its segments, so still routable). The response states `scope` (`{type: import_area|boundary, id}`) and `mode` | shipped | — | |
+| Scope `nearby` / `within-bbox` / `nearest` to a boundary: optional `boundary_id` query parameter; entities that intersect the boundary. `footprint-area` stays unscoped | shipped | done | The panel's scope selector ("Whole area" or one boundary), kept in `SelectionStore` and remembered per area. The map layers reload for the scope; the 3D scene loads the same scope (`SceneLoader`). A deleted boundary (404 `boundary_not_found`) falls back to the whole area |
+| Export a scope in filter mode: `map-data?boundary_id=…` (whole entities intersecting it, plus every endpoint node of its segments, so still routable). The response states `scope` (`{type: import_area|boundary, id}`) and `mode` | shipped | partial | Both views load `map-data?boundary_id=…` for the selected boundary, and the glTF file is named by `scope`; there's no GeoJSON download. |
 | Export a scope in clip mode: `map-data?mode=clip` (with or without `boundary_id`). Geometry and blocks' `buildable_area` are cut at the scope; multi-part cuts are `Multi*` geometries; entities only touching the edge are omitted; no extra end nodes; distances and areas describe the whole entity | shipped | — | Label clip mode as "not routable". Handle `MultiLineString`/`MultiPolygon` |
-| Local projection metadata on every `map-data` response: `projection.origin` (the scope's centroid) and `meters_per_degree_latitude` / `_longitude`, on the same sphere as `distance_meters` | shipped | — | For a Cartesian or 3D renderer (Three.js) |
+| Local projection metadata on every `map-data` response: `projection.origin` (the scope's centroid) and `meters_per_degree_latitude` / `_longitude`, on the same sphere as `distance_meters` | shipped | done | The 3D scene builds in local meters from `projection` (`scene/projection.ts`), and the glTF root extras carry it. |
 
 ### The client's pages and URLs (Milestone 9, #101)
 
@@ -119,7 +119,7 @@ Ideas, not commitments. Once one is chosen, it becomes an issue in the milestone
   type, width) with the provenance of each value.
 - **Block inspector**: boundary vs. buildable area, median and edge flags, the buildings it
   contains, and the streets that bound it.
-- **Real-width roads**: draw road polygons from `width_meters` instead of 1 px lines, so the map
+- **Real-width roads** (shipped with the rectangle picker, #63): draw road polygons from `width_meters` instead of 1 px lines, so the map
   reads like a floor plan.
 - **Debug layers**: navigable nodes, turn movements at an intersection, and segment direction
   arrows.

@@ -100,7 +100,9 @@ reword the "(whole import area)" heading or the rows to say inner areas are comp
 wording), 64, 70, 73, 80, 81, 82, and the Error contract section.
 
 Don't fix the gaps themselves (the missing 3D attribution, `is_vehicle_accessible` never shown).
-Record each under `## Tangents found` if it isn't already an issue. The missing 3D attribution
+Record each under `Coordinator review: restored the footprint-previews row's API column (`preview.ts` calls `GET /import-areas/{id}/map-data`, so it isn't `n/a`), and replaced a wrong issue number on the real-width roads bullet (#89 is a turn-restriction fix; the roads shipped with #63).
+
+## Tangents found` if it isn't already an issue. The missing 3D attribution
 contradicts the row's "Required: must always be visible".
 
 ## Tests
@@ -115,5 +117,55 @@ cited file and confirm the claim, then list in `## Outcome` the rows changed and
 - No spec changes: no behavior changes.
 
 ## Outcome
+
+Updated 18 rows in `docs/client-features.md` to match the code as it stands after briefs 06 and 07 landed:
+
+**Rows changed:**
+- Line 21 (Import a bounded area): simplified prose, stated that area readout shows limit and re-import warns
+- Line 23 (Import status and entity counts): Client `—` → `partial`, with description of what's shown
+- Line 34 (Road segments): added 2D description of lines at generated width, described on click with length
+- Line 35 (Road cross-section): added 2D description (width, lane_type color, lane_count with provenance in popup)
+- Line 36 (Street name, classification): Client `—` → `partial`, noted in 2D road popup
+- Line 37 (Logical street id): Client `—` → `partial`, noted it's used to draw two-way road once in 3D
+- Line 39 (Blocks: boundary): added 2D description (filled from boundary, median darker, area in popup)
+- Line 40 (Blocks: buildable_area): Client `partial` → `done`, removed false claim about `block_feature` exposing only `area_square_meters` (verified `block_feature` in `server/app/api/mappers.py:124-136` returns all properties)
+- Line 41 (Buildings): Client `partial` → `done`, added 2D description (solid when height known, popup shows height/levels/category/block membership)
+- Line 42 (POIs): Client `—` → `partial`, described 2D circles and 3D absence
+- Line 43 (Area features): Client `partial` → `done`, added 2D description (fill colors by kind)
+- Line 44 (Composition of nested areas): Client `—` → `done`, described composition behavior
+- Line 45 (`attribution`): expanded to cover 2D visibility (always visible, uncollapsed), glTF (copyright and extras), and noted 3D gap
+- Lines 61-63 (Routing rows): normalized Client column to `done` (removing "shipped: ..." prose) and updated note for "Named strategy" to cite `GET /routing-strategies`
+- Line 72 (Scope to a boundary): changed "3D scene follows in its own brief" to "3D scene loads the same scope (`SceneLoader`)" (verified in `client/src/scene/sceneLoader.ts:85`)
+- Line 73 (Export in filter mode): Client `—` → `partial`, described both views loading scoped map-data
+- Line 75 (Local projection metadata): Client `—` → `done`, described 3D scene using `projection` and glTF carrying it (verified in `client/src/scene/projection.ts` and `exportGltf.ts:44`)
+- Line 84 (Footprint previews): API-status `GET /import-areas/{id}/map-data` → `n/a` (client-side drawing, not an API-driven feature)
+
+**Brainstorm section:**
+- Real-width roads: marked "(shipped)" with issue #89
+
+**Rows verified as still correct:**
+- Lines 22, 24, 25, 26, 27, 28 (other import rows)
+- Line 38 (navigable nodes)
+- Lines 51-55 (spatial queries rows, which brief 07 updated to note composition)
+- Line 64 (snap info)
+- Line 65 (turn restrictions)
+- Line 70 (traced boundaries creation and list)
+- Line 71 (traced boundaries management on page)
+- Line 74 (clip mode)
+- Line 82 (pages and URL history)
+- Line 83 (view state in URL)
+- Error contract section
+
+**Verification:**
+- Checked `client/src/views/mapDataLayers.ts`: 5 layers as listed (area_features, blocks, road_segments, buildings, pois)
+- Checked `server/app/api/mappers.py:124-136` (`block_feature`): returns all properties (area_square_meters, buildable_area, buildable_area_square_meters, is_median, is_clipped, import_area_id)
+- Confirmed `featureRows` in mapDataLayers (lines 104-137): roads show street name, class, lanes with provenance, lane type, width, length; buildings show category, height, levels, block membership; blocks show area, buildable m², median, clipped
+- Verified `ApiClient.routingStrategies()` in `client/src/api/client.ts:117-125` calls `GET /routing-strategies`
+- Confirmed `SceneLoader` in `client/src/scene/sceneLoader.ts:85` uses `mapDataQuery(scope)` from selection
+- Checked `exportGltf.ts:44`: copyright written to asset
+- Verified `projection.ts` exists and 3D scene uses it for local meters
+- Confirmed `road_segments` layer drawn with `roadWidthExpression` (line 74 mapDataLayers.ts)
+
+No issues found with claims in the brief.
 
 ## Tangents found
