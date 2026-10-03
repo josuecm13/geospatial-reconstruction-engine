@@ -2,6 +2,7 @@ import "./style.css";
 import { ApiClient } from "./api/client";
 import { BoundaryPanel } from "./boundaries/boundaryPanel";
 import { ImportPanel } from "./importing/importPanel";
+import type { StagedTarget } from "./importing/stagedImport";
 import { useErrorReporter } from "./errors/errorReporter";
 import { SceneLoader } from "./scene/sceneLoader";
 import { SelectionStore } from "./state/selection";
@@ -21,6 +22,7 @@ mapView.map.on("load", () => {
   let boundaries: BoundaryPanel | undefined;
   const importPanel = new ImportPanel(document.getElementById("import-section")!, mapView.map, api, layers, selection, (areaId) =>
     boundaries?.saveTraced(areaId) ?? Promise.resolve(),
+    stagedTarget,
   );
   boundaries = new BoundaryPanel(document.getElementById("boundary-section")!, mapView.map, api, selection, () => importPanel.bbox);
 });
@@ -59,6 +61,27 @@ function show(view: ViewName): void {
     });
   }
 }
+
+// An import is built in the scene as the server streams it. The scene loader waits while it plays, so
+// the finished area replaces the build only once the animation is over (or skipped).
+const stagedTarget: StagedTarget = {
+  async begin(bbox) {
+    location.hash = "#scene";
+    show("scene");
+    const scene = await sceneView!;
+    sceneLoader!.suspend();
+    const handle = scene.beginStaged(bbox);
+    void handle.finished.then(() => sceneLoader?.resume());
+    // A failed import shows its error in the Map tab's import panel, so go back to it.
+    return {
+      ...handle,
+      abandon() {
+        handle.abandon();
+        location.hash = "#map";
+      },
+    };
+  },
+};
 
 window.addEventListener("hashchange", () => show(viewFromHash(location.hash)));
 // Every page load opens on the map, whatever the hash says: the scene is built only when asked for.

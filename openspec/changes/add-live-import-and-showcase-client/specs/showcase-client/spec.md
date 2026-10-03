@@ -99,3 +99,22 @@ The scene view SHALL offer a "Download glTF" button, enabled once a world is loa
 #### Scenario: Node names
 - **WHEN** the file is opened in a glTF viewer
 - **THEN** a building appears as a node named `building:<id>` and a road as `road:<id>`
+
+### Requirement: The client SHALL build an imported place in stages as the server streams them
+The client SHALL start an import with `background: true`, switch to the scene view, and reveal each stage as its server-sent event arrives: a waiting animation until `fetched`, then the ground (area features), roads, buildings rising ring by ring from the centre out, and the blocks overlay last. It SHALL ignore an event that repeats or arrives out of order. A completed area that `fetched` names in `inner_area_ids` SHALL be shown fully built at once. A "Skip animation" button SHALL jump every pending step to its final state. While a build plays, the glTF export SHALL be disabled, and the finished area SHALL be loaded from map-data once it ends. A `failed` event SHALL discard the build, return to the map view, and report the event's `code`. Opening an already imported area SHALL show it with no animation.
+
+#### Scenario: Reveal order
+- **WHEN** the events `fetched`, `ground`, `roads`, `blocks`, two `buildings` rings and `completed` arrive
+- **THEN** the scene reveals the ground, then the roads, then the first ring of buildings, then the second, and finally the blocks overlay
+
+#### Scenario: Skipping the animation
+- **WHEN** a user presses "Skip animation" while the build is playing
+- **THEN** every pending step, and every step that arrives afterwards, is shown in its final state at once
+
+#### Scenario: Reopening an imported area
+- **WHEN** a user opens an already imported area from the list, or loads the page with one open
+- **THEN** the scene shows the finished world from map-data with no animation
+
+#### Scenario: A failed import
+- **WHEN** a `failed` event arrives mid-build
+- **THEN** the partial build is removed, the map view is shown, and the import panel reports the event's `code`

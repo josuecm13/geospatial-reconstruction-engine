@@ -43,6 +43,24 @@ export class SceneLoader {
 
   private readonly selection: SelectionSource;
 
+  /**
+   * Holds loading while a staged build is drawing the world: nothing loads, and a request already in
+   * flight is dropped. `resume` loads whatever is selected then (the finished area, or the previous
+   * one if the build failed), replacing what the build left.
+   */
+  suspend(): void {
+    this.suspended = true;
+    this.latest++;
+  }
+
+  resume(): void {
+    this.suspended = false;
+    this.loadedKey = null;
+    if (this.visible) void this.load();
+  }
+
+  private suspended = false;
+
   shown(): void {
     this.visible = true;
     void this.load();
@@ -53,6 +71,7 @@ export class SceneLoader {
   }
 
   async load(): Promise<void> {
+    if (this.suspended) return;
     const { areaId, scope } = this.selection.get();
     const request = ++this.latest;
     if (!areaId) {

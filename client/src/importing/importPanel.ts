@@ -9,6 +9,7 @@ import { RectangleTool } from "./rectangleTool";
 import { ApiError } from "../api/client";
 import { mapDataQuery, sameScope, type Scope, type SelectionStore } from "../state/selection";
 import { describeArea, findByBbox } from "./recentImports";
+import { runStagedImport, type StagedTarget } from "./stagedImport";
 
 /** How many completed areas the panel lists. */
 const LISTED_AREAS = 50;
@@ -43,6 +44,8 @@ export class ImportPanel {
     private readonly selection: SelectionStore,
     /** Runs after an import succeeds and its area is open, for example to save a traced boundary. */
     private readonly afterImport: (areaId: string) => Promise<void> = async () => {},
+    /** Where an import is built in front of the user. Without it the import runs in one request, with no animation. */
+    private readonly staging?: StagedTarget,
   ) {
     container.innerHTML = `
       <h2>Import a place</h2>
@@ -109,7 +112,7 @@ export class ImportPanel {
     tick();
     const timer = window.setInterval(tick, 1000);
     try {
-      const area = await this.api.importArea(bbox);
+      const area = this.staging ? await runStagedImport(this.api, this.staging, bbox) : await this.api.importArea(bbox);
       await this.open(area.id, { area });
       void this.refreshAreas();
       await this.afterImport(area.id);

@@ -7,6 +7,8 @@ export const IMPORT_MESSAGES: Record<string, string> = {
   source_incomplete: "OpenStreetMap sent back an incomplete answer, so nothing was changed. Try again in a moment.",
   upstream_unavailable: "OpenStreetMap's Overpass service is busy or unreachable. Nothing was changed. Try again in a minute.",
   import_conflict: "Another import of this exact rectangle started at the same time. Reopen it from Recent imports.",
+  import_in_progress: "This rectangle is already being imported. Wait for it to finish, then open it from Imported areas.",
+  import_job_not_found: "The import's progress is no longer available. Check Imported areas to see whether it finished.",
   payload_too_large: "The import is too large for the server.",
   database_unavailable: "The server can't reach its database.",
   http_error: "The API isn't answering. Is the server running?",

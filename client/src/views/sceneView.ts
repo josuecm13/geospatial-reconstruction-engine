@@ -1,15 +1,18 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import type { MapData } from "../api/types";
+import type { BoundingBox, MapData } from "../api/types";
 import { buildWorld } from "../scene/buildWorld";
 import { createCameraModes } from "../scene/cameraModes";
 import { createExportButton } from "../scene/exportButton";
 import { createRoutePanel, type RoutingDeps } from "../scene/routePanel";
 import type { SceneTarget } from "../scene/sceneLoader";
+import { bboxMeters, createStagedScene, type StagedHandle } from "../scene/stagedScene";
 
 export interface SceneView extends SceneTarget {
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
+  /** Replaces the world with an empty one in `bbox` that the returned handle builds up, stage by stage. */
+  beginStaged(bbox: BoundingBox): StagedHandle;
   /** Starts rendering; the loop stops while the view is hidden. */
   shown(): void;
   hidden(): void;
@@ -67,6 +70,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps): 
   const routes = routing && createRoutePanel(container, scene, camera, renderer.domElement, routing, () => modes.mode === "fly");
 
   const exporter = createExportButton(container);
+  const staged = createStagedScene(scene, container);
 
   let running = false;
   const resize = () => {
@@ -82,6 +86,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps): 
     const delta = clock.getDelta();
     if (modes.mode === "fly") controls.update();
     modes.update(delta);
+    staged.update(delta);
     renderer.render(scene, camera);
     requestAnimationFrame(frame);
   };
@@ -109,6 +114,30 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps): 
       controls.target.copy(center);
       camera.position.set(center.x, center.y + size * 0.6, center.z + size * 0.7);
       controls.update();
+    },
+    beginStaged(bbox) {
+      removeWorld();
+      modes.setWorld(undefined);
+      routes?.setWorld(undefined);
+      exporter.setWorld(undefined);
+      const build = staged.begin(bbox);
+      world = build.world;
+      world.getObjectByName("blocks")!.visible = buildable.checked;
+      scene.remove(placeholder);
+      overlay.hidden = true;
+      toggle.hidden = false;
+      // The export waits for the build to play out; the finished world is loaded after it.
+      exporter.setBusy(true);
+      void build.handle.finished.then(() => exporter.setBusy(false));
+      // Frame the rectangle, whose centre is the projection origin, from the usual raised viewpoint.
+      const { width, height } = bboxMeters(bbox);
+      const size = Math.max(Math.hypot(width, height), 50);
+      camera.far = Math.max(5000, size * 10);
+      camera.updateProjectionMatrix();
+      controls.target.set(0, 0, 0);
+      camera.position.set(0, size * 0.6, size * 0.7);
+      controls.update();
+      return build.handle;
     },
     showMessage(message: string) {
       removeWorld();

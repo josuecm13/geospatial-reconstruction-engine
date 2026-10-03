@@ -9,6 +9,7 @@ import type {
   FeatureCollection,
   Geometry,
   ImportArea,
+  ImportStarted,
   ImportStatus,
   MapData,
   Route,
@@ -50,6 +51,19 @@ export class ApiClient {
   /** Without a payload the server fetches the box live from Overpass. */
   importArea(bbox: BoundingBox, payload?: unknown): Promise<ImportArea> {
     return this.request("POST", "/import-areas", payload === undefined ? { bbox } : { bbox, payload });
+  }
+
+  /**
+   * Starts an import in the server's background and answers at once with where its stages stream.
+   * The UI uses this; `importArea` stays for tests and scripts.
+   */
+  startImport(bbox: BoundingBox): Promise<ImportStarted> {
+    return this.request("POST", "/import-areas", { bbox, background: true });
+  }
+
+  /** The server-sent events of a background import: one per stage. The browser reconnects with `Last-Event-ID`. */
+  importEvents(areaId: string): EventSource {
+    return new EventSource(`${this.baseUrl}/import-areas/${encodeURIComponent(areaId)}/events`);
   }
 
   /** Import areas, most recently imported first. */

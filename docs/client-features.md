@@ -24,8 +24,8 @@ beyond parity.
 | Created / updated / removed counts on import | `POST /import-areas` | planned (#6) | — | Show a diff summary after a re-import |
 | Skipped turn restrictions on import (`skipped_restriction_count`: malformed or unresolvable in OSM) | `POST /import-areas` | shipped | — | Mention it in the import summary when it isn't zero |
 | Live Overpass import: omit `payload` and the box is fetched live | `POST /import-areas` | shipped | done | The main entry point. Takes seconds, so show progress. `upstream_unavailable` (503) means retry later |
-| Background import: `background: true` answers 202 with an `events_url`, runs the import in the server, and refuses a second import of the same area (409 `import_in_progress`) | `POST /import-areas` | shipped | — | The staged build animation (brief 08) starts the import this way |
-| Import progress as server-sent events, one per stage (`fetched`, `ground`, `roads`, `blocks`, `buildings` by ring, then `completed` or `failed`), resumable with `Last-Event-ID` | `GET /import-areas/{id}/events` | shipped | — | Draw each stage as it arrives. A `failed` event leaves the area as it was. 404 `import_job_not_found` once a job is gone (kept ten minutes). `fetched` names the completed `inner_area_ids` the import skips: they're already built, so show them at once; no `buildings` event carries their buildings |
+| Background import: `background: true` answers 202 with an `events_url`, runs the import in the server, and refuses a second import of the same area (409 `import_in_progress`) | `POST /import-areas` | shipped | done | The staged build animation starts every import this way (`client/src/importing/stagedImport.ts`) |
+| Import progress as server-sent events, one per stage (`fetched`, `ground`, `roads`, `blocks`, `buildings` by ring, then `completed` or `failed`), resumable with `Last-Event-ID` | `GET /import-areas/{id}/events` | shipped | done | Draw each stage as it arrives. A `failed` event leaves the area as it was. 404 `import_job_not_found` once a job is gone (kept ten minutes). `fetched` names the completed `inner_area_ids` the import skips: they're already built, so show them at once; no `buildings` event carries their buildings |
 
 ### Map data (`GET /import-areas/{id}/map-data`)
 
@@ -128,6 +128,12 @@ Ideas, not commitments. Once one is chosen, it becomes an issue in the milestone
 - **Strategy comparison**: overlay the routes from several strategies once more exist.
 
 ### Import and data lifecycle
+- **Staged build** (#67, shipped): importing switches to the Scene tab and builds the place as the
+  server streams it: a turning wireframe of the rectangle while Overpass answers, then the ground, the
+  roads, buildings rising ring by ring from the centre out, and the blocks overlay last. Inner areas
+  the server skipped are shown built at once. "Skip animation" jumps to the end, and the glTF button
+  waits for the build. The finished area then replaces the build, loaded from map-data. Reopening an
+  area shows no animation (`scene/stagedBuild.ts`, `scene/stagedScene.ts`, `scene/buildAnimation.ts`).
 - **Re-import diff**: created / updated / removed shown in color on the map (depends on #6).
 - **Import history** per area, with when it happened, the counts, and what changed.
 - **Data health panel**: roads dropped for unmapped classes, failed restrictions, and the

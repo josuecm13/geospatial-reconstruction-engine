@@ -77,4 +77,24 @@ describe("SceneLoader", () => {
     loader.shown();
     expect(pending).toHaveLength(1);
   });
+
+  it("loads nothing while suspended, drops a request in flight, and reloads on resume", async () => {
+    const { pending, calls, loader, select } = setup();
+    loader.shown(); // request 0, for a1
+    loader.suspend();
+    pending[0].resolve(fakeData("a1")); // lands while a staged build draws the world
+    await flush();
+    select({ areaId: "a2", scope: { type: "import_area" } });
+    expect(pending).toHaveLength(1);
+    expect(calls).toEqual([]);
+    loader.resume(); // loads the current selection
+    expect(pending).toHaveLength(2);
+    expect(pending[1]).toMatchObject({ areaId: "a2" });
+    pending[1].resolve(fakeData("a2"));
+    await flush();
+    expect(calls).toEqual(["world:a2"]);
+    loader.suspend();
+    loader.resume(); // the same selection again: the build replaced the world, so it loads again
+    expect(pending).toHaveLength(3);
+  });
 });
