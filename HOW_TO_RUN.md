@@ -4,6 +4,8 @@ This project is a work-in-progress (see `MILESTONES.md` for status). You can run
 application backed by a local PostGIS database, apply migrations, run the test suite, and call the
 HTTP API to import a fixture area, query it, and plan a route.
 
+For a terse, step-by-step path from a clean checkout to an exported real place, see [`docs/runbook.md`](docs/runbook.md); the UI tour is [`docs/walkthrough.md`](docs/walkthrough.md).
+
 ## Prerequisites
 
 - Python 3.12 (check with `python3.12 --version`; on macOS with Homebrew: `brew install python@3.12`)

@@ -50,4 +50,6 @@ a curl import of a small fixture via `payload`. Record which steps you verified 
 
 ## Outcome
 
+Wrote `docs/runbook.md` and `docs/walkthrough.md` (five screenshot placeholders, listed as a checklist at the end), pointed to from `HOW_TO_RUN.md` and `README.md`. Checked each command and flag against the code (routes, `kind` on `/nearby`, error codes and statuses, button labels, ports, Node 22 from CI). Not run: a fresh-clone pass, the live import, or any browser step; CI doesn't cover them.
+
 ## Tangents found

@@ -23,6 +23,8 @@ The architecture is recorded in [docs/architecture.md](docs/architecture.md), an
 
 Milestones 0–8 are complete: persistence, OSM fixture ingestion with block derivation and reconciling re-import, spatial queries, road graph, routing, an HTTP API in front of all of it, logical streets with generated cross-sections, buildable blocks, and traced boundaries with scoped queries and GeoJSON export. Next up are building heights from source (8.1), then live import and the showcase client (9): pick a place on a 2D map, import it live, and explore it as a low-poly 3D scene. See [HOW_TO_RUN.md](HOW_TO_RUN.md) to try it.
 
+To run it end to end, follow [docs/runbook.md](docs/runbook.md); [docs/walkthrough.md](docs/walkthrough.md) tours the client.
+
 ## Backlog
 
 Work is tracked as [GitHub issues](https://github.com/josuecm13/geospatial-reconstruction-engine/issues), grouped by [milestones](https://github.com/josuecm13/geospatial-reconstruction-engine/milestones) that mirror `MILESTONES.md`. Every change starts from an issue and closes it from its PR; the workflow is described in [AGENTS.md](AGENTS.md#backlog-and-issues).
