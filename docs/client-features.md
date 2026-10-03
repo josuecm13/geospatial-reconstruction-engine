@@ -25,7 +25,7 @@ beyond parity.
 | Skipped turn restrictions on import (`skipped_restriction_count`: malformed or unresolvable in OSM) | `POST /import-areas` | shipped | — | Mention it in the import summary when it isn't zero |
 | Live Overpass import: omit `payload` and the box is fetched live | `POST /import-areas` | shipped | done | The main entry point. Takes seconds, so show progress. `upstream_unavailable` (503) means retry later |
 | Background import: `background: true` answers 202 with an `events_url`, runs the import in the server, and refuses a second import of the same area (409 `import_in_progress`) | `POST /import-areas` | shipped | — | The staged build animation (brief 08) starts the import this way |
-| Import progress as server-sent events, one per stage (`fetched`, `ground`, `roads`, `blocks`, `buildings` by ring, then `completed` or `failed`), resumable with `Last-Event-ID` | `GET /import-areas/{id}/events` | shipped | — | Draw each stage as it arrives. A `failed` event leaves the area as it was. 404 `import_job_not_found` once a job is gone (kept ten minutes) |
+| Import progress as server-sent events, one per stage (`fetched`, `ground`, `roads`, `blocks`, `buildings` by ring, then `completed` or `failed`), resumable with `Last-Event-ID` | `GET /import-areas/{id}/events` | shipped | — | Draw each stage as it arrives. A `failed` event leaves the area as it was. 404 `import_job_not_found` once a job is gone (kept ten minutes). `fetched` names the completed `inner_area_ids` the import skips: they're already built, so show them at once; no `buildings` event carries their buildings |
 
 ### Map data (`GET /import-areas/{id}/map-data`)
 
@@ -41,6 +41,7 @@ beyond parity.
 | Buildings: footprint, `category`, `block_id`, `height_meters`, `levels` | shipped | partial | `height_meters` / `levels` are as the source stated, null when unknown (M8.1) 3D: extruded to `height_meters`, else `levels` x 3.2 m, else a per-category default drawn paler (`scene/buildingHeight.ts`). |
 | POIs: point, `category`, `name` | shipped | — | |
 | Area features: polygon, `kind` | shipped | partial | 3D: flat shapes, water blue and the rest green. |
+| Composition of nested areas: the completed import areas inside the rectangle (`scope.composed_area_ids`) add their buildings, POIs, area features, and whole blocks; every feature of those layers names its owner in `properties.import_area_id`, and no source id appears twice | shipped | — | Treat the response as one place. The area's counts cover only its own rows |
 | `attribution` ("© OpenStreetMap contributors") | shipped | partial | **Required**: must always be visible |
 
 ### Spatial queries (whole import area)

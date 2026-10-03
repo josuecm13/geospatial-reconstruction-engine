@@ -57,7 +57,11 @@ class StageEmitter:
 
     def _layers(self, stage: str, info: dict[str, Any]) -> dict[str, Any]:
         if stage == "fetched":
-            return {"element_count": info["element_count"]}
+            # The inner areas are already built, so a client can show them before anything else.
+            return {
+                "element_count": info["element_count"],
+                "inner_area_ids": [str(inner_id) for inner_id in info.get("inner_area_ids", ())],
+            }
         if stage == "ground":
             area_features = AreaFeatureRepository(self.session).list_for_import_area(self.area_id)
             pois = PointOfInterestRepository(self.session).list_for_import_area(self.area_id)

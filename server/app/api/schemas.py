@@ -119,6 +119,8 @@ class ScopeType(str, Enum):
 class ScopeOut(BaseModel):
     type: ScopeType
     id: uuid.UUID
+    # The completed areas inside the import area's rectangle whose features the response composes.
+    composed_area_ids: list[uuid.UUID] = []
 
 
 class ProjectionOut(BaseModel):

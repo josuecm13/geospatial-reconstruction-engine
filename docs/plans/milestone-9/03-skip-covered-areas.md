@@ -98,4 +98,58 @@ full, as today.
 
 ## Outcome
 
+Done as Option A, in one commit.
+
+- **Inner areas.** `ImportAreaRepository.completed_areas_covered_by(bbox, exclude_id)` (`ST_CoveredBy`,
+  completed only). Both `import_fixture` and `import_staged` look them up after parsing.
+- **Skip at persist.** `app/domain/covered_areas.py` (pure, in the purity test's list):
+  `is_covered_by`, `without_covered`, and `compose_by_source_id`. `_persist` drops covered buildings,
+  POIs (by their point), and area features before upserting, so they are neither stored nor counted,
+  and the sweep removes earlier copies on re-import.
+- **Blocks.** `BlockDerivationService.derive_for_import_area` looks the inner areas up itself (so
+  `rederive_for_import_area` agrees, and its signature, which tests monkeypatch, is unchanged).
+- **Streaming.** `fetched` carries `inner_area_ids`. Ring batches read stored buildings, so they skip
+  the inner areas with no change.
+- **Map-data.** Composes inner areas' buildings, POIs, and area features (deduplicated by source id, own
+  copy first), plus their blocks that are unclipped and not covered by an outer block
+  (`BlockRepository.list_composable`). Boundary and clip scopes compose the same feature layers
+  (`map_scope` takes `composed_area_ids`). `scope.composed_area_ids` is new, and blocks, buildings, POIs,
+  and area features carry `properties.import_area_id` (in SSE stages too, since the mappers are shared).
+  Client types updated to match.
+- **Docs.** architecture.md ("Nested import areas"), schema.md (no table change, confirmed),
+  client-features.md, spec deltas (new requirement plus the modified map-data requirement and the
+  `fetched` payload), tasks.md 1.12f.
+- **Tests.** `tests/domain/test_covered_areas.py`, `tests/persistence/test_import_area_repository.py`
+  (covered-by query), and `tests/api/test_nested_import_areas.py`: a synthetic 4 x 4 road grid with the
+  inner area imported first. Covers skipping, a route across, composition (whole, clip, boundary),
+  the event stream, re-import sweeping duplicates with block-id stability, and partial overlap. Not run
+  locally (CI is the gate). Guards not mutation-checked.
+
+Decisions that differ from the plan text:
+
+1. **Blocks are dropped when their boundary is covered by an inner box, not when their
+   representative point is inside it.** With the representative-point rule, a block straddling an
+   inner edge could be dropped while the inner area holds only its clipped piece. That contradicts
+   the plan's own "straddling blocks are stored" and the acceptance criterion's "interior blocks".
+2. **Block ids are assigned over all faces, then covered faces are dropped**, not dropped first.
+   `block_ids_for` numbers faces that share a segment set among themselves, so dropping one first
+   could renumber a survivor. Assigning first makes stability hold by construction. The re-import
+   test checks it end to end (same ids and geometry before and after an inner area appears).
+3. **Composed blocks are an inner area's unclipped blocks that no outer block covers.** Clipped
+   pieces would overlap the outer area's whole straddling blocks. The "not covered by an outer block"
+   check keeps an outer area imported *before* its inner area (which still holds every block) free of
+   duplicate blocks until it is re-imported.
+
+Left undone:
+
+- Two-level nesting where a middle area was imported *before* its own inner area: both hold the
+  innermost blocks, and map-data of the outermost area can then show those blocks twice (features
+  stay deduplicated by source id). Re-importing the middle area fixes it.
+
 ## Tangents found
+
+- Spatial queries (`/nearby`, `/within-bbox`, `/nearest`, footprint-area in
+  `server/app/api/routers/spatial_queries.py`) don't compose inner areas. On an outer area they miss
+  the buildings, POIs, and area features that an inner area holds, though map-data shows them.
+- `docs/client-features.md`, the map-data "Blocks: `buildable_area` …" row: the note "`block_feature`
+  exposes only `area_square_meters`" is stale (it exposes all of them), which misleads client work.

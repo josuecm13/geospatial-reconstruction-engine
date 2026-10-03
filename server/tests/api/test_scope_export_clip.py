@@ -67,7 +67,7 @@ def test_clip_mode_cuts_geometry_at_the_boundary_where_filter_mode_does_not(clie
     clipped = _map_data(client, neighborhood, boundary_id=west, mode="clip")
 
     assert filtered["mode"] == "filter" and clipped["mode"] == "clip"
-    assert clipped["scope"] == {"type": "boundary", "id": west}
+    assert clipped["scope"] == {"type": "boundary", "id": west, "composed_area_ids": []}
     with pytest.raises(AssertionError):
         _assert_contained(filtered, WEST)
     _assert_contained(clipped, WEST)
@@ -87,7 +87,7 @@ def test_clip_mode_on_the_whole_area_is_contained_by_the_rectangle(client):
     filtered = _map_data(client, area_id)
     clipped = _map_data(client, area_id, mode="clip")
 
-    assert clipped["scope"] == {"type": "import_area", "id": area_id}
+    assert clipped["scope"] == {"type": "import_area", "id": area_id, "composed_area_ids": []}
     with pytest.raises(AssertionError):
         _assert_contained(filtered, _bbox_ring(narrow))
     _assert_contained(clipped, _bbox_ring(narrow))

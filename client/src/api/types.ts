@@ -68,6 +68,8 @@ export interface BuildingProperties {
   block_id: string | null;
   height_meters: number | null;
   levels: number | null;
+  /** The area that stores it: the requested one, or an inner area it composes. */
+  import_area_id: string;
 }
 
 export interface BlockProperties {
@@ -76,15 +78,18 @@ export interface BlockProperties {
   buildable_area_square_meters: number;
   is_median: boolean;
   is_clipped: boolean;
+  import_area_id: string;
 }
 
 export interface PoiProperties {
   category: string;
   name: string | null;
+  import_area_id: string;
 }
 
 export interface AreaFeatureProperties {
   kind: string;
+  import_area_id: string;
 }
 
 export interface Projection {
@@ -97,7 +102,8 @@ export type ExportMode = "filter" | "clip";
 
 export interface MapData {
   attribution: string;
-  scope: { type: "import_area" | "boundary"; id: string };
+  /** `composed_area_ids`: the completed areas inside the rectangle whose features are composed in. */
+  scope: { type: "import_area" | "boundary"; id: string; composed_area_ids: string[] };
   mode: ExportMode;
   projection: Projection;
   road_segments: FeatureCollection<RoadSegmentProperties>;

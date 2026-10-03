@@ -17,6 +17,7 @@
 - [x] 1.12c #93 [client] Open on the map and build the 3D scene only when its tab is opened
 - [x] 1.12d #91 [blocks] Block derivation takes minutes on a 1 km² city import
 - [x] 1.12e #90 [ingestion] Import in stages in the background and stream each stage as server-sent events
+- [x] 1.12f #100 [ingestion] Skip completed areas inside a new import's rectangle
 - [x] 1.12a #88 [client] Show the server's reason for an import failure
 - [x] 1.13 #64 [client] Trace a boundary over the selection and manage saved boundaries
 - [x] 1.14 #65 [client] Build a low-poly 3D scene from map-data

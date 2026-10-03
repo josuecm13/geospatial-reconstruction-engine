@@ -8,11 +8,13 @@ from sqlalchemy.orm import Session
 
 from app.domain.block import MIN_BUILDABLE_WIDTH_METERS, Block
 from app.domain.block_identity import BlockKeyInput, block_ids_for
-from app.domain.bounding_box import Coordinate
+from app.domain.bounding_box import BoundingBox, Coordinate
+from app.domain.covered_areas import is_covered_by_any
 from app.domain.cross_section import cross_sections_by_classified_segment
 from app.persistence.geometry import geom_to_multipolygon
 from app.persistence.models import BlockBoundarySegmentModel, BlockModel, BuildingModel
 from app.persistence.repositories.building import BuildingRepository
+from app.persistence.repositories.import_area import ImportAreaRepository
 from app.persistence.repositories.road_graph import RoadSegmentRepository
 
 SRID = 4326
@@ -29,6 +31,10 @@ class BlockDerivationService:
     leave the box close the blocks along its edge; those are flagged as clipped.
 
     Not sourced from OSM: a block only exists because the enclosing road segments do.
+
+    A face covered by a completed inner area's bounding box is not stored: the inner area already
+    holds that block. A face straddling an inner edge is stored, since the inner area only has it
+    clipped.
     """
 
     def __init__(self, session: Session):
@@ -127,6 +133,9 @@ class BlockDerivationService:
             shapely_polygon = shapely_wkt.loads(row.boundary_wkt)
             faces.append((row, shapely_polygon, from_shape(shapely_polygon, srid=SRID), segment_ids))
 
+        # Ids are assigned over every face, before the inner areas' faces are dropped, so a
+        # surviving block keeps the id it has when no inner area exists (faces sharing a segment
+        # set are numbered among themselves, and dropping one would renumber the rest).
         block_ids = block_ids_for(
             import_area_id,
             [
@@ -134,9 +143,17 @@ class BlockDerivationService:
                 for _, shapely_polygon, _, segment_ids in faces
             ],
         )
+        inner_boxes = self._inner_boxes(import_area_id)
+        kept = [
+            (block_id, face)
+            for block_id, face in zip(block_ids, faces)
+            if not is_covered_by_any(
+                (Coordinate(latitude=y, longitude=x) for x, y in face[1].exterior.coords), inner_boxes
+            )
+        ]
 
         blocks: list[Block] = []
-        for block_id, (row, shapely_polygon, boundary_geom, segment_ids) in zip(block_ids, faces):
+        for block_id, (row, shapely_polygon, boundary_geom, segment_ids) in kept:
             area_square_meters = self.session.execute(
                 text("SELECT ST_Area(ST_GeogFromText(:wkt))"), {"wkt": row.boundary_wkt}
             ).scalar_one()
@@ -186,6 +203,13 @@ class BlockDerivationService:
             )
 
         return blocks
+
+    def _inner_boxes(self, import_area_id: uuid.UUID) -> list[BoundingBox]:
+        areas = ImportAreaRepository(self.session)
+        area = areas.get(import_area_id)
+        if area is None:
+            return []
+        return [inner.bbox for inner in areas.completed_areas_covered_by(area.bbox, exclude_id=import_area_id)]
 
     def _bounding_segment_ids(self, import_area_id: uuid.UUID, boundary_wkts: list[str]) -> list[list[uuid.UUID]]:
         """Per face, the ids of the road segments along its boundary, in walk order around its exterior.

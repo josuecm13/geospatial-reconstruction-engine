@@ -88,3 +88,27 @@ def test_block_count_reflects_derived_blocks(db_session):
     BlockDerivationService(db_session).derive_for_import_area(area.id)
 
     assert repo.block_count(area.id) == 1
+
+
+def _completed(repo, south, west, north, east):
+    area = repo.get_or_create("osm", BoundingBox(Coordinate(south, west), Coordinate(north, east)))
+    return repo.mark_completed(area.id, road_count=0, node_count=0, building_count=0, poi_count=0, area_feature_count=0)
+
+
+def test_completed_areas_covered_by_finds_only_completed_areas_wholly_inside(db_session):
+    repo = ImportAreaRepository(db_session)
+    outer_bbox = BoundingBox(Coordinate(30.0, -97.8), Coordinate(30.004, -97.796))
+    outer = _completed(repo, 30.0, -97.8, 30.004, -97.796)
+    inside = _completed(repo, 30.001, -97.799, 30.002, -97.798)
+    on_the_edge = _completed(repo, 30.0, -97.8, 30.001, -97.799)
+    _completed(repo, 30.003, -97.797, 30.005, -97.795)  # partly overlapping
+    _completed(repo, 30.01, -97.79, 30.011, -97.789)  # outside
+    pending = repo.get_or_create("osm", BoundingBox(Coordinate(30.002, -97.798), Coordinate(30.003, -97.797)))
+    failed = repo.get_or_create("osm", BoundingBox(Coordinate(30.0025, -97.7985), Coordinate(30.0035, -97.7975)))
+    repo.mark_failed(failed.id)
+
+    covered = repo.completed_areas_covered_by(outer_bbox, exclude_id=outer.id)
+
+    assert {area.id for area in covered} == {inside.id, on_the_edge.id}
+    assert pending.id not in {area.id for area in covered}
+    assert outer.id in {area.id for area in repo.completed_areas_covered_by(outer_bbox)}

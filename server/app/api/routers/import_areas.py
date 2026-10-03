@@ -47,6 +47,7 @@ from app.api.schemas import (
     ScopeType,
 )
 from app.domain.bounding_box import BoundingBox, Coordinate
+from app.domain.covered_areas import compose_by_source_id
 from app.domain.cross_section import cross_sections_by_segment
 from app.domain.enums import ImportStatus
 from app.domain.import_area import ImportArea
@@ -213,24 +214,36 @@ def get_map_data(
     """Filter mode returns whole entities that intersect the scope. Segments keep their full
     geometry, and the nodes they end at are always included, so the result stays routable.
     Clip mode cuts every geometry at the scope (the boundary, or the bounding box), which is a
-    picture: distances and areas still describe the whole entity."""
+    picture: distances and areas still describe the whole entity.
+
+    The area composes the completed areas inside its rectangle: their buildings, POIs, area
+    features, and whole blocks join its own, each feature naming its `import_area_id`, so the
+    response is one complete place. Where both hold a feature, the area's own copy wins."""
+    composed_area_ids = [
+        inner.id for inner in ImportAreaRepository(session).completed_areas_covered_by(area.bbox, exclude_id=area.id)
+    ]
     segments = RoadSegmentRepository(session).list_for_import_area_with_street(area.id)
     # Cross-sections read the whole area (a direction is inferred from a road's reverse
     # twin), so they are computed before the scope narrows the segments.
     cross_sections = cross_sections_by_segment(segments)
     nodes = NavigableNodeRepository(session).list_for_import_area(area.id)
-    blocks = BlockRepository(session).list_for_import_area(area.id)
-    buildings = BuildingRepository(session).list_for_import_area(area.id)
-    pois = PointOfInterestRepository(session).list_for_import_area(area.id)
-    area_features = AreaFeatureRepository(session).list_for_import_area(area.id)
+    owner_ids = [area.id, *composed_area_ids]
+    block_repository = BlockRepository(session)
+    blocks = [
+        *block_repository.list_for_import_area(area.id),
+        *block_repository.list_composable(composed_area_ids, area.id),
+    ]
+    buildings = _composed(BuildingRepository(session), owner_ids)
+    pois = _composed(PointOfInterestRepository(session), owner_ids)
+    area_features = _composed(AreaFeatureRepository(session), owner_ids)
 
     if scope is None:
-        scope_out = ScopeOut(type=ScopeType.IMPORT_AREA, id=area.id)
+        scope_out = ScopeOut(type=ScopeType.IMPORT_AREA, id=area.id, composed_area_ids=composed_area_ids)
         projection = local_projection_for(area.bbox.ring())
     else:
-        scope_out = ScopeOut(type=ScopeType.BOUNDARY, id=scope.id)
+        scope_out = ScopeOut(type=ScopeType.BOUNDARY, id=scope.id, composed_area_ids=composed_area_ids)
         projection = local_projection_for(scope.polygon)
-        in_scope = ids_intersecting_boundary(session, area.id, scope.id)
+        in_scope = ids_intersecting_boundary(session, area.id, scope.id, composed_area_ids)
         segments = [entry for entry in segments if entry.segment.id in in_scope.road_segments]
         endpoint_ids = {node_id for entry in segments for node_id in (entry.segment.from_node_id, entry.segment.to_node_id)}
         nodes = [node for node in nodes if node.id in in_scope.navigable_nodes or node.id in endpoint_ids]
@@ -248,13 +261,20 @@ def get_map_data(
         "area_features": [area_feature_feature(feature) for feature in area_features],
     }
     if mode is ExportMode.CLIP:
-        layers = _clipped(layers, clip_to_scope(session, area.id, scope.id if scope else None))
+        layers = _clipped(layers, clip_to_scope(session, area.id, scope.id if scope else None, composed_area_ids))
 
     return MapDataOut(
         scope=scope_out,
         mode=mode,
         projection=projection_out(projection),
         **{name: feature_collection(features) for name, features in layers.items()},
+    )
+
+
+def _composed(repository, owner_ids: list) -> list:
+    """One layer from the area's own features and then its inner areas', each source id once."""
+    return compose_by_source_id(
+        (repository.list_for_import_area(owner_id) for owner_id in owner_ids), lambda feature: feature.source_id
     )
 
 

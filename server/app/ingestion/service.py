@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.domain.area_feature import AreaFeature
 from app.domain.bounding_box import BoundingBox, Coordinate
 from app.domain.building import Building
+from app.domain.covered_areas import without_covered
 from app.domain.enums import RestrictionKind
 from app.domain.import_area import ImportArea
 from app.domain.poi import PointOfInterest
@@ -50,8 +51,9 @@ def _untimed(step: str) -> AbstractContextManager[None]:
     return nullcontext()
 
 # Called as `emit(stage, **info)` once a stage's rows are written (flushed, not committed), so the
-# listener can read them back through the same session. The stages, in order: `fetched`, `ground`,
-# `roads`, `blocks`, then `buildings` once per ring of buildings. The listener maps `info` to JSON.
+# listener can read them back through the same session. The stages, in order: `fetched` (with the
+# ids of the inner areas the import skips), `ground`, `roads`, `blocks`, then `buildings` once per
+# ring of buildings. The listener maps `info` to JSON.
 StageEmitter = Callable[..., None]
 
 
@@ -95,7 +97,8 @@ class OSMIngestionService:
             with self._step(import_area.id, "parse"):
                 records = self.adapter.parse(with_way_nodes_from_geometry(payload))
             self._validate_within_bounding_box(bbox, records)
-            result = self._persist(import_area, records)
+            inner_areas = area_repo.completed_areas_covered_by(bbox, exclude_id=import_area.id)
+            result = self._persist(import_area, records, inner_areas=inner_areas)
             self.session.commit()
             return result
         except Exception as error:
@@ -110,9 +113,19 @@ class OSMIngestionService:
                 raise
             raise OSMIngestionError(f"OSM import failed: {error}") from error
 
-    def _persist(self, import_area: ImportArea, records: ImportRecords, emit: StageEmitter = _no_emit) -> ImportResult:
+    def _persist(
+        self,
+        import_area: ImportArea,
+        records: ImportRecords,
+        emit: StageEmitter = _no_emit,
+        inner_areas: tuple[ImportArea, ...] | list[ImportArea] = (),
+    ) -> ImportResult:
         area_id = import_area.id
         started = time.perf_counter()
+        # Completed areas inside this rectangle already hold their buildings, POIs and area
+        # features: those are not stored here, and earlier copies here are swept as not produced.
+        # The road network stays whole, so routes and blocks cross the inner areas.
+        records = self._without_inner_area_features(area_id, records, inner_areas)
         logger.info(
             "import area %s: persisting %d nodes, %d roads, %d buildings, %d POIs, %d area features",
             area_id, len(records.nodes), len(records.roads), len(records.buildings), len(records.pois), len(records.areas),
@@ -273,14 +286,39 @@ class OSMIngestionService:
             area_repo.mark_importing(import_area.id)
             records = self.adapter.parse(with_way_nodes_from_geometry(payload))
             self._validate_within_bounding_box(bbox, records)
-            emit("fetched", element_count=len(payload.get("elements", [])))
-            result = self._persist(import_area, records, emit)
+            inner_areas = area_repo.completed_areas_covered_by(bbox, exclude_id=import_area.id)
+            emit(
+                "fetched",
+                element_count=len(payload.get("elements", [])),
+                inner_area_ids=[inner.id for inner in inner_areas],
+            )
+            result = self._persist(import_area, records, emit, inner_areas=inner_areas)
             self.session.commit()
             return result
         except OSMIngestionError:
             raise
         except Exception as error:
             raise OSMIngestionError(f"OSM import failed: {error}") from error
+
+    @staticmethod
+    def _without_inner_area_features(area_id, records: ImportRecords, inner_areas) -> ImportRecords:
+        """`records` without the buildings, POIs and area features covered by an inner area's box."""
+        boxes = [inner.bbox for inner in inner_areas]
+        if not boxes:
+            return records
+        buildings, skipped_buildings = without_covered(
+            records.buildings, lambda feature: (records.nodes[node_id] for node_id in feature.node_ids), boxes
+        )
+        pois, skipped_pois = without_covered(records.pois, lambda poi: (poi.point,), boxes)
+        areas, skipped_areas = without_covered(
+            records.areas, lambda feature: (records.nodes[node_id] for node_id in feature.node_ids), boxes
+        )
+        logger.info(
+            "import area %s: skipping %d buildings, %d POIs, %d area features held by %d inner area(s): %s",
+            area_id, len(skipped_buildings), len(skipped_pois), len(skipped_areas), len(boxes),
+            ", ".join(str(inner.id) for inner in inner_areas),
+        )
+        return replace(records, buildings=tuple(buildings), pois=tuple(pois), areas=tuple(areas))
 
     @contextmanager
     def _step(self, area_id, step: str) -> Iterator[None]:
