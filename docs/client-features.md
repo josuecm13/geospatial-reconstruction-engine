@@ -19,7 +19,7 @@ beyond parity.
 | Capability | Endpoint | API status | Client | Client notes |
 |---|---|---|---|---|
 | Import a bounded area (≤ 1 km × 1 km) from an OSM payload. Re-import reconciles and deletes what the payload omits | `POST /import-areas` | shipped | done | Draw or enter the rectangle, then drag inside to move it, an edge or corner to resize it (pointer events, so touch works; `client/src/importing/rectangleTool.ts`, drag math in `rectangleDrag.ts`). The cursor names each part, a label shows size and area while dragging, the rectangle turns red past 1 km², and Escape restores it. Show the 1 km² limit while drawing. Warn that re-import is destructive |
-| List import areas, most recently imported first, with an optional `status` filter and `limit` | `GET /import-areas` | shipped | done | The panel's "Imported areas" list, so any completed import can be reopened |
+| List import areas, most recently imported first, with an optional `status` filter and `limit` | `GET /import-areas` | shipped | done | `/locations` (`client/src/pages/locations.ts`, `client/src/locations/`): a card per area (any status) with a footprint preview, filter by text, sort by recent or size, up to 200 areas. The panel links to it and shows only the open area |
 | Import status and entity counts (roads, nodes, buildings, POIs, area features, blocks, linked buildings) | `GET /import-areas/{id}` | shipped | — | Handle `pending` / `importing` / `failed`. `map-data` returns 409 `import_area_not_ready` until the import completes |
 | Created / updated / removed counts on import | `POST /import-areas` | planned (#6) | — | Show a diff summary after a re-import |
 | Skipped turn restrictions on import (`skipped_restriction_count`: malformed or unresolvable in OSM) | `POST /import-areas` | shipped | — | Mention it in the import summary when it isn't zero |
@@ -77,9 +77,10 @@ beyond parity.
 
 | Capability | API status | Client | Client notes |
 |---|---|---|---|
-| Pages behind a history router: `/` landing, `/locations`, `/explore/:areaId`, not found | n/a | done | `client/src/routing/` (`routes.ts` codec, `router.ts`, `store.ts`) and `client/src/pages/`. The landing page is built (#102, below); locations is a placeholder until #103 |
+| Pages behind a history router: `/` landing, `/locations`, `/explore/:areaId`, not found | n/a | done | `client/src/routing/` (`routes.ts` codec, `router.ts`, `store.ts`) and `client/src/pages/`. The landing page (#102, below) and `/locations` (#103) are built |
 | Landing page at `/`: what the engine is, the pipeline as an interactive SVG diagram (hover, focus or tap a stage for what it produces and a doc link), the six most recent completed areas from `GET /import-areas`, "See all locations", and "Import a new place" | shipped | done | `client/src/pages/landing.ts`, `client/src/landing/` (`architectureModel.ts` is the stage data, `architecture.ts` draws it). Renders without the API: the locations block then shows the error reporter's sentence. "Import a new place" opens the last-opened (else most recent) area on the map, since explore always names an area; with none it goes to the locations page |
 | View state in the URL: `view`, `scope`, and the 2D map's `at=<lat>,<lon>,<zoom>`; Back and Forward restore area, scope and view; camera moves rewrite the entry. Old `#map` / `#scene` links redirect | n/a | done | `client/src/pages/explore.ts` keeps the `SelectionStore` and the route in step. The scene camera is not in the URL |
+| Footprint previews of every import area, drawn from `map-data` on a 2D canvas (lazy, three at a time, cached by id and `imported_at`), and an animated fly-to when an area is opened from the gallery or switched to inside explore (reduced motion jumps) | `GET /import-areas/{id}/map-data` | done | `client/src/locations/` (`preview.ts`, `previewTransform.ts`, `flyTo.ts`, `cardModel.ts`, `card.ts` for the card the landing page can reuse). A page opened directly on an explore URL jumps, not flies |
 
 ### Later milestones (planned)
 

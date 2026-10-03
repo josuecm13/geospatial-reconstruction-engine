@@ -4,6 +4,7 @@ import { BoundaryPanel } from "../boundaries/boundaryPanel";
 import { useErrorReporter } from "../errors/errorReporter";
 import { ImportPanel } from "../importing/importPanel";
 import type { StagedTarget } from "../importing/stagedImport";
+import { consumeFlyTo } from "../locations/flyTo";
 import { formatRoute, type ExploreRoute, type ExploreView, type Route } from "../routing/routes";
 import { SceneLoader } from "../scene/sceneLoader";
 import { SelectionStore, type Scope } from "../state/selection";
@@ -133,7 +134,10 @@ export const mount: Mount<ExploreRoute> = (el, ctx) => {
           // Anything else: let the panel try again and show the error.
         }
         if (mine !== applies || disposed) return;
-        await panel.open(route.areaId, { area, instant: true, camera: route.at });
+        // A page that opens on this URL (a pasted link, a reload) jumps to the area, unless a gallery card
+        // asked for the fly. Moving to another area while the page is open always flies.
+        const gallery = consumeFlyTo(route.areaId);
+        await panel.open(route.areaId, { area, instant: initial && !gallery, camera: route.at });
         if (mine !== applies || disposed) return;
       }
       if (!initial) selection.setScope(scopeOf(route));

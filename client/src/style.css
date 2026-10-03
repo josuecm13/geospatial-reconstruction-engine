@@ -75,7 +75,7 @@ body:has(#map-view[hidden]) .panel { display: none; }
 .status { margin: 6px 0 0; min-height: 1.2em; }
 .status[data-state="error"] { color: #c0392b; }
 .status[data-state="busy"] { color: #2f7dd1; }
-.recent { list-style: none; margin: 0; padding: 0; }
+.panel a.browse-locations { display: inline-block; margin-top: 2px; color: #2f7dd1; font-size: 13px; }
 .selection-label {
   margin-bottom: 8px;
   padding: 2px 8px;
@@ -192,4 +192,72 @@ main > .page.landing { padding: 0; background: #f4f1ea; }
   .landing .landing-hero h2 { font-size: 26px; }
   .landing .landing-facts { grid-template-columns: 1fr; gap: 16px; }
   .landing .landing-inner { padding: 0 16px; }
+
+/* --- Locations gallery: the card (shared with the landing page) and the page's own layout under .locations --- */
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+.location-card {
+  position: relative; display: flex; flex-direction: column; height: 100%; overflow: hidden;
+  background: #fff; border: 1px solid #d5dbe0; border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(31, 42, 51, 0.06), 0 4px 14px rgba(31, 42, 51, 0.06);
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+.location-card:has(a:hover) { transform: translateY(-3px); border-color: #b9c3cc; box-shadow: 0 2px 4px rgba(31, 42, 51, 0.08), 0 12px 28px rgba(31, 42, 51, 0.16); }
+.location-card:has(a:focus-visible) { outline: 3px solid #2f7dd1; outline-offset: 2px; }
+.location-card[data-status]:not([data-status="completed"]) { background: #fafaf8; border-style: dashed; }
+.location-preview { position: relative; aspect-ratio: 8 / 5; background: #26343f; overflow: hidden; }
+.location-preview canvas { display: block; width: 100%; height: 100%; opacity: 0; transform: scale(1.03); transition: opacity 400ms ease, transform 600ms ease; }
+.location-preview[data-state="ready"] canvas { opacity: 1; transform: none; }
+.location-preview[data-state="idle"]::after, .location-preview[data-state="loading"]::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(100deg, transparent 30%, rgba(244, 241, 234, 0.12) 50%, transparent 70%);
+  background-size: 200% 100%; animation: location-shimmer 1.4s linear infinite;
+}
+@keyframes location-shimmer { from { background-position: 150% 0; } to { background-position: -50% 0; } }
+.location-preview-note { display: none; position: absolute; inset: 0; align-items: center; justify-content: center; color: #93a1ac; font-size: 13px; }
+.location-preview[data-state="error"] .location-preview-note { display: flex; }
+.location-badge {
+  position: absolute; top: 10px; left: 10px; padding: 3px 10px; border-radius: 999px;
+  background: rgba(244, 241, 234, 0.95); color: #1f2a33; font-size: 12px; font-weight: 600;
+}
+.location-card[data-status="failed"] .location-badge { background: #c0392b; color: #fff; }
+.location-card[data-status="importing"] .location-badge { background: #2f7dd1; color: #fff; }
+.location-body { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px 16px; }
+.location-title { margin: 0; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.location-open { color: inherit; text-decoration: none; }
+.location-open:focus-visible { outline: none; }
+.location-open::after { content: ""; position: absolute; inset: 0; } /* the whole card is the link */
+.location-meta { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; font-size: 13px; color: #5b6b78; }
+.location-counts { display: flex; gap: 20px; list-style: none; margin: 6px 0 0; padding: 10px 0 0; border-top: 1px solid #e6e9ec; }
+.location-counts li { display: flex; flex-direction: column; }
+.location-counts strong { font-size: 17px; font-variant-numeric: tabular-nums; }
+.location-counts span { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #7b8994; }
+
+.page.locations { background: #f4f1ea; }
+.locations > * { max-width: 1240px; margin-left: auto; margin-right: auto; }
+.locations-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px 32px; margin-bottom: 8px; }
+.locations-head h2 { margin: 0; font-size: 30px; letter-spacing: -0.01em; }
+.locations-lede { margin: 4px 0 0; color: #5b6b78; }
+.locations-tools { display: flex; gap: 10px; }
+.locations-tools input, .locations-tools select {
+  height: 38px; padding: 0 12px; border: 1px solid #b9c3cc; border-radius: 8px; background: #fff; font: inherit; color: inherit;
+}
+.locations-tools input { width: 260px; max-width: 100%; padding-left: 34px; background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%237b8994' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='7' cy='7' r='5'/%3E%3Cpath d='M11 11l4 4'/%3E%3C/svg%3E") 11px 50% no-repeat; }
+.locations-tools input:focus-visible, .locations-tools select:focus-visible { outline: 3px solid #2f7dd1; outline-offset: 1px; }
+.locations-count { margin-top: 0; margin-bottom: 16px; font-size: 13px; color: #5b6b78; min-height: 1.2em; }
+.locations-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; list-style: none; padding: 0; margin-top: 0; margin-bottom: 24px; }
+.locations-grid > li[hidden] { display: none; }
+.locations-message { padding: 32px 16px; text-align: center; color: #5b6b78; }
+.locations-message[hidden] { display: none; }
+.locations-retry { padding: 8px 16px; border: 1px solid #2f7dd1; border-radius: 8px; background: #2f7dd1; color: #fff; font: inherit; cursor: pointer; }
+.location-skeleton { background: #fff; border: 1px solid #d5dbe0; border-radius: 12px; overflow: hidden; }
+.location-skeleton .location-preview { animation: scene-building-pulse 1.4s ease-in-out infinite; }
+.location-skeleton .bar { height: 12px; border-radius: 6px; background: #e6e9ec; width: 55%; }
+.location-skeleton .bar.wide { height: 16px; width: 80%; }
+@media (prefers-reduced-motion: reduce) {
+  .location-card, .location-preview canvas { transition: none; }
+  .location-card:has(a:hover) { transform: none; }
+  .location-preview[data-state="idle"]::after, .location-preview[data-state="loading"]::after, .location-skeleton .location-preview { animation: none; }
 }

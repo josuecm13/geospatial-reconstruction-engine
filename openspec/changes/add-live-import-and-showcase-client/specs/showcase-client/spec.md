@@ -152,3 +152,30 @@ The client SHALL serve a landing page at `/` that says what the engine takes in 
 #### Scenario: Opening a recent location
 - **WHEN** a user selects a recent location's card
 - **THEN** the client navigates, with no page load, to `/explore/<that area>`
+
+### Requirement: The client SHALL list import areas with previews and fly to the one opened
+The client SHALL show every import area on `/locations` as a card: a preview of its footprint drawn from its map-data (buildings filled, roads stroked at their generated width, area features tinted) on a 2D canvas, its place (the rounded centre of its rectangle), its size, when it was imported, and its counts of buildings, roads, and blocks. Previews SHALL load only when their card nears the viewport, at most three at a time, and SHALL be cached in memory by area id and `imported_at`. Cards SHALL be filterable by text and sortable by most recent or largest. An area whose import did not complete SHALL be shown with its status and no counts, and SHALL NOT be openable. Opening a card SHALL navigate to `/explore/:areaId` and the map SHALL animate there in a zoom-out, pan, zoom-in arc that frames the rectangle, lasting between 1.2 and 3.5 seconds by distance; switching to another area inside the explore page SHALL animate the same way. For a user who prefers reduced motion the map SHALL jump instead. A page that opens directly on an explore URL SHALL jump rather than fly. The gallery's scroll position, filter, and sort SHALL be kept in the browser's history entry, so Back returns to the same spot. The import panel SHALL link to the gallery and show only the open area, rather than listing every area.
+
+#### Scenario: Previews load as cards scroll into view
+- **WHEN** the gallery opens with many import areas
+- **THEN** only the cards near the viewport request their map-data, three at a time, and a card revisited later draws its cached preview without a request
+
+#### Scenario: Filtering and sorting
+- **WHEN** a user types part of a place or a status into the filter, and chooses to sort by size
+- **THEN** only the matching cards are shown, largest rectangle first
+
+#### Scenario: An import that did not complete
+- **WHEN** an import area is `failed`, `pending`, or `importing`
+- **THEN** its card shows that status over an empty footprint, with no counts and no link to the map
+
+#### Scenario: Opening a location
+- **WHEN** a user opens a completed area's card
+- **THEN** the URL becomes `/explore/<id>` and the map flies there, framing the rectangle, instead of jumping
+
+#### Scenario: Reduced motion
+- **WHEN** a user who prefers reduced motion opens a card or switches areas in the explore page
+- **THEN** the map jumps to the area with no animation
+
+#### Scenario: Back returns to the same spot
+- **WHEN** a user scrolls the gallery, opens a card, and presses Back
+- **THEN** the gallery shows the same scroll position, filter, and sort

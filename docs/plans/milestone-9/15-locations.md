@@ -42,4 +42,42 @@ Spec delta: "The client SHALL list import areas with previews and fly to the one
 
 ## Outcome
 
+Built as briefed. `pages/locations.ts` is the gallery; its modules are in `client/src/locations/`:
+
+- `cardModel.ts` (pure, tested): `toCard(area, now)` gives `{ id, title, subtitle, when, importedAt, counts, status, statusLabel, bbox,
+  squareMeters }`; `filterCards`, `sortCards("recent" | "size")`, `formatCentre`, `formatWhen`. The API gives no place name
+  (`ImportArea` has none), so the title is always the rounded centre ("52.5300° N, 13.4000° E"). The date is relative for a week,
+  then a UTC date, so it reads the same everywhere. Counts are empty unless the import completed.
+- `previewTransform.ts` (pure, tested): `previewTransform(bbox, w, h, padding)` and `projectToPreview`; longitude is scaled by the
+  cosine of the centre latitude. `preview.ts` draws on a 2D canvas (640 x 400) and holds `PreviewLoader` (IntersectionObserver with a
+  240 px margin, a queue of 3, a 48-entry LRU cache keyed by `id@imported_at`, shared across visits so Back shows them at once; a
+  card still queued when it scrolls away is dropped). `previewScheduler.ts` (tested) has the queue, the LRU, and the key.
+- `flyTo.ts`: `flyParams(from, toBbox, viewport)` (pure, tested): centre in Mercator, zoom fitted with 60 px padding (clamped 0 to
+  19), `curve` 1.42, duration 1200 + 600 * log10(1 + km) clamped to 1.2 to 3.5 s. `flyToArea(map, bbox)` calls `flyTo`, or `jumpTo`
+  under `prefers-reduced-motion`.
+- `card.ts`: `renderLocationCard(card, { previews, onOpen? }): HTMLElement`, the one function the landing page can adopt. The title
+  is a `data-link` anchor stretched over the whole card; an area that did not complete is a dashed card with a status badge and no link.
+- `galleryState.ts` (tested): scroll, filter, and sort in `history.state` under the key `locations` (read on mount, written on a
+  150 ms debounce and at the moment a card is opened), so Back restores them. The router needed no change.
+
+Explore and the panel: `ImportPanel.open` now flies (instead of `fitBounds` for 800 ms) unless `instant`, `quiet`, or a `camera` is
+given. Explore passes `instant: initial && !gallery`, where `gallery = consumeFlyTo(areaId)`. Decision: a page that opens on an
+explore URL (a pasted link, a reload) still jumps, because flying there from the map's default Berlin view is not an arrival, and
+only a click on a gallery card marks the area (`markFlyTo`, valid for 5 s). Any area change while explore is open (Back, Forward,
+a link) flies. A route with `at` jumps to that camera. The panel's list is now "Browse locations" plus one line for the open area;
+it still fetches up to 200 areas (was 50) to detect a re-import of a rectangle.
+
+Not run locally (CI only): `tsc --noEmit -p client` is clean, tests included. Expected values in the tests are computed by hand
+(comments show the arithmetic). Guards are not mutation-checked. The canvas drawing, the IntersectionObserver loading, the fly,
+and the CSS were never seen in a browser; a human should open `/locations` with a few areas and open one. Not done: the landing
+page (brief 14) does not use `renderLocationCard` yet; it is a drop-in with a `PreviewLoader` that the page disposes on unmount.
+Preview, fly and gallery have no component tests (they need a canvas, a map, or a DOM).
+
 ## Tangents found
+
+- With no import area there is no way to reach the map: `/explore/:areaId` needs an id, and the gallery's empty state can only say
+  to "import a place on the map". The first import needs an explore route without an area (or a landing action that opens the
+  map at a default view). Worth an issue before the walkthrough (brief 11) is written.
+- The map's default view is Berlin (`createMapView`), so the first fly from the gallery starts there, not where the user was.
+  Remembering the last camera would make arrival smoother.
+- `ImportPanel.open`'s `quiet` option has no caller left (grep shows none passing it); it can go.

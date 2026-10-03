@@ -9,11 +9,12 @@ import { RectangleTool } from "./rectangleTool";
 import { ApiError } from "../api/client";
 import { mapDataQuery, sameScope, type Scope, type SelectionStore } from "../state/selection";
 import { describeArea, findByBbox } from "./recentImports";
+import { flyToArea } from "../locations/flyTo";
 import type { Camera } from "../routing/routes";
 import { runStagedImport, type StagedTarget } from "./stagedImport";
 
-/** How many completed areas the panel lists. */
-const LISTED_AREAS = 50;
+/** How many completed areas the panel fetches, to tell a re-import of a rectangle from a new one. */
+const LISTED_AREAS = 200;
 const reportError = useErrorReporter(IMPORT_MESSAGES);
 
 export const REIMPORT_WARNING =
@@ -26,6 +27,8 @@ export class ImportPanel {
   private readonly tool: RectangleTool;
   /** Completed import areas from the API, most recent first. */
   private areas: ImportArea[] = [];
+  /** The area on the map now, for the line under "Imported areas". */
+  private openArea: ImportArea | null = null;
   private readonly el: {
     draw: HTMLButtonElement;
     area: HTMLElement;
@@ -58,7 +61,8 @@ export class ImportPanel {
       <button type="button" class="primary" data-role="import" disabled>Import from OpenStreetMap</button>
       <p class="status" data-role="status" role="status" aria-live="polite"></p>
       <h3>Imported areas</h3>
-      <ul class="recent" data-role="recent"><li class="hint">Loading…</li></ul>`;
+      <p class="hint" data-role="recent">Loading…</p>
+      <a class="browse-locations" data-link href="/locations">Browse locations</a>`;
     const pick = <T extends HTMLElement>(role: string) => container.querySelector<T>(`[data-role="${role}"]`)!;
     this.el = {
       draw: pick("draw"),
@@ -136,7 +140,8 @@ export class ImportPanel {
 
   /**
    * Loads an import area's map data and shows it: the engine's own representation. `camera` puts the
-   * map there instead of fitting the area, and `instant` skips the fly-to animation.
+   * map there instead of flying to the area, and `instant` fits the area without any animation. Otherwise
+   * the map flies to the area (or jumps, for a user who prefers reduced motion).
    */
   async open(areaId: string, options: { area?: ImportArea; quiet?: boolean; instant?: boolean; camera?: Camera | null } = {}): Promise<void> {
     try {
@@ -157,22 +162,25 @@ export class ImportPanel {
       this.shown = { areaId, scope };
       this.tool.show(area.bbox, true);
       const { camera } = options;
-      const moveCamera = () =>
-        camera
-          ? this.map.jumpTo({ center: [camera.lon, camera.lat], zoom: camera.zoom })
-          : this.map.fitBounds(
-              [
-                [area.bbox.min_longitude, area.bbox.min_latitude],
-                [area.bbox.max_longitude, area.bbox.max_latitude],
-              ],
-              { padding: 60, duration: options.quiet || options.instant ? 0 : 800 },
-            );
+      const moveCamera = () => {
+        if (camera) this.map.jumpTo({ center: [camera.lon, camera.lat], zoom: camera.zoom });
+        else if (options.quiet || options.instant) {
+          this.map.fitBounds(
+            [
+              [area.bbox.min_longitude, area.bbox.min_latitude],
+              [area.bbox.max_longitude, area.bbox.max_latitude],
+            ],
+            { padding: 60, duration: 0 },
+          );
+        } else flyToArea(this.map, area.bbox);
+      };
       // A hidden map has no size to fit into (the page opened on the Scene view): wait until it shows.
       if (this.map.getContainer().clientWidth === 0) this.pendingCamera = moveCamera;
       else {
         this.pendingCamera = null;
         moveCamera();
       }
+      this.openArea = area;
       this.selection.setArea(areaId);
       this.selection.setScope(scope);
       this.setStatus(summary(area), "ok");
@@ -206,29 +214,13 @@ export class ImportPanel {
       this.areas = await this.api.listImportAreas({ status: "completed", limit: LISTED_AREAS });
       this.renderAreas();
     } catch (error) {
-      const item = Object.assign(document.createElement("li"), { className: "hint" });
-      renderReportedError(item, reportError(error));
-      this.el.recent.replaceChildren(item);
+      renderReportedError(this.el.recent, reportError(error));
     }
   }
 
+  /** The line under "Imported areas": the open area (the gallery lists the rest). */
   private renderAreas(): void {
-    const selected = this.selection.get().areaId;
-    this.el.recent.replaceChildren(
-      ...(this.areas.length
-        ? this.areas.map((area) => {
-            const li = document.createElement("li");
-            const button = document.createElement("button");
-            button.type = "button";
-            button.className = "link";
-            if (area.id === selected) button.setAttribute("aria-current", "true");
-            button.textContent = describeArea(area);
-            button.addEventListener("click", () => void this.open(area.id));
-            li.appendChild(button);
-            return li;
-          })
-        : [Object.assign(document.createElement("li"), { textContent: "None yet", className: "hint" })]),
-    );
+    this.el.recent.textContent = this.openArea ? describeArea(this.openArea) : "None open";
   }
 
   private showError(error: unknown): void {
