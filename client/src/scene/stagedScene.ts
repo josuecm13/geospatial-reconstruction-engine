@@ -7,6 +7,10 @@ import { toLocal } from "./projection";
 import type { RevealStep } from "./stagedBuild";
 
 const GROUND_MARGIN = 20;
+
+/** What an inner area adds to a staged build. Not its roads: the outer area's `roads` stage carries
+ *  the whole network across the rectangle, inner areas included. */
+export const INNER_AREA_LAYERS = ["area_features", "blocks", "buildings"] as const;
 const WAITING_LABEL = "Building the map…";
 const FETCHED_LABEL = "Building…";
 
@@ -20,7 +24,7 @@ export function bboxMeters(bbox: BoundingBox): { width: number; height: number }
 export interface StagedHandle {
   /** Queues a step. Steps play one after another, each once the one before has finished. */
   apply(step: RevealStep): void;
-  /** Shows an already imported inner area at once, fully built (its map-data, in its own projection). */
+  /** Shows an already imported inner area's features, blocks and buildings at once (its map-data, in its own projection). Its roads come from the `roads` stage. */
   addBuilt(data: MapData): void;
   /** No more steps are coming: `finished` resolves once those queued have played. */
   complete(): void;
@@ -181,8 +185,9 @@ export function createStagedScene(scene: THREE.Scene, container: HTMLElement): S
         addBuilt(data) {
           if (over || !projection) return;
           const offset = toLocal(projection, [data.projection.origin.longitude, data.projection.origin.latitude]);
-          const inner = buildWorld(data); // its own ground and the unreleased `generated` group stay behind
-          for (const name of ["area_features", "roads", "blocks", "buildings"] as const) {
+          const inner = buildWorld(data); // its own ground, roads and the unreleased `generated` group stay behind
+          inner.getObjectByName("roads")!.traverse((object) => (object as THREE.Mesh).geometry?.dispose());
+          for (const name of INNER_AREA_LAYERS) {
             for (const mesh of take(inner, name)) {
               mesh.position.x += offset.x;
               mesh.position.z += offset.z;

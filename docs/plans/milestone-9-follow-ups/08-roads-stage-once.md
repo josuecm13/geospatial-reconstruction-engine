@@ -102,4 +102,13 @@ because `map-data` has no layer filter, and adding one is out of scope.
 
 ## Outcome
 
+Done as the brief designed. `stagedScene.ts` exports `INNER_AREA_LAYERS` (`area_features`, `blocks`, `buildings`); `addBuilt` loops over it and disposes the geometries of the inner world's roads, which stay behind. The server and routing are untouched, so routing is unaffected. The code claims checked out (the `addBuilt` loop, `take`, the server `roads` stage). The `StagedHandle.addBuilt` doc comment was updated.
+
+Test: `stagedScene.test.ts` now opts into jsdom and runs `createStagedScene` behaviourally (begin, apply `fetched`, `addBuilt` with one road, block and building; asserts the roads group is empty and the others hold their meshes), plus the constant check. Spec requirement and scenario and the client-features row updated. `npx tsc --noEmit -p client` passes. Guards are not mutation-checked, and the jsdom test hasn't been run (CI is the gate).
+
+Not done: the in-browser check of a nested import.
+
 ## Tangents found
+
+- (From the brief, unconfirmed) A building or area feature crossing an inner area's edge is stored by both areas, so a staged build draws it twice (outer `buildings` ring plus inner `map-data`).
+- (From the brief, unconfirmed) An inner area's clipped edge blocks overlap the outer area's straddling blocks the same way.

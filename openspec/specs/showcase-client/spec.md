@@ -108,11 +108,15 @@ The scene view SHALL offer a "Download glTF" button, enabled once a world is loa
 - **THEN** a building appears as a node named `building:<id>` and a road as `road:<id>`
 
 ### Requirement: The client SHALL build an imported place in stages as the server streams them
-The client SHALL start an import with `background: true`, switch to the scene view, and reveal each stage as its server-sent event arrives: a waiting animation until `fetched`, then the ground (area features), roads, buildings rising ring by ring from the centre out, and the blocks overlay last. It SHALL ignore an event that repeats or arrives out of order. A completed area that `fetched` names in `inner_area_ids` SHALL be shown fully built at once. A "Skip animation" button SHALL jump every pending step to its final state. While a build plays, the glTF export SHALL be disabled, and the finished area SHALL be loaded from map-data once it ends. A `failed` event SHALL discard the build, return to the map view, and report the event's `code`. Opening an already imported area SHALL show it with no animation.
+The client SHALL start an import with `background: true`, switch to the scene view, and reveal each stage as its server-sent event arrives: a waiting animation until `fetched`, then the ground (area features), roads, buildings rising ring by ring from the centre out, and the blocks overlay last. It SHALL ignore an event that repeats or arrives out of order. A completed area that `fetched` names in `inner_area_ids` SHALL have its area features, blocks and buildings shown at once, but not its roads, because the `roads` stage already carries the whole network. A "Skip animation" button SHALL jump every pending step to its final state. While a build plays, the glTF export SHALL be disabled, and the finished area SHALL be loaded from map-data once it ends. A `failed` event SHALL discard the build, return to the map view, and report the event's `code`. Opening an already imported area SHALL show it with no animation.
 
 #### Scenario: Reveal order
 - **WHEN** the events `fetched`, `ground`, `roads`, `blocks`, two `buildings` rings and `completed` arrive
 - **THEN** the scene reveals the ground, then the roads, then the first ring of buildings, then the second, and finally the blocks overlay
+
+#### Scenario: An inner area's roads
+- **WHEN** an import's `fetched` event names an inner area
+- **THEN** each road inside it is drawn once, from the `roads` stage
 
 #### Scenario: Skipping the animation
 - **WHEN** a user presses "Skip animation" while the build is playing
