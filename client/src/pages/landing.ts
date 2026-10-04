@@ -4,6 +4,7 @@ import { IMPORT_MESSAGES } from "../importing/errorMessages";
 import { CurrentArea } from "../importing/recentImports";
 import { renderArchitecture } from "../landing/architecture";
 import type { FeaturedStage } from "../landing/featuredStage";
+import { pickFeatured } from "../landing/featured";
 import { importTarget } from "../landing/importTarget";
 import { STORY_STEPS } from "../landing/storySteps";
 import { renderLocationCard } from "../locations/card";
@@ -245,11 +246,18 @@ export const mount: Mount<{ page: "landing" }> = (el, ctx) => {
     );
   };
 
+  const featuredId: string | null = import.meta.env?.VITE_FEATURED_AREA_ID?.trim() || null;
+
   api.listImportAreas({ status: "completed", limit: RECENT_LIMIT }).then(
-    (list) => {
+    async (list) => {
+      // The configured area may be older than the recent list, so fetch it when it isn't in there.
+      const configured = featuredId
+        ? (list.find((a) => a.id === featuredId) ?? (await api.getImportArea(featuredId).catch(() => null)))
+        : null;
       if (disposed) return;
       areas = list;
-      if (list.length) renderFeatured(list[0]);
+      const featured = pickFeatured(list, configured);
+      if (featured) renderFeatured(featured);
       else renderInvitation();
     },
     (error) => {
