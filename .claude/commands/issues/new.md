@@ -21,7 +21,7 @@ findings logged earlier in this session that haven't been filed yet, starting wi
 3. **Draft**:
    - Title `[area] <problem or outcome>`.
    - Exactly one label: `bug`, `enhancement`, `documentation`, or `chore`.
-   - A milestone: the GitHub milestone whose `MILESTONES.md` scope it belongs to, or none for
+   - A milestone: the GitHub milestone whose tracking issue's scope it belongs to, or none for
      housekeeping. Say why.
    - A body with the problem paragraph, `### Acceptance criteria`, and `### Reference`.
    - Its place in the plan: which sub-issue of the milestone's tracking issue it goes after, and

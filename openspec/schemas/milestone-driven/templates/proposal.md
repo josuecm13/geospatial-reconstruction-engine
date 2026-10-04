@@ -2,7 +2,7 @@
 
 <!-- 2-4 sentences the milestone section doesn't already say, then the links. -->
 
-See `MILESTONES.md` → <milestone section> and #<tracking issue>.
+See #<tracking issue>.
 
 ## What Changes
 

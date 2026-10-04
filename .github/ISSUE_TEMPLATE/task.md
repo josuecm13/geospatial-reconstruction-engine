@@ -6,10 +6,10 @@ labels: enhancement
 ---
 
 <!-- One paragraph: what's missing or needed, and why. Change the label to chore or documentation
-if that fits better, and set the milestone if it belongs to one (see MILESTONES.md). -->
+if that fits better, and set the milestone if it belongs to one (see its tracking issue). -->
 
 ### Acceptance criteria
 -
 
 ### Reference
-<!-- file:line, MILESTONES.md section, related issue or PR -->
+<!-- file:line, tracking issue, related issue or PR -->

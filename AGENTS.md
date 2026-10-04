@@ -15,8 +15,10 @@ belonging to either side.
   sync with the actual Alembic migrations; it's design intent, not generated from the DB.
 - `docs/client-features.md` — every API capability the client must surface, plus a UI brainstorm.
   A PR that adds or changes an API capability updates its row there.
-- `MILESTONES.md` — the progressive delivery plan. Work is scoped to one milestone at a time;
-  don't pull in a later milestone's concerns early just because the scaffolding exists.
+- `MILESTONES.md` — the milestones in order, each linking to its GitHub tracking issue, PRs, and
+  archived OpenSpec change. The plan itself lives in the tracking issues. Work is scoped to one
+  milestone at a time; don't pull in a later milestone's concerns early just because the
+  scaffolding exists.
 - `server/app/domain/` — framework-agnostic domain value objects and entities. No FastAPI,
   SQLAlchemy, or OSM types leak in here.
 - `server/app/config/` — environment-based settings and database engine setup.
@@ -51,10 +53,15 @@ and edge-block flags, stable ids), and traced boundaries (named shapes over an i
 scoped queries, and GeoJSON export in filter and clip modes with local projection metadata).
 Milestone 9 added live Overpass import, background imports that stream their stages, and the
 showcase client (2D picker, boundary tracing, a 3D scene you can fly and walk, routes, glTF export).
-The generated-content milestones (11 and 12) remain unbuilt. Don't pull those in prematurely; see `MILESTONES.md` for current status and what's next.
+Next is Milestone 10 (terrain elevation, #105), then the generated-content milestones (11 and 12), all
+unbuilt. Don't pull those in prematurely; see `MILESTONES.md` for the order and the tracking issues for
+the plan.
 
 ## Conventions
 
+- Each milestone is one architectural capability, and leaves the repository runnable and reviewable.
+  Domain contracts and tests come before integrations, and fixtures and local data before live
+  services. Decisions are recorded in `docs/` or the change's `design.md`.
 - Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/)
   (`feat:`, `fix:`, `docs:`, `chore:`, etc.).
 - Run tests before committing: `pytest -q` (see `HOW_TO_RUN.md` for environment setup), and
@@ -71,14 +78,15 @@ The generated-content milestones (11 and 12) remain unbuilt. Don't pull those in
 
 GitHub Issues are the backlog, and they are part of every change — not bookkeeping done afterward.
 
-- **`MILESTONES.md`** is the roadmap: why each milestone exists, its deliverables, acceptance checks,
-  and order. It does not track individual items.
+- **Tracking issues** hold the roadmap: each milestone's `[milestone] … (tracking)` issue says why
+  the milestone exists, its deliverables, acceptance checks, and open questions. **`MILESTONES.md`**
+  only lists the milestones in order and links to them; it holds no plan text.
 - **GitHub Issues**, each assigned to the GitHub milestone it belongs to (`7.1 Street
   cross-sections`, `9 Live import and the showcase client`, …), are every actionable item: milestone
   deliverables, bugs, chores, docs. Housekeeping that belongs to no milestone has none.
 - **OpenSpec changes** are created only when a milestone or large issue actually starts, and are
   linked from that issue. They use the project schema `openspec/schemas/milestone-driven/`: the
-  proposal links to `MILESTONES.md` and the tracking issue instead of restating them, and
+  proposal links to the tracking issue instead of restating it, and
   `tasks.md` is one checkbox per issue. The value is in the spec deltas (the contract) and
   `design.md` (the decisions). Small fixes need an issue, not a proposal; if a small fix changes
   observable behavior, its PR edits the living spec in `openspec/specs/` directly.
@@ -137,7 +145,9 @@ the user can override.
    always added as a sub-issue of that milestone's tracking issue.
 6. **Close.** The PR description carries `Fixes #<n>` for each issue it resolves, so merging
    closes them. When a milestone's last sub-issue closes, close its tracking issue and the GitHub
-   milestone, and update that milestone's status and completion note in `MILESTONES.md`.
+   milestone, post the completion note (what shipped, verification, decisions, what was deferred)
+   as the tracking issue's closing comment, and update the milestone's row in `MILESTONES.md`
+   (status, PRs, archived change).
 
 ### Issue format
 
@@ -155,7 +165,7 @@ Body:
 - <observable, testable outcomes>
 
 ### Reference
-<file:line, MILESTONES.md section, related issue or PR>
+<file:line, tracking issue, related issue or PR>
 ```
 
 State the current understanding, not how it was discovered; the discovery context belongs in a

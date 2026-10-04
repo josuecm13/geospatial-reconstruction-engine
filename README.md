@@ -17,11 +17,11 @@ OpenStreetMap is only an external source. The database schema, domain entities, 
 
 ## Design
 
-The architecture is recorded in [docs/architecture.md](docs/architecture.md), and the progressive implementation plan is in [MILESTONES.md](MILESTONES.md).
+The architecture is recorded in [docs/architecture.md](docs/architecture.md), and the milestones are listed in order in [MILESTONES.md](MILESTONES.md), each linking to its tracking issue, where the plan lives.
 
 ## Status
 
-Milestones 0–8 are complete: persistence, OSM fixture ingestion with block derivation and reconciling re-import, spatial queries, road graph, routing, an HTTP API in front of all of it, logical streets with generated cross-sections, buildable blocks, and traced boundaries with scoped queries and GeoJSON export. Next up are building heights from source (8.1), then live import and the showcase client (9): pick a place on a 2D map, import it live, and explore it as a low-poly 3D scene. See [HOW_TO_RUN.md](HOW_TO_RUN.md) to try it.
+Milestones 0–9 are complete: persistence, OSM fixture ingestion with block derivation and reconciling re-import, spatial queries, road graph, routing, an HTTP API in front of all of it, logical streets with generated cross-sections, buildable blocks, and traced boundaries with scoped queries and GeoJSON export. Milestone 8.1 added building heights from source, and Milestone 9 the live import and the showcase client: pick a place on a 2D map, import it live, and explore it as a low-poly 3D scene. Next is terrain elevation (Milestone 10, #105). See [HOW_TO_RUN.md](HOW_TO_RUN.md) to try it.
 
 To run it end to end, follow [docs/runbook.md](docs/runbook.md); [docs/walkthrough.md](docs/walkthrough.md) tours the client.
 

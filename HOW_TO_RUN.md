@@ -1,6 +1,6 @@
 # How to run it
 
-This project is a work-in-progress (see `MILESTONES.md` for status). You can run the FastAPI
+This project is a work-in-progress (see `MILESTONES.md` for the milestones and their status). You can run the FastAPI
 application backed by a local PostGIS database, apply migrations, run the test suite, and call the
 HTTP API to import a fixture area, query it, and plan a route.
 

@@ -37,5 +37,5 @@ Also check the plan's structure:
 - Blockers still make sense: flag closed blockers that no longer matter and dependencies the
   issue text mentions but GitHub doesn't record.
 - `in-progress` labels are live: flag any with no branch, PR, or activity in the last 14 days.
-- If a milestone has no open sub-issues left, flag that its tracking issue, GitHub milestone, and
-  `MILESTONES.md` status and completion note need closing out.
+- If a milestone has no open sub-issues left, flag that its tracking issue (with its completion note), GitHub
+  milestone, and `MILESTONES.md` row need closing out.

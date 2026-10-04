@@ -1,6 +1,6 @@
 ## Summary
 
-<!-- What this changes and why. Name the milestone (see MILESTONES.md) and the OpenSpec change, if any. -->
+<!-- What this changes and why. Name the milestone (its tracking issue) and the OpenSpec change, if any. -->
 
 Fixes #<!-- issue number; one line per issue this PR resolves -->
 
@@ -20,7 +20,7 @@ Fixes #<!-- issue number; one line per issue this PR resolves -->
 - [ ] `openspec validate --all --strict`
 - [ ] New guard/regression tests mutation-checked (broke the protected code, saw red, restored, saw green)
 - [ ] Schema changes go through an Alembic migration, and `docs/schema.md` is updated to match
-- [ ] `docs/architecture.md`, `MILESTONES.md`, `HOW_TO_RUN.md` updated if behavior or setup changed
+- [ ] `docs/architecture.md`, `HOW_TO_RUN.md` updated if behavior or setup changed; `MILESTONES.md` row if a milestone completed
 
 ## Commits
 

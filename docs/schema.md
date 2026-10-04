@@ -113,7 +113,7 @@ needs no migration and no re-import.
 (`left`/`right`/`straight`/`u_turn`) and defaulting `allowed = true` unless an OSM turn-restriction
 relation says otherwise. This means routing/graph code queries "legal outgoing segments for this
 incoming segment at this node" as a single join — no default-allow logic needed elsewhere, and it
-matches `MILESTONES.md`'s Milestone 5 acceptance check that the graph derives legal transitions
+matches Milestone 5's acceptance check (`openspec/changes/archive/2026-09-19-add-spatial-queries-road-graph-and-routing/`) that the graph derives legal transitions
 directly from this table.
 
 ```mermaid
@@ -280,7 +280,7 @@ Key decisions:
   heavily.
 - A trigger on `turn_movements` enforcing `incoming_segment.to_node_id = intersection_node_id AND
   outgoing_segment.from_node_id = intersection_node_id` — this can't be a plain `CHECK` since it
-  reads other tables, and `MILESTONES.md`'s Milestone 2 acceptance criteria explicitly calls for
+  reads other tables, and Milestone 2's acceptance criteria (`openspec/changes/archive/2026-09-16-domain-model-and-persistence-schema/`) explicitly call for
   turn movements to enforce valid segment-to-intersection relationships at the schema level.
 - A `CHECK (ST_IsValid(geom) AND ST_IsSimple(geom))` and a containment trigger on
   `traced_boundaries`. The containment check reads `import_areas.bbox`, so, like the
