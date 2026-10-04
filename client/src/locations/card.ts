@@ -20,7 +20,7 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, t
 /**
  * One import area as a card: a preview of its footprint, where it is, when it was imported, and its counts.
  * A completed area's title is a router link to `/explore/:id` (the whole card is its click target), and opening it
- * marks the area for the map to fly to. An area whose import did not complete is shown as such and is not a link.
+ * marks the area for the map to fly to. A second link, "Open in 3D", goes straight to the scene view (no fly-to). An area whose import did not complete is shown as such and is not a link.
  * Styles are in `style.css` under `.location-card`; the gallery scopes the grid under `.locations`.
  */
 export function renderLocationCard(card: LocationCard, ctx: CardContext): HTMLElement {
@@ -66,6 +66,18 @@ export function renderLocationCard(card: LocationCard, ctx: CardContext): HTMLEl
       counts.append(item);
     }
     body.append(counts);
+  }
+
+  if (card.status === "completed") {
+    // A plain anchor above the card's stretched link: no fly-to, and modifier clicks keep their browser meaning.
+    const scene = el("a", "location-open-3d", "Open in 3D");
+    scene.href = formatRoute({ page: "explore", areaId: card.id, view: "scene", scope: null, at: null });
+    scene.dataset.link = "";
+    scene.addEventListener("click", (event) => {
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      ctx.onOpen?.(card);
+    });
+    body.append(scene);
   }
 
   article.append(preview, body);

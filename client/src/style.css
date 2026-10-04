@@ -229,6 +229,13 @@ main > .page.landing { padding: 0; background: #f4f1ea; }
 .location-context { margin: 0; font-size: 13px; color: #5b6b78; }
 .location-coords { font-size: 12px; color: #7b8994; font-variant-numeric: tabular-nums; }
 .location-meta { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; font-size: 13px; color: #5b6b78; }
+.location-open-3d {
+  position: relative; z-index: 1; align-self: flex-start; margin-top: 4px; padding: 4px 12px;
+  font-size: 12px; font-weight: 600; color: #2f5f93; text-decoration: none;
+  background: #eef4fb; border: 1px solid #c5d8ee; border-radius: 999px;
+}
+.location-open-3d:hover { background: #dfeaf7; border-color: #9dbbe0; }
+.location-open-3d:focus-visible { outline: 3px solid #2f7dd1; outline-offset: 2px; }
 .location-counts { display: flex; gap: 20px; list-style: none; margin: 6px 0 0; padding: 10px 0 0; border-top: 1px solid #e6e9ec; }
 .location-counts li { display: flex; flex-direction: column; }
 .location-counts strong { font-size: 17px; font-variant-numeric: tabular-nums; }
