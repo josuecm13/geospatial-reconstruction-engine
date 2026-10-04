@@ -18,6 +18,7 @@ from app.api.dependencies import (
     SessionScope,
     completed_import_area,
     composed_import_area_ids,
+    get_geocoder,
     get_import_jobs,
     get_job_session_scope,
     get_overpass_client,
@@ -26,6 +27,7 @@ from app.api.dependencies import (
     scope_boundary,
 )
 from app.api.errors import ApiError
+from app.api.place_lookup import Geocoder, name_area
 from app.api.mappers import (
     area_feature_feature,
     block_feature,
@@ -93,6 +95,7 @@ def create_import_area(
     overpass: OverpassClient = Depends(get_overpass_client),
     jobs: ImportJobRegistry = Depends(get_import_jobs),
     session_scope: SessionScope = Depends(get_job_session_scope),
+    geocoder: Geocoder | None = Depends(get_geocoder),
 ) -> ImportAreaOut | JSONResponse:
     bbox = BoundingBox(
         min_corner=Coordinate(body.bbox.min_latitude, body.bbox.min_longitude),
@@ -103,7 +106,7 @@ def create_import_area(
     if existing is not None and jobs.is_running(existing.id):
         raise _import_in_progress(existing.id)
     if body.background:
-        return _start_background_import(body, bbox, session, overpass, jobs, session_scope)
+        return _start_background_import(body, bbox, session, overpass, jobs, session_scope, geocoder)
     payload = body.payload
     if payload is None:
         try:
@@ -121,8 +124,11 @@ def create_import_area(
         raise ApiError(
             409, "import_conflict", "a concurrent request already created this import area"
         ) from exc
+    named = name_area(areas, result.import_area, geocoder)
+    # The import committed before the lookup; the name needs its own commit or the session's close drops it.
+    session.commit()
     return import_area_out(
-        result.import_area, result.block_count, result.linked_building_count, result.skipped_restriction_count
+        named, result.block_count, result.linked_building_count, result.skipped_restriction_count
     )
 
 
@@ -133,6 +139,7 @@ def _start_background_import(
     overpass: OverpassClient,
     jobs: ImportJobRegistry,
     session_scope: SessionScope,
+    geocoder: Geocoder | None,
 ) -> JSONResponse:
     try:
         area = ImportAreaRepository(session).get_or_create(PROVIDER, bbox)
@@ -142,7 +149,7 @@ def _start_background_import(
         session.rollback()
         raise ApiError(409, "import_conflict", "a concurrent request already created this import area") from exc
     try:
-        jobs.start(area.id, background_import_work(bbox, body.payload, overpass, session_scope))
+        jobs.start(area.id, background_import_work(bbox, body.payload, overpass, session_scope, geocoder))
     except ImportAlreadyRunning as exc:
         raise _import_in_progress(area.id) from exc
     started = ImportStartedOut(import_area_id=area.id, events_url=f"/import-areas/{area.id}/events")

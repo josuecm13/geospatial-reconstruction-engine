@@ -52,6 +52,8 @@ erDiagram
         int poi_count
         int area_feature_count
         timestamptz imported_at
+        text place_name "nullable; reverse-geocoded name of the box centre, e.g. Mitte"
+        text place_context "nullable; the larger place and country, e.g. Berlin, Germany"
         timestamptz created_at
         timestamptz updated_at
     }

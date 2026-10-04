@@ -24,6 +24,7 @@ from app.api.mappers import (
     projection_out,
     segment_feature,
 )
+from app.api.place_lookup import Geocoder, name_area
 from app.domain.bounding_box import BoundingBox
 from app.domain.cross_section import cross_sections_by_segment
 from app.domain.import_area import ImportArea
@@ -92,6 +93,7 @@ def background_import_work(
     payload: dict | None,
     overpass: OverpassClient,
     session_scope: SessionScope,
+    geocoder: Geocoder | None = None,
 ) -> Callable[[ImportJob], None]:
     """The job body: fetch (when no payload was posted), then import in stages in one transaction.
 
@@ -105,8 +107,11 @@ def background_import_work(
                 source = payload if payload is not None else overpass.fetch(bbox)
                 area = ImportAreaRepository(session).get_or_create(PROVIDER, bbox)
                 result = OSMIngestionService(session).import_staged(bbox, source, StageEmitter(session, area, job), provider=PROVIDER)
+                named = name_area(ImportAreaRepository(session), result.import_area, geocoder)
+                # The import committed before the lookup; without this the name is dropped when the session closes.
+                session.commit()
                 completed = import_area_out(
-                    result.import_area, result.block_count, result.linked_building_count, result.skipped_restriction_count
+                    named, result.block_count, result.linked_building_count, result.skipped_restriction_count
                 )
                 job.emit("completed", _dump(completed))
             except Exception as exc:

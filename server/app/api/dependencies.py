@@ -26,6 +26,7 @@ from app.domain.enums import ImportStatus
 from app.domain.import_area import ImportArea
 from app.domain.traced_boundary import TracedBoundary
 from app.ingestion.jobs import ImportJobRegistry, get_registry
+from app.ingestion.geocoder import DEFAULT_GEOCODER_URL, NominatimGeocoder
 from app.ingestion.overpass import DEFAULT_OVERPASS_URL, OverpassClient
 from app.persistence.repositories.import_area import ImportAreaRepository
 from app.persistence.repositories.traced_boundary import TracedBoundaryRepository
@@ -129,3 +130,14 @@ def get_overpass_client() -> OverpassClient:
     """The live source for an import without a payload. `OVERPASS_URL` points it at another
     instance; tests override this dependency so they never reach the network."""
     return OverpassClient(url=os.environ.get("OVERPASS_URL") or DEFAULT_OVERPASS_URL)
+
+
+def get_geocoder() -> NominatimGeocoder | None:
+    """The reverse geocoder that names an import area, or None when `GEOCODER_URL=off` (or set to
+    an empty string) disables lookups. Tests override this so they never reach the network."""
+    url = os.environ.get("GEOCODER_URL")
+    if url is None:
+        url = DEFAULT_GEOCODER_URL
+    if url.strip().lower() in ("", "off"):
+        return None
+    return NominatimGeocoder(url=url)

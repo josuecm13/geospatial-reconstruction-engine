@@ -101,6 +101,9 @@ class ImportAreaOut(BaseModel):
     # unresolvable inside the import.
     skipped_restriction_count: int | None = None
     imported_at: datetime | None
+    # Where the area is, from a reverse geocoder; null when unknown or the lookup failed.
+    place_name: str | None = None
+    place_context: str | None = None
 
 
 class ExportMode(str, Enum):

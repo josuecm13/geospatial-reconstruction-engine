@@ -82,6 +82,12 @@ To import a real place instead, omit `payload`: the box is fetched live from Ove
 small while trying it out, since the public instance is shared and sometimes busy, which shows
 up as a 503 `upstream_unavailable`.
 
+After an import succeeds, the box's centre is looked up on Nominatim (`https://nominatim.openstreetmap.org`
+by default; set `GEOCODER_URL` to use another instance, or `off` to skip it) and the area's
+`place_name` and `place_context` (for example `Mitte` and `Berlin, Germany`) are stored. The lookup
+is best effort: if it fails the import still succeeds and the fields stay null. To name areas that
+were imported earlier, run `PYTHONPATH=. python scripts/backfill_place_names.py` from `server/`.
+
 ```bash
 curl -s -X POST localhost:$APP_PORT/import-areas \
   -H 'Content-Type: application/json' \
