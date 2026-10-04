@@ -123,6 +123,7 @@ is in meters, y up.
 | 503 `upstream_unavailable` | Overpass is busy or down. Wait a minute and retry, or set `OVERPASS_URL` in `server/.env` to another instance. |
 | 502 `source_incomplete` | Overpass returned a partial response (timeout or out of memory) and nothing was stored. Retry, or use a smaller box. |
 | 409 `import_in_progress` | That box is already importing. Follow its `/events`, or wait. |
+| A place shows coordinates instead of a name | The reverse-geocode lookup (Nominatim) failed or is off; the import itself is fine. Check `GEOCODER_URL` in `server/.env` (unset uses the public instance, `off` disables it), then re-import or run `PYTHONPATH=. python scripts/backfill_place_names.py` from `server/`. |
 | Port already in use | PostGIS is on 55432, the API on `APP_PORT` (58000), the client on 55173. Change `APP_PORT` in `server/.env` or `CLIENT_PORT` in `client/.env`. Don't point anything at 5432, 5433, or 8000. |
 | Header says **API unreachable** | The API isn't running, or isn't on the `APP_PORT` the client reads. Start it first and reload. |
 | The UI shows a generic error and you want the server's reason | Set `DEBUG_ERRORS = true` in `client/src/errors/errorReporter.ts` (off by default, the same in every build), and the error line then carries the server's message and any OSM references. |

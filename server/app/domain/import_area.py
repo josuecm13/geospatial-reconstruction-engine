@@ -18,3 +18,6 @@ class ImportArea:
     poi_count: int | None = None
     area_feature_count: int | None = None
     imported_at: datetime | None = None
+    # Where the area is, as a geocoder names it ("Mitte" / "Berlin, Germany"); None when unknown.
+    place_name: str | None = None
+    place_context: str | None = None

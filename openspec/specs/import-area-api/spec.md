@@ -43,12 +43,20 @@ The API SHALL accept `POST /import-areas` with a bounding box (min/max latitude 
 - **WHEN** a client posts a valid bounding box and no payload
 - **THEN** the API fetches that box from Overpass, imports it, and responds as for a posted payload
 
+#### Scenario: Import area is named after its place
+- **WHEN** an import succeeds and a reverse geocoder names the box's centre
+- **THEN** the response, and every later response for that area, carries `place_name` and `place_context` (for example `Mitte` and `Berlin, Germany`), and a re-import looks them up again
+
+#### Scenario: Place lookup fails
+- **WHEN** an import succeeds but the reverse geocoder is disabled, unreachable, or has no answer
+- **THEN** the import still succeeds, `place_name` and `place_context` are null (or keep their earlier values on a re-import), and no error is reported
+
 #### Scenario: Overpass unavailable
 - **WHEN** a client posts a bounding box without a payload and Overpass is unavailable
 - **THEN** the response is a 503 error with code `upstream_unavailable` and no import area is created
 
 ### Requirement: The API SHALL report an import area's status and counts
-The API SHALL expose `GET /import-areas/{id}` returning the import area's id, provider, bounding box, status, import timestamp, and its recorded entity counts, including its current block count. The status SHALL describe the most recent import attempt.
+The API SHALL expose `GET /import-areas/{id}` returning the import area's id, provider, bounding box, status, import timestamp, and its recorded entity counts, including its current block count, and its place name and place context when known. The status SHALL describe the most recent import attempt.
 
 #### Scenario: Existing import area
 - **WHEN** a client requests an import area that exists

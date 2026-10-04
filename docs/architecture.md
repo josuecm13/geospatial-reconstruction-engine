@@ -106,6 +106,9 @@ Implemented HTTP endpoints (Milestone 7):
 - `POST /import-areas` — validate a bounding box and import an OSM payload, or, with no payload,
   fetch the box live from Overpass (Milestone 9, `app/ingestion/overpass.py`); re-importing
   the same bounding box reconciles the area with the new payload rather than only upserting.
+  After a successful import the API layer (not the ingestion service) makes one best-effort reverse
+  geocoding call (Nominatim, `app/ingestion/geocoder.py`) at the box centre and stores the
+  `place_name` and `place_context` on the area; a failed lookup never fails the import.
 - `GET /import-areas` — every import area, most recently imported first (optional `status`, `limit`).
 - `GET /import-areas/{id}` — status and entity counts, including the derived block count.
 - `GET /import-areas/{id}/map-data` — every persisted entity for a completed area, as one GeoJSON

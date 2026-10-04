@@ -60,6 +60,8 @@ class ImportAreaModel(Base):
     poi_count = Column(SmallInteger, nullable=True)
     area_feature_count = Column(SmallInteger, nullable=True)
     imported_at = Column(DateTime(timezone=True), nullable=True)
+    place_name = Column(String, nullable=True)
+    place_context = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at = Column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()

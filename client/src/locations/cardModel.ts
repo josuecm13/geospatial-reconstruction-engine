@@ -1,7 +1,7 @@
 import type { BoundingBox, ImportArea, ImportStatus } from "../api/types";
 import { areaSquareMeters, formatSquareKilometers } from "../geo/bbox";
 
-export type SortKey = "recent" | "size";
+export type SortKey = "recent" | "size" | "name";
 
 export interface CardCount {
   key: "buildings" | "roads" | "blocks";
@@ -12,8 +12,14 @@ export interface CardCount {
 /** What one card in the gallery shows, derived from an import area; everything the view needs is a plain value here. */
 export interface LocationCard {
   id: string;
-  /** The rounded centre, as the API gives places no name. */
+  /** The place name, else the rounded centre. */
   title: string;
+  /** The place name, or null when the API has none. */
+  place: string | null;
+  /** Where the place is (district, region, country), or null. */
+  context: string | null;
+  /** The rounded centre, e.g. "52.5300° N, 13.4000° E". */
+  coordinates: string;
   /** The size of the rectangle, e.g. "0.250 km²". */
   subtitle: string;
   /** When it was imported, in words ("3 d ago", "12 Mar 2026"), or "Never completed". */
@@ -63,9 +69,14 @@ export function formatWhen(iso: string | null, now: Date): string {
 export function toCard(area: ImportArea, now: Date = new Date()): LocationCard {
   const squareMeters = areaSquareMeters(area.bbox);
   const completed = area.status === "completed";
+  const coordinates = formatCentre(area.bbox);
+  const place = area.place_name?.trim() || null;
   return {
     id: area.id,
-    title: formatCentre(area.bbox),
+    title: place ?? coordinates,
+    place,
+    context: area.place_context?.trim() || null,
+    coordinates,
     subtitle: formatSquareKilometers(squareMeters),
     when: formatWhen(area.imported_at, now),
     importedAt: area.imported_at,
@@ -88,16 +99,20 @@ export function filterCards(cards: readonly LocationCard[], text: string): Locat
   const words = text.toLowerCase().split(/\s+/).filter(Boolean);
   if (!words.length) return [...cards];
   return cards.filter((card) => {
-    const haystack = `${card.title} ${card.subtitle} ${card.when} ${card.statusLabel}`.toLowerCase();
+    const haystack = `${card.place ?? ""} ${card.context ?? ""} ${card.coordinates} ${card.subtitle} ${card.when} ${card.statusLabel}`.toLowerCase();
     return words.every((word) => haystack.includes(word));
   });
 }
 
-/** A sorted copy: "recent" puts the latest import first (areas never completed last), "size" the largest rectangle first. Ties keep a stable order by id. */
+/** A sorted copy: "recent" puts the latest import first (areas never completed last), "size" the largest rectangle first, "name" A–Z by title (cards without a place name after the named ones, by coordinates). Ties keep a stable order by id. */
 export function sortCards(cards: readonly LocationCard[], key: SortKey): LocationCard[] {
   const time = (card: LocationCard) => (card.importedAt ? Date.parse(card.importedAt) : Number.NEGATIVE_INFINITY);
   const primary = (a: LocationCard, b: LocationCard): number => {
     if (key === "size") return b.squareMeters - a.squareMeters;
+    if (key === "name") {
+      if (!a.place !== !b.place) return a.place ? -1 : 1;
+      return a.title.localeCompare(b.title, "en", { sensitivity: "base" });
+    }
     const [ta, tb] = [time(a), time(b)];
     return ta === tb ? 0 : tb > ta ? 1 : -1;
   };

@@ -84,6 +84,8 @@ def import_area_out(
         linked_building_count=linked_building_count,
         skipped_restriction_count=skipped_restriction_count,
         imported_at=area.imported_at,
+        place_name=area.place_name,
+        place_context=area.place_context,
     )
 
 

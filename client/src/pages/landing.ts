@@ -3,10 +3,13 @@ import { useErrorReporter } from "../errors/errorReporter";
 import { IMPORT_MESSAGES } from "../importing/errorMessages";
 import { CurrentArea } from "../importing/recentImports";
 import { renderArchitecture } from "../landing/architecture";
+import type { FeaturedStage } from "../landing/featuredStage";
+import { pickFeatured } from "../landing/featured";
 import { importTarget } from "../landing/importTarget";
+import { STORY_STEPS } from "../landing/storySteps";
 import { renderLocationCard } from "../locations/card";
-import { toCard } from "../locations/cardModel";
-import { PreviewLoader } from "../locations/preview";
+import { formatCentre, toCard } from "../locations/cardModel";
+import { PreviewLoader, type PreviewTarget } from "../locations/preview";
 import type { Mount } from "./types";
 
 const RECENT_LIMIT = 6;
@@ -26,6 +29,12 @@ const link = (href: string, text: string, className?: string): HTMLAnchorElement
   return a;
 };
 
+const TILES: readonly [string, string][] = [
+  ["Walk through it", "Drop to street level and move through the place, stopped by its buildings: press Walk."],
+  ["Route across it", "Pick two points and the engine finds the way along the real street graph: click two points."],
+  ["Export it as glTF", "Take the whole model into a game engine or a modelling tool: Download glTF."],
+];
+
 const FACTS: readonly [string, string][] = [
   ["What goes in", "A rectangle of up to 1 km² on the OpenStreetMap map, fetched live from Overpass."],
   [
@@ -35,78 +44,232 @@ const FACTS: readonly [string, string][] = [
   ["What it is for", "Games, simulation, and art: places you can query, fly over, walk through, and export as glTF."],
 ];
 
-/** `/`: what the engine is, how it works, and the way in to the locations and to a new import. */
+/** Runs `callback` once the browser is idle after first paint; returns a canceller. */
+const afterPaint = (callback: () => void): (() => void) => {
+  if (typeof window.requestIdleCallback === "function") {
+    const handle = window.requestIdleCallback(callback);
+    return () => window.cancelIdleCallback(handle);
+  }
+  const handle = window.setTimeout(callback, 200);
+  return () => window.clearTimeout(handle);
+};
+
+/** A 2D preview host (the gallery's: a `<canvas>` the preview loader paints into): the stage's stand-in until 3D is ready, and for good when it can't be. */
+const previewHost = (label: string): HTMLElement => {
+  const host = element("div", "location-preview landing-stage-fallback");
+  const canvas = element("canvas");
+  canvas.setAttribute("role", "img");
+  canvas.setAttribute("aria-label", label);
+  host.append(canvas, element("span", "location-preview-note", "Preview unavailable"));
+  return host;
+};
+
+const previewTarget = (area: ImportArea): PreviewTarget => ({ id: area.id, importedAt: area.imported_at, bbox: area.bbox, status: area.status });
+
+/**
+ * `/`: a journey around the most recent place (hero, how it is rebuilt, what you can do with it), then
+ * the places built so far, the way in to a new import, and the pipeline for engineers.
+ */
 export const mount: Mount<{ page: "landing" }> = (el, ctx) => {
   const { api, router } = ctx;
   let disposed = false;
   let areas: ImportArea[] = [];
+  let stage: FeaturedStage | null = null;
+  let activeStep = 0;
+  const cleanups: (() => void)[] = [];
+  const previews = new PreviewLoader(api);
 
   const page = element("div", "page landing");
+  const importButton = (text: string, primary: boolean) => {
+    const button = element("button", primary ? "landing-button primary" : "landing-button", text);
+    button.type = "button";
+    button.addEventListener("click", () => router.navigate(importTarget(areas, new CurrentArea(localStorage).id)));
+    return button;
+  };
 
-  // --- hero ---
+  // --- hero: a skeleton until the list arrives, then the featured place, or the invitation when there is none ---
   const hero = element("section", "landing-hero");
-  const heroInner = element("div", "landing-inner");
-  const importButton = element("button", "landing-button primary", "Import a new place");
-  importButton.type = "button";
-  importButton.addEventListener("click", () => router.navigate(importTarget(areas, new CurrentArea(localStorage).id)));
-  const actions = element("div", "landing-actions");
-  actions.append(importButton, link("/locations", "Browse locations", "landing-button"));
-  heroInner.append(
-    element("h2", undefined, "Geospatial Reconstruction Engine"),
-    element("p", "landing-lede", "Pick a place on the map and the engine rebuilds it as a queryable model, then shows it to you in 3D."),
-    actions,
-  );
-  hero.append(heroInner);
+  const heroSkeleton = element("div", "landing-inner landing-hero-grid");
+  heroSkeleton.setAttribute("aria-busy", "true");
+  heroSkeleton.append(element("div", "landing-skeleton landing-skeleton-text"), element("div", "landing-skeleton landing-skeleton-stage"));
+  hero.append(heroSkeleton);
 
-  // --- what it is ---
-  const facts = element("section", "landing-inner landing-facts");
+  // The place-dependent middle: the story, what you can do, and the places built so far.
+  const journey = element("div", "landing-journey");
+
+  // --- your turn ---
+  const turn = element("section", "landing-inner landing-turn");
+  const turnText = element("div");
+  turnText.append(
+    element("h3", "landing-heading", "Rebuild your own place"),
+    element(
+      "p",
+      "landing-lede",
+      "Draw a rectangle of up to 1 km² on the map. The engine fetches it live from OpenStreetMap and builds it while you watch, usually in under a minute.",
+    ),
+  );
+  turn.append(turnText, importButton("Rebuild your own place", true));
+
+  // --- under the hood ---
+  const hood = element("section", "landing-hood");
+  const hoodInner = element("div", "landing-inner");
+  const facts = element("div", "landing-facts");
   for (const [title, body] of FACTS) {
     const item = element("div", "landing-fact");
     item.append(element("h3", undefined, title), element("p", undefined, body));
     facts.append(item);
   }
-
-  // --- how it works ---
-  const how = element("section", "landing-inner");
   const diagram = element("div", "landing-arch");
-  how.append(
-    element("h3", "landing-heading", "How it works"),
-    element("p", "landing-note", "Data moves through six stages. Point at one to see what it produces."),
+  hoodInner.append(
+    element("h3", "landing-heading", "Under the hood"),
+    element("p", "landing-note", "For engineers: data moves through six stages. Point at one to see what it produces."),
+    facts,
     diagram,
   );
+  hood.append(hoodInner);
 
-  // --- locations ---
-  const recent = element("section", "landing-inner");
-  const grid = element("div", "landing-cards");
-  const status = element("p", "landing-note");
-  status.setAttribute("role", "status");
-  const heading = element("div", "landing-heading-row");
-  heading.append(element("h3", "landing-heading", "Recent locations"), link("/locations", "See all locations"));
-  recent.append(heading, status, grid);
-
-  page.append(hero, facts, how, recent);
+  page.append(hero, journey, turn, hood);
   el.replaceChildren(page);
   const disposeDiagram = renderArchitecture(diagram);
 
-  // The recent places use the gallery's cards: a footprint preview, and a fly to the area when opened.
-  const previews = new PreviewLoader(api);
-  status.textContent = "Loading locations…";
+  /** The hero when there is nothing to feature: the invitation, plus the error sentence when the list failed. */
+  const renderInvitation = (message?: string) => {
+    const inner = element("div", "landing-inner landing-hero-text");
+    inner.append(
+      element("p", "landing-eyebrow", "Rebuilt from OpenStreetMap"),
+      element("h2", undefined, "Rebuild a place from OpenStreetMap"),
+      element("p", "landing-lede", "Draw a rectangle on the map and the engine rebuilds it block by block, then shows it to you in 3D."),
+    );
+    if (message) {
+      const note = element("p", "landing-note", message);
+      note.setAttribute("role", "status");
+      note.dataset.state = "error";
+      inner.append(note);
+    }
+    const actions = element("div", "landing-actions");
+    actions.append(link("/explore", "Start on the map", "landing-button primary"));
+    inner.append(actions);
+    hero.replaceChildren(inner);
+    turn.hidden = true; // the hero is already the invitation
+  };
+
+  const renderFeatured = (area: ImportArea) => {
+    const sceneHref = `/explore/${area.id}?view=scene`;
+    const label = area.place_name ?? formatCentre(area.bbox);
+
+    // --- hero ---
+    const heroStage = element("div", "landing-stage landing-stage-hero");
+    heroStage.append(previewHost(`A map of ${label}`));
+    const text = element("div", "landing-hero-text");
+    const actions = element("div", "landing-actions");
+    actions.append(link(sceneHref, "Explore this place", "landing-button primary"), importButton("Rebuild your own", false));
+    text.append(element("p", "landing-eyebrow", "Rebuilt from OpenStreetMap"), element("h2", undefined, label));
+    if (area.place_context) text.append(element("p", "landing-context", area.place_context));
+    text.append(element("p", "landing-lede", "A city block by block: streets with lanes, buildable blocks, buildings at their height."), actions);
+    const heroInner = element("div", "landing-inner landing-hero-grid");
+    heroInner.append(text, heroStage);
+    hero.replaceChildren(heroInner);
+
+    // --- the story: a sticky stage beside four steps that scroll ---
+    const story = element("section", "landing-story");
+    const storyInner = element("div", "landing-inner landing-story-grid");
+    const storyStage = element("div", "landing-stage landing-stage-story");
+    storyStage.append(previewHost(`A map of ${label}`));
+    const stageColumn = element("div", "landing-story-stage");
+    stageColumn.append(storyStage);
+    const steps = element("ol", "landing-steps");
+    const stepItems = STORY_STEPS.map((step, index) => {
+      const item = element("li", "landing-step");
+      item.dataset.step = String(index);
+      item.append(element("p", "landing-step-number", `Step ${index + 1} of ${STORY_STEPS.length}`), element("h3", undefined, step.title), element("p", undefined, step.body));
+      steps.append(item);
+      return item;
+    });
+    storyInner.append(stageColumn, steps);
+    const storyHeading = element("div", "landing-inner");
+    storyHeading.append(element("h3", "landing-heading", "How a place is rebuilt"));
+    story.append(storyHeading, storyInner);
+
+    const setActive = (index: number) => {
+      activeStep = index;
+      stepItems.forEach((item, i) => item.classList.toggle("is-active", i === index));
+      stage?.setStep(index);
+    };
+    setActive(0);
+    if (typeof IntersectionObserver !== "undefined") {
+      // A step is active when it crosses the middle of the viewport.
+      const observer = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) if (entry.isIntersecting) setActive(Number((entry.target as HTMLElement).dataset.step));
+        },
+        { rootMargin: "-50% 0px -50% 0px" },
+      );
+      stepItems.forEach((item) => observer.observe(item));
+      cleanups.push(() => observer.disconnect());
+    }
+
+    // --- what you can do with it ---
+    const doing = element("section", "landing-inner landing-doing");
+    doing.append(element("h3", "landing-heading", "What you can do with it"));
+    const tiles = element("div", "landing-tiles");
+    for (const [title, body] of TILES) {
+      const tile = element("div", "landing-tile");
+      tile.append(element("h4", undefined, title), element("p", undefined, body), link(sceneHref, "Open the scene"));
+      tiles.append(tile);
+    }
+    doing.append(tiles);
+
+    // --- places built so far: the gallery's cards ---
+    const recent = element("section", "landing-inner");
+    const grid = element("div", "landing-cards");
+    const row = element("div", "landing-heading-row");
+    row.append(element("h3", "landing-heading", "Places built so far"), link("/locations", "See all locations"));
+    recent.append(row, grid);
+    grid.replaceChildren(...areas.map((a) => renderLocationCard(toCard(a), { previews })));
+
+    journey.replaceChildren(story, doing, recent);
+
+    // The 2D previews stand in for the stage until the 3D one is ready, and stay if it can't be built.
+    for (const slot of [heroStage, storyStage]) previews.attach(slot.querySelector<HTMLElement>(".landing-stage-fallback")!, previewTarget(area));
+    cleanups.push(
+      afterPaint(() => {
+        // Three.js stays out of the landing page's first chunk.
+        import("../landing/featuredStage")
+          .then(({ createFeaturedStage }) => createFeaturedStage({ api, areaId: area.id, slots: { hero: heroStage, story: storyStage } }))
+          .then((created) => {
+            if (disposed) return created.dispose();
+            stage = created;
+            created.setStep(activeStep);
+          })
+          .catch(() => undefined); // no WebGL, or no map data: the 2D previews stay
+      }),
+    );
+  };
+
+  const featuredId: string | null = import.meta.env?.VITE_FEATURED_AREA_ID?.trim() || null;
+
   api.listImportAreas({ status: "completed", limit: RECENT_LIMIT }).then(
-    (list) => {
+    async (list) => {
+      // The configured area may be older than the recent list, so fetch it when it isn't in there.
+      const configured = featuredId
+        ? (list.find((a) => a.id === featuredId) ?? (await api.getImportArea(featuredId).catch(() => null)))
+        : null;
       if (disposed) return;
       areas = list;
-      status.textContent = list.length ? "" : "Nothing has been imported yet.";
-      grid.replaceChildren(...list.map((area) => renderLocationCard(toCard(area), { previews })));
+      const featured = pickFeatured(list, configured);
+      if (featured) renderFeatured(featured);
+      else renderInvitation();
     },
     (error) => {
       if (disposed) return;
-      status.textContent = report(error).sentence;
-      status.dataset.state = "error";
+      renderInvitation(report(error).sentence);
     },
   );
 
   return () => {
     disposed = true;
+    cleanups.forEach((cleanup) => cleanup());
+    stage?.dispose();
     disposeDiagram();
     previews.dispose();
   };

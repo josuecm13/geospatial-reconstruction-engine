@@ -48,6 +48,10 @@ export interface ImportArea {
   block_count: number;
   linked_building_count: number | null;
   imported_at: string | null;
+  /** A real-world place name for the area ("Prenzlauer Berg"), when the API could resolve one. */
+  place_name?: string | null;
+  /** Where that place is ("Berlin, Germany"). */
+  place_context?: string | null;
 }
 
 export interface RoadSegmentProperties {

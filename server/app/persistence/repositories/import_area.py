@@ -116,6 +116,25 @@ class ImportAreaRepository:
         self.session.flush()
         return self._to_domain(model)
 
+    def set_place(self, import_area_id: uuid.UUID, name: str | None, context: str | None) -> ImportArea:
+        """Stores the area's place name. An answer with neither part keeps what is stored."""
+        model = self.session.get(ImportAreaModel, import_area_id)
+        if model is None:
+            raise ValueError(f"import area {import_area_id} not found")
+        if name is not None or context is not None:
+            model.place_name = name
+            model.place_context = context
+            self.session.flush()
+        return self._to_domain(model)
+
+    def list_without_place(self) -> list[ImportArea]:
+        query = (
+            select(ImportAreaModel)
+            .where(ImportAreaModel.place_name.is_(None))
+            .order_by(ImportAreaModel.created_at, ImportAreaModel.id)
+        )
+        return [self._to_domain(model) for model in self.session.execute(query).scalars().all()]
+
     def mark_importing(self, import_area_id: uuid.UUID) -> ImportArea:
         model = self.session.get(ImportAreaModel, import_area_id)
         if model is None:
@@ -149,4 +168,6 @@ class ImportAreaRepository:
             poi_count=model.poi_count,
             area_feature_count=model.area_feature_count,
             imported_at=model.imported_at,
+            place_name=model.place_name,
+            place_context=model.place_context,
         )
