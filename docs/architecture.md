@@ -54,6 +54,35 @@ PostgreSQL with PostGIS is the only persistence requirement. A future runtime sh
 
 Use GiST indexes on spatial columns, foreign keys for graph relationships, and unique constraints on `(provider, source_id, import_area_id)` where a source ID is only unique within an import. Lane counts are stored as structured values on each directed segment: total lanes where known, plus forward and backward counts when available. A missing lane value is defaulted, visibly: the stored value records only what the source stated (null when it is silent), and the cross-section read from it is generated — tagged lanes win, otherwise two lanes per street (1 + 1 two-way, both forward one-way), a lane type (`narrow`/`normal`/`wide`) by road classification, and a carriageway width of lane count × lane-type width — with each lane count marked `tagged` or `defaulted`. The cross-section is computed on read (`app/domain/cross_section.py`), never stored. `road_segments` are the canonical graph edges, so their explicit direction prevents routing from inferring semantics from a raw line. `turn_movements` are constrained so their incoming segment ends at the intersection node and their outgoing segment starts there.
 
+## A generated representation, from OSM hints
+
+The project builds its own representation of a map, and OSM is a source of hints rather than the
+truth to reproduce. Where the source is usually silent, the representation is **generated** and marked
+as such: lanes and street width (the cross-section above) are generated, because OSM rarely carries
+them (global taginfo coverage, September 2026: `lanes` on 70% of primary but under 6% of residential
+ways; `width` under 2% on every road class; `turn:lanes` at most 7%). What the source does state is
+stored as stated, and unknown stays unknown in storage (a building with no height tag stores null,
+never zero). Converting an observation into an estimate (levels into a height, say) is inference, and
+belongs to the content layer below.
+
+## Raw layer and content layer
+
+The raw layer is everything OSM observed, stored as ingested in the tables it lives in today. The
+content layer is everything invented about a place (generated buildings, inferred heights, asset
+identities). **The raw layer is never written to by generation**: generated content lives in its own
+tables and can be deleted and regenerated without touching an observed row. Two reasons:
+
+- `buildings.source_id` is `NOT NULL` under `UNIQUE (import_area_id, source_id)`, and ingestion upserts
+  on exactly that key. A synthetic building in that table would need a fabricated source identity, and
+  would sit in the path of re-import's convergence.
+- Keeping them apart keeps the observed place and the populated place separately queryable and
+  separately exportable, the same "both references" property traced boundaries have.
+
+Derived data that follows deterministically from the raw layer (blocks, streets, cross-sections) is not
+content: `blocks` are persisted without a source because "a block only exists because the enclosing
+road segments do", and they are re-derived on every import. Anything involving randomness or manual
+edits belongs in the content layer.
+
 ## OSM translation
 
 The adapter fetches only streets/roads, building footprints, POIs, relevant areas, and the OSM tags needed for lane and turn semantics. It maps OSM values into constrained application categories: e.g. `highway=*` becomes a `RoadClassification`, `lanes`/`lanes:forward`/`lanes:backward` become a lane profile, and turn-restriction relations become `TurnMovement` records. Building tags become a `BuildingCategory`, while amenity/shop/leisure tags become `PoiCategory` or `AreaFeatureKind`. Unknown tags are either omitted or captured as narrowly scoped source metadata, rather than leaked as application behavior.

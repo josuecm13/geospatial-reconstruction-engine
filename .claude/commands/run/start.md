@@ -57,6 +57,8 @@ Authorizations default as shown; only the user widens them (e.g. "you may file i
 
 - Read each file once per issue; use `grep -n` and `sed -n` ranges, not whole files.
 - An Explore agent only when the location of the code is genuinely unknown.
+- Delegate by `CLAUDE.md`'s model rule: `haiku` for docs and mechanical edits, `sonnet` for code and
+  tests, never `opus` to implement; at most two subagents at once.
 - Pure logic: table-driven unit tests. The new DB/API path: one integration test per issue.
 - While iterating, run only the targeted test file; the full suite runs once, in `/run:ship`.
 - Don't re-validate what step 2 validated unless the code under it changed.

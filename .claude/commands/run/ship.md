@@ -22,7 +22,7 @@ Prefix every `gh` call with `GH_TOKEN=$(gh auth token --user josuecm13)`.
 3. **Scope.** Read `git diff main...` (or the stack base). Every hunk must serve an acceptance
    criterion; anything else is reverted and logged under `Tangents`.
 4. **Docs.** Update what the change made stale: `docs/architecture.md`, `docs/schema.md` (must
-   match migrations), `MILESTONES.md` status when it's the milestone's last issue, and this
+   match migrations), the milestone's row in `MILESTONES.md` when it's the milestone's last issue (its completion note goes on the tracking issue), and this
    issue's task checkboxes in the OpenSpec change.
 5. **Commit** in Conventional Commits form with the attribution trailer. Push with `-u`.
    - When this issue ticks the OpenSpec change's **last** task, archive it in this PR, as its own

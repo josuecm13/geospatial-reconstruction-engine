@@ -12,8 +12,8 @@ Prefix every `gh` call with `GH_TOKEN=$(gh auth token --user josuecm13)`.
 
 **Input**: the tracking issue number, or the milestone title.
 
-1. **Issues.** Read the milestone's section of `MILESTONES.md` and the tracking issue's
-   sub-issues. For any deliverable without an issue, draft one with `/issues:new`. Create it only
+1. **Issues.** Read the tracking issue (why, deliverables, acceptance checks, open questions)
+   and its sub-issues. For any deliverable without an issue, draft one with `/issues:new`. Create it only
    if the run authorizes filing; otherwise put the draft under the ledger's `Tangents`.
 2. **One OpenSpec change** for the whole milestone via `openspec-propose` — not one per issue. It
    uses the project schema (`openspec/schemas/milestone-driven/`): the proposal links to the

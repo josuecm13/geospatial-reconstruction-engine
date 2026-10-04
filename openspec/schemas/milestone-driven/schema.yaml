@@ -1,7 +1,7 @@
 name: milestone-driven
 version: 1
 description: >-
-  Spec-driven workflow where GitHub holds the plan and MILESTONES.md holds the why:
+  Spec-driven workflow where GitHub holds the plan and the why (the milestone's tracking issue):
   proposal (short, linked) → specs → design → tasks (one checkbox per issue)
 artifacts:
   - id: proposal
@@ -10,13 +10,12 @@ artifacts:
     template: proposal.md
     instruction: |
       Create the proposal that establishes WHY this change exists and WHICH capabilities
-      it touches. The milestone's section in MILESTONES.md and its GitHub tracking issue
-      already state the motivation, deliverables, and plan. Link to them; do not restate them.
+      it touches. The milestone's GitHub tracking issue already states the motivation, deliverables, and plan. Link to them; do not restate them.
 
       Sections:
-      - **Why**: 2-4 sentences, only what the linked milestone section doesn't already say
-        (usually: why now, and what the change unlocks). End with links to the
-        `MILESTONES.md` section and the tracking issue (`#<n>`).
+      - **Why**: 2-4 sentences, only what the linked tracking issue doesn't already say
+        (usually: why now, and what the change unlocks). End with a link to the
+        tracking issue (`#<n>`).
       - **What Changes**: one bullet per GitHub issue the change covers, as
         `**<short name> (#<n>)**: <one sentence>`. The issue's acceptance criteria are the
         detail; don't copy them. Mark breaking changes with **BREAKING**.
@@ -193,7 +192,7 @@ artifacts:
       - No sub-steps, file lists, or test plans. Those are the issue's acceptance
         criteria and the PR's description.
       - A final checkbox for closing the milestone:
-        `- [ ] 1.<k> Close out: MILESTONES.md status, tracking issue, archive the change`
+        `- [ ] 1.<k> Close out: tracking issue and its completion note, MILESTONES.md row, archive the change`
 
       Example:
       ```
@@ -201,7 +200,7 @@ artifacts:
 
       - [ ] 1.1 #47 [persistence] Persist named traced boundaries inside an import area's bbox
       - [ ] 1.2 #48 [api] Create, list, fetch, and delete traced boundaries
-      - [ ] 1.3 Close out: MILESTONES.md status, tracking issue, archive the change
+      - [ ] 1.3 Close out: tracking issue and its completion note, MILESTONES.md row, archive the change
       ```
     requires:
       - specs
