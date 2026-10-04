@@ -17,7 +17,7 @@ export function readGalleryState(historyState: unknown): GalleryState {
   return {
     scroll: typeof saved.scroll === "number" && Number.isFinite(saved.scroll) && saved.scroll > 0 ? saved.scroll : 0,
     text: typeof saved.text === "string" ? saved.text : "",
-    sort: saved.sort === "size" ? "size" : "recent",
+    sort: saved.sort === "size" || saved.sort === "name" ? saved.sort : "recent",
   };
 }
 

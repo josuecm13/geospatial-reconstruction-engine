@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_GALLERY_STATE, readGalleryState, withGalleryState } from "./galleryState";
 
 describe("readGalleryState", () => {
+  it("keeps the name sort", () => {
+    expect(readGalleryState({ locations: { scroll: 0, text: "", sort: "name" } }).sort).toBe("name");
+  });
+
   it("is the default for an entry the gallery never wrote", () => {
     expect(readGalleryState(null)).toEqual({ scroll: 0, text: "", sort: "recent" });
     expect(readGalleryState({ other: 1 })).toEqual(DEFAULT_GALLERY_STATE);

@@ -31,7 +31,7 @@ export function renderLocationCard(card: LocationCard, ctx: CardContext): HTMLEl
   const preview = el("div", "location-preview");
   const canvas = el("canvas");
   canvas.setAttribute("role", "img");
-  canvas.setAttribute("aria-label", `Footprint of the area around ${card.title}`);
+  canvas.setAttribute("aria-label", `Footprint of ${card.title}`);
   preview.append(canvas, el("span", "location-preview-note", "Preview unavailable"));
   if (card.status !== "completed") preview.append(el("span", "location-badge", card.statusLabel));
 
@@ -53,7 +53,10 @@ export function renderLocationCard(card: LocationCard, ctx: CardContext): HTMLEl
   const meta = el("p", "location-meta");
   meta.append(el("span", undefined, card.subtitle), el("span", "location-dot", "·"), el("time", undefined, card.when));
   if (card.importedAt) meta.querySelector("time")!.dateTime = card.importedAt;
-  body.append(heading, meta);
+  if (card.place) meta.append(el("span", "location-dot", "·"), el("span", "location-coords", card.coordinates));
+  body.append(heading);
+  if (card.context) body.append(el("p", "location-context", card.context));
+  body.append(meta);
 
   if (card.counts.length) {
     const counts = el("ul", "location-counts");

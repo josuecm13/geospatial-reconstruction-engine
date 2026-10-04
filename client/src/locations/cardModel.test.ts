@@ -83,6 +83,24 @@ describe("toCard", () => {
   });
 });
 
+describe("toCard place name", () => {
+  it("titles the card by place name, keeping the context and coordinates", () => {
+    const card = toCard(area("a", { place_name: "Mitte", place_context: "Berlin, Germany" }), NOW);
+
+    expect(card).toMatchObject({ title: "Mitte", place: "Mitte", context: "Berlin, Germany", coordinates: "52.5300° N, 13.4000° E" });
+  });
+
+  it.each<[string | null | undefined, string | null | undefined]>([
+    [null, null],
+    [undefined, undefined],
+    ["  ", ""],
+  ])("falls back to the coordinates for place %j and context %j", (place_name, place_context) => {
+    const card = toCard(area("a", { place_name, place_context }), NOW);
+
+    expect(card).toMatchObject({ title: "52.5300° N, 13.4000° E", place: null, context: null });
+  });
+});
+
 describe("filterCards", () => {
   const cards = [
     toCard(area("berlin"), NOW),
@@ -99,6 +117,13 @@ describe("filterCards", () => {
   it("matches the place", () => {
     expect(filterCards(cards, "52.53").map((card) => card.id)).toEqual(["berlin"]);
     expect(filterCards(cards, "10.0025° N").map((card) => card.id)).toEqual(["far"]);
+  });
+
+  it("matches the place name and context", () => {
+    const named = [toCard(area("mitte", { place_name: "Mitte", place_context: "Berlin, Germany" }), NOW), ...cards];
+
+    expect(filterCards(named, "mitte").map((card) => card.id)).toEqual(["mitte"]);
+    expect(filterCards(named, "germany berlin").map((card) => card.id)).toEqual(["mitte"]);
   });
 
   it("matches the status, ignoring case", () => {
@@ -126,6 +151,19 @@ describe("sortCards", () => {
   it("puts the largest rectangle first", () => {
     expect(sortCards(cards, "size").map((card) => card.id)).toEqual(["new", "old", "never"]);
     expect(sortCards([cards[1], cards[0]], "size").map((card) => card.id)).toEqual(["old", "never"]);
+  });
+
+  it("sorts by name A-Z ignoring case and accents, unnamed cards last by coordinates, ties by id", () => {
+    const named = [
+      toCard(area("z", { place_name: "zürich" }), NOW),
+      toCard(area("far", { bbox: small }), NOW),
+      toCard(area("b2", { place_name: "Berlin" }), NOW),
+      toCard(area("e", { place_name: "Écully" }), NOW),
+      toCard(area("b1", { place_name: "berlin" }), NOW),
+      toCard(area("here"), NOW),
+    ];
+
+    expect(sortCards(named, "name").map((card) => card.id)).toEqual(["b1", "b2", "e", "z", "far", "here"]);
   });
 
   it("breaks ties by id and leaves the input alone", () => {

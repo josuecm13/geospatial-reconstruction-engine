@@ -44,6 +44,7 @@ export const mount: Mount<{ page: "locations" }> = (el, ctx) => {
           <select data-role="sort">
             <option value="recent">Most recent</option>
             <option value="size">Largest</option>
+            <option value="name">Name</option>
           </select>
         </label>
         <a class="locations-import" href="/explore" data-link>Import a new place</a>

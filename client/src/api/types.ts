@@ -48,6 +48,9 @@ export interface ImportArea {
   block_count: number;
   linked_building_count: number | null;
   imported_at: string | null;
+  /** The real-world place the rectangle is in; absent or null when unknown. */
+  place_name?: string | null;
+  place_context?: string | null;
 }
 
 export interface RoadSegmentProperties {
