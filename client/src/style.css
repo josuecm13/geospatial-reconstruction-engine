@@ -25,8 +25,10 @@
 h1, h2, h3 { text-wrap: balance; }
 p, .landing-lede { text-wrap: pretty; }
 html, body { margin: 0; height: 100%; }
-body { display: flex; flex-direction: column; background: var(--bg); }
+body { display: flex; flex-direction: column; background: var(--bg); timeline-scope: --page; }
 .app-header {
+  position: relative;
+  z-index: 10; /* above a scrolling page, which extends up under it */
   height: var(--header-height);
   display: flex;
   align-items: center;
@@ -49,8 +51,10 @@ body { display: flex; flex-direction: column; background: var(--bg); }
 .view-tabs a[aria-current="true"] { background: var(--surface-3); }
 .view-tabs[hidden] { display: none; }
 .app-header h1 a { color: inherit; text-decoration: none; }
-/* A page that scrolls on its own (landing, locations, not found), not the full-bleed explore views. */
-main > .page { position: absolute; inset: 0; overflow: auto; padding: 24px 32px; box-sizing: border-box; }
+/* A page that scrolls on its own (landing, locations, not found), not the full-bleed explore views. It extends up under the
+   header (which is in flow above it, so the explore views below size as before) and pads its content by the header's height,
+   so content scrolls beneath the glass. Its scroll position is the `--page` timeline that the header and the reveals read. */
+main > .page { position: absolute; inset: calc(-1 * var(--header-height)) 0 0 0; overflow: auto; padding: calc(var(--header-height) + 24px) 32px 24px; box-sizing: border-box; scroll-timeline: --page block; }
 .api-status { margin-left: auto; font-size: 13px; opacity: 0.8; }
 .api-status[data-state="ok"]::before { content: "● "; color: var(--ok); }
 .api-status[data-state="down"]::before { content: "● "; color: var(--danger); }
@@ -170,7 +174,7 @@ body:has(#map-view[hidden]) .panel { display: none; }
 }
 
 /* The landing page (`/`). Everything is under `.landing`. */
-main > .page.landing { padding: 0; background: var(--bg); }
+main > .page.landing { padding: var(--header-height) 0 0; background: var(--bg); }
 .landing .landing-inner { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
 .landing .landing-hero { background: var(--scene-background); color: var(--text); padding: 56px 0 48px; }
 .landing .landing-hero h2 { margin: 0 0 12px; font-size: clamp(1.75rem, 1.3rem + 2vw, 2.5rem); font-weight: 650; line-height: 1.15; letter-spacing: -0.025em; }
@@ -228,7 +232,7 @@ main > .page.landing { padding: 0; background: var(--bg); }
 .landing .landing-skeleton-text { height: 260px; background: color-mix(in oklch, var(--text) 8%, transparent); }
 .landing .landing-skeleton-stage { height: min(70vh, 560px); }
 .landing .landing-story-grid { display: grid; grid-template-columns: minmax(0, 6fr) minmax(0, 5fr); gap: 40px; align-items: start; }
-.landing .landing-story-stage { position: sticky; top: 72px; padding: 16px 0; }
+.landing .landing-story-stage { position: sticky; top: calc(var(--header-height) + 72px); padding: 16px 0; }
 .landing .landing-stage-story { height: min(70vh, 560px); }
 .landing .landing-steps { margin: 0; padding: 0; list-style: none; }
 .landing .landing-step { min-height: 70vh; display: flex; flex-direction: column; justify-content: center; opacity: 0.45; transition: opacity 0.3s ease; }
@@ -251,7 +255,7 @@ main > .page.landing { padding: 0; background: var(--bg); }
   .landing .landing-hero-grid, .landing .landing-story-grid, .landing .landing-tiles { grid-template-columns: 1fr; }
   .landing .landing-stage-hero { height: 45vh; }
   /* The stage stays pinned at the top while the steps scroll under it. */
-  .landing .landing-story-stage { top: 56px; z-index: 1; padding: 8px 0; background: var(--bg); }
+  .landing .landing-story-stage { top: calc(var(--header-height) + 56px); z-index: 1; padding: 8px 0; background: var(--bg); }
   .landing .landing-stage-story { height: 45vh; }
   .landing .landing-step { min-height: 55vh; }
 }
@@ -348,4 +352,33 @@ main > .page.landing { padding: 0; background: var(--bg); }
   .location-card, .location-preview canvas { transition: none; }
   .location-card:has(a:hover) { transform: none; }
   .location-preview[data-state="idle"]::after, .location-preview[data-state="loading"]::after, .location-skeleton .location-preview { animation: none; }
+}
+
+/* --- Scroll-driven motion (CSS only): the header glass, the landing progress bar and the reveals. --- */
+@media (prefers-reduced-motion: no-preference) {
+  /* Over the first 120px of the page's scroll the header goes from transparent to frosted glass. Pages that do not scroll
+     (explore) have no `--page` timeline, so there the header keeps its solid base style. */
+  @keyframes header-glass {
+    from { background-color: transparent; border-bottom-color: transparent; backdrop-filter: blur(0px) saturate(1); }
+    to { background-color: color-mix(in oklch, var(--surface-1) 70%, transparent); border-bottom-color: var(--border); backdrop-filter: blur(14px) saturate(1.4); }
+  }
+  .app-header { animation: header-glass linear both; animation-timeline: --page; animation-range: 0 120px; }
+
+  @keyframes page-progress { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+  body[data-page="landing"] .app-header::after {
+    content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--accent);
+    transform-origin: left; animation: page-progress linear both; animation-timeline: --page;
+  }
+
+  /* Fade and rise as they enter the page's viewport; the end state is whatever the element's own style is. */
+  @keyframes reveal-rise { from { opacity: 0; translate: 0 24px; } }
+  @keyframes reveal-fade { from { opacity: 0; } }
+  .landing .landing-heading, .landing .landing-tile, .landing .landing-fact, .landing .arch-figure, .landing .arch-card, .landing .landing-cards > *,
+  .locations-grid > li {
+    --stagger: min(calc((sibling-index() - 1) * 6%), 30%);
+    animation: reveal-rise linear both; animation-timeline: view();
+    animation-range-start: entry var(--stagger); animation-range-end: entry calc(60% + var(--stagger));
+  }
+  /* The step's own opacity (dimmed until active) is its end state, so this only fades it in. */
+  .landing .landing-step { animation: reveal-fade linear both; animation-timeline: view(); animation-range: entry 0% entry 60%; }
 }
