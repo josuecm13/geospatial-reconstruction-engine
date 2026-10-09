@@ -278,8 +278,6 @@ main > .page.landing { padding: var(--header-height) 0 0; background: var(--bg);
 .landing .landing-step h3 { margin: 0 0 12px; font-size: clamp(1.875rem, 1.3rem + 2vw, 2.75rem); font-weight: 650; line-height: 1.1; letter-spacing: -0.025em; }
 .landing .landing-step p { margin: 0; font-size: clamp(1.0625rem, 1rem + 0.5vw, 1.25rem); line-height: 1.5; }
 .landing .landing-step .landing-step-number { margin-bottom: 8px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--link); }
-.landing .landing-turn { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 24px; padding-top: 8px; padding-bottom: 56px; }
-.landing .landing-turn .landing-lede { margin-bottom: 0; }
 .landing .landing-hood { background: var(--surface-1); padding-bottom: 48px; }
 .landing .landing-hood .landing-facts { padding-top: 16px; padding-bottom: 24px; }
 @media (max-width: 899px) {
@@ -393,6 +391,61 @@ main > .page.landing { padding: var(--header-height) 0 0; background: var(--bg);
   .landing .bento-export { animation: pull-apart linear both; animation-timeline: view(); animation-range: entry 20% cover 45%; transition: --lift-hover 0.5s cubic-bezier(0.2, 0.8, 0.2, 1); }
 }
 .landing .bento-export:hover, .landing .bento-export:focus-within { --lift-hover: 1; }
+
+/* --- "Rebuild your own place": a full-bleed band over a faint street grid (landing/selectionDemo.ts) --- */
+@property --n { syntax: "<integer>"; inherits: true; initial-value: 98; }
+.landing .landing-cta { overflow: hidden; }
+.landing .landing-cta-grid {
+  position: absolute; inset: 0; pointer-events: none;
+  background:
+    repeating-linear-gradient(90deg, color-mix(in oklab, var(--border) 70%, transparent) 0 1px, transparent 1px 192px),
+    repeating-linear-gradient(0deg, color-mix(in oklab, var(--border) 70%, transparent) 0 1px, transparent 1px 192px),
+    repeating-linear-gradient(90deg, color-mix(in oklab, var(--border) 35%, transparent) 0 1px, transparent 1px 48px),
+    repeating-linear-gradient(0deg, color-mix(in oklab, var(--border) 35%, transparent) 0 1px, transparent 1px 48px);
+  mask-image: radial-gradient(ellipse 75% 85% at 68% 50%, var(--bg) 15%, transparent 72%);
+}
+.landing .landing-cta-inner { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: clamp(32px, 5vw, 80px); align-items: center; }
+.landing .landing-cta .landing-section-head { margin-bottom: 36px; }
+.landing .landing-cta .landing-heading { font-size: clamp(2.25rem, 1.2rem + 3vw, 3.75rem); }
+.landing .landing-cta-demo { display: flex; flex-direction: column; gap: 20px; }
+.landing .cta-frame { position: relative; }
+.landing .cta-svg { display: block; width: 100%; height: auto; overflow: visible; }
+.landing .cta-fill { fill: color-mix(in oklab, var(--link) 7%, transparent); }
+.landing .cta-rect { fill: none; stroke: var(--link); stroke-width: 1.5px; stroke-dasharray: 7 5; }
+.landing .cta-mask-line { fill: none; stroke: var(--text); stroke-width: 6px; stroke-dasharray: 1 2; }
+.landing .cta-block { fill: color-mix(in oklab, var(--accent) 14%, transparent); stroke: color-mix(in oklab, var(--accent) 45%, transparent); stroke-width: 1px; }
+.landing .cta-handle { fill: var(--bg); stroke: var(--link); stroke-width: 1.5px; }
+.landing .cta-area { position: absolute; right: 10%; bottom: 1%; padding: 6px 10px; border-radius: 6px; background: var(--link); color: var(--bg); font: 500 0.8125rem/1 var(--font-mono); }
+.landing .cta-area::after { counter-reset: n var(--n); content: "0." counter(n, decimal-leading-zero) " km²"; }
+.landing .cta-stages { display: flex; flex-wrap: wrap; gap: 6px 0; margin: 0; padding: 0; list-style: none; font: 500 0.75rem/1.4 var(--font-mono); color: var(--text-muted); }
+.landing .cta-stage::before { content: "✓ "; color: var(--ok); }
+.landing .cta-stage:not(:last-child)::after { content: "→"; margin: 0 8px; color: var(--border); }
+@media (max-width: 899px) {
+  .landing .landing-cta-inner { grid-template-columns: 1fr; }
+  .landing .landing-cta-grid { mask-image: radial-gradient(ellipse 90% 60% at 50% 70%, var(--bg) 15%, transparent 75%); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  /* The rectangle draws itself with the scroll, then its handles and its area arrive. */
+  @keyframes cta-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+  @keyframes cta-pop { from { opacity: 0; scale: 0.2; } }
+  @keyframes cta-fade { from { opacity: 0; } }
+  @keyframes cta-count { from { --n: 0; } }
+  .landing .cta-mask-line { animation: cta-draw linear both; animation-timeline: view(); animation-range: entry 15% cover 40%; }
+  .landing .cta-fill { animation: cta-fade linear both; animation-timeline: view(); animation-range: cover 30% cover 50%; }
+  .landing .cta-block { animation: cta-fade linear both; animation-timeline: view(); animation-range: cover calc(34% + var(--k) * 2.5%) cover calc(40% + var(--k) * 2.5%); }
+  .landing .cta-handle { transform-box: fill-box; transform-origin: center; animation: cta-pop linear both; animation-timeline: view(); animation-range: cover 35% cover 48%; }
+  .landing .cta-area { animation: cta-count linear both, cta-fade linear both; animation-timeline: view(), view(); animation-range: cover 30% cover 55%, cover 30% cover 38%; }
+  /* The stages tick through: running, then done, each a beat after the one before; the cycle wraps. */
+  @keyframes stage-tick {
+    0%, 4% { color: var(--text-muted); }
+    8% { color: var(--accent); }
+    16%, 82% { color: var(--text); }
+    92%, 100% { color: var(--text-muted); }
+  }
+  @keyframes stage-check { 0%, 8% { opacity: 0; } 16%, 82% { opacity: 1; } 92%, 100% { opacity: 0; } }
+  .landing .cta-stage { animation: stage-tick 11s linear infinite; animation-delay: calc(var(--k) * 0.9s); }
+  .landing .cta-stage::before { animation: stage-check 11s linear infinite; animation-delay: calc(var(--k) * 0.9s); }
+}
 
 /* --- Locations gallery: the card (shared with the landing page) and the page's own layout under .locations --- */
 .visually-hidden {

@@ -4,6 +4,7 @@ import { IMPORT_MESSAGES } from "../importing/errorMessages";
 import { CurrentArea } from "../importing/recentImports";
 import { renderArchitecture } from "../landing/architecture";
 import { renderBento } from "../landing/bento";
+import { selectionDemo } from "../landing/selectionDemo";
 import type { FeaturedStage } from "../landing/featuredStage";
 import { pickFeatured } from "../landing/featured";
 import { importTarget } from "../landing/importTarget";
@@ -120,18 +121,15 @@ export const mount: Mount<{ page: "landing" }> = (el, ctx) => {
   // The place-dependent middle: the story, what you can do, and the places built so far.
   const journey = element("div", "landing-journey");
 
-  // --- your turn ---
-  const turn = element("section", "landing-inner landing-turn");
-  const turnText = element("div");
-  turnText.append(
-    element("h3", "landing-heading", "Rebuild your own place"),
-    element(
-      "p",
-      "landing-lede",
-      "Draw a rectangle of up to 1 km² on the map. The engine fetches it live from OpenStreetMap and builds it while you watch, usually in under a minute.",
-    ),
-  );
-  turn.append(turnText, importButton("Rebuild your own place", true));
+  // --- your turn: a full-bleed band, a street grid with a selection rectangle drawing itself ---
+  const turn = element("section", "landing-section landing-cta");
+  turn.append(element("div", "landing-cta-grid"));
+  const turnInner = element("div", "landing-inner landing-cta-inner");
+  const turnCopy = element("div", "landing-cta-copy");
+  const turnHead = sectionHead("Your turn", "Your street, rebuilt in under a minute.", "Draw a rectangle of up to 1 km² and watch it build, live from OpenStreetMap.");
+  turnCopy.append(turnHead, importButton("Rebuild your own place", true));
+  turnInner.append(turnCopy, selectionDemo());
+  turn.append(turnInner);
 
   // --- under the hood ---
   const hood = element("section", "landing-hood");
