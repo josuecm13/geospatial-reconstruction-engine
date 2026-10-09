@@ -14,6 +14,23 @@ flat, unindented and `background: var(--scene-background)`, and the hero stage m
 `@media (prefers-reduced-motion: no-preference)`. The existing `prefersReducedMotion()` lives in
 `client/src/locations/flyTo.ts`.
 
+## 0. Readability follow-ups from the theme pass (own commit, first)
+
+- **Thumbnails** (`client/src/locations/previewColors.ts`). `edge` (the dashed area outline),
+  `hatch` and `buildingEdge` are tints darker than the ground, which made sense on light clay but
+  are invisible on the near-black ground. Make them lighter than the ground: derive them from
+  `COLORS.edge` (or a mix toward it), at an alpha that is visible but quiet (≥ 2:1 against the
+  ground for the outline). Update `previewColors.test.ts`.
+- **2D map** (`client/src/views/mapColors.ts`, on the OpenFreeMap dark basemap with a near-black
+  background and `#181818` minor roads):
+  - the engine's road tiers derived 1:1 from the 3D palette are only ~1.5–2:1 there;
+  - water and green at 0.7 opacity of dark colours are faint.
+
+  Keep the 2D colours derived from `COLORS`, but lift them for the basemap with one documented rule
+  (e.g. `color-mix` toward `COLORS.edge` by a fixed amount, or a fixed lightness in oklch). Aim for
+  road tiers ≥ 3:1 against `#0c0c0c` and still in order, and water and green clearly visible.
+  Report the ratios.
+
 ## 1. Typography
 
 - `npm install @fontsource-variable/inter`, and import it once from `client/src/main.ts`.
