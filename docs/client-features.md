@@ -158,6 +158,13 @@ Ideas, not commitments. Once one is chosen, it becomes an issue in the milestone
   it into vertex colours, and the materials in `scene/palette.ts` (the only source of scene colours)
   are unlit, so the glTF export (`KHR_materials_unlit`, `COLOR_0`) looks the same as the viewer.
 - **Dark theme** (#133): the interface, the 3D scene (night clay, pale edge lines on buildings that the glTF export leaves out) and the 2D map (OpenFreeMap's dark basemap) are dark; `style.css` takes every colour from its `:root` tokens (a test enforces it and 4.5:1 text contrast), and `views/mapColors.ts` holds the 2D overlay colours.
+- **Look and motion** (#133): Inter for type, frosted-glass overlays and a header that frosts as the page scrolls.
+  Landing and locations reveal their sections and cards as they scroll into view (CSS scroll-driven
+  animations, no script), the primary button has a spinning accent ring, and cards follow the cursor with a
+  soft spotlight (`ui/spotlight.ts`). Page changes run inside a View Transition (`pages/host.ts`): the page
+  slides slightly forward or back by how the router got there, and a card's preview or the hero stage morphs
+  into the explore view. Every animation and transition sits under `prefers-reduced-motion: no-preference`, so
+  a user who asks for less motion gets none: pages swap directly and the effects do not run.
 - **Fly and walk** (#66, shipped): the scene opens in fly mode (orbit, pan, zoom). A "Walk" button
   in its corner, or the `V` key, drops the camera to eye height (1.7 m) on the road nearest the
   centre, facing north; click the canvas to look around, WASD or the arrows to move (Shift runs),

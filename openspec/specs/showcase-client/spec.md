@@ -244,3 +244,10 @@ The client SHALL show every import area on `/locations` as a card: a preview of 
 #### Scenario: A text colour that stops being legible
 - **WHEN** a text token is changed so that it falls below 4.5:1 on a surface it is drawn on
 - **THEN** the token test fails, naming the pair
+
+### Requirement: The client SHALL switch its motion off when the user prefers reduced motion
+Every animation and transition in `style.css` (scroll-driven reveals, the header glass and progress bar, the animated button ring, overlay entry transitions, view-transition animations) SHALL be declared inside `@media (prefers-reduced-motion: no-preference)`, and the page host SHALL swap pages directly, without a view transition, when the user prefers reduced motion. The end state of every effect (content visible, header solid) SHALL not depend on a motion running.
+
+#### Scenario: Reduced motion
+- **WHEN** a user who prefers reduced motion scrolls the landing page and navigates from the locations page to a place
+- **THEN** sections are visible without fading in, the header is solid, the page changes with no view transition, and no animation runs
