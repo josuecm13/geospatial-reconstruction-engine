@@ -4,11 +4,11 @@ import { prefersReducedMotion } from "../locations/flyTo";
 import { Animator } from "../scene/buildAnimation";
 import { buildWorld } from "../scene/buildWorld";
 import { overview } from "../scene/framing";
+import { SCENE_BACKGROUND } from "../scene/palette";
 import { changeBetween, FINAL_STEP, layersFor, pickSlot, STORY_LAYERS, type StoryLayer } from "./storySteps";
 
 /** The turntable's speed, radians per second. */
 const TURN_SPEED = 0.05;
-const BACKGROUND = "#1b252d";
 
 export type StageSlot = "hero" | "story";
 
@@ -55,11 +55,7 @@ export async function createFeaturedStage({ api, areaId, slots, onReady }: Featu
     renderer.domElement.className = "landing-stage-canvas";
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(BACKGROUND);
-    scene.add(new THREE.HemisphereLight("#ffffff", "#7a8b6f", 1.4));
-    const sun = new THREE.DirectionalLight("#fff4e0", 1.6);
-    sun.position.set(300, 500, 200);
-    scene.add(sun);
+    scene.background = new THREE.Color(SCENE_BACKGROUND);
 
     world = buildWorld(data);
     scene.add(world);

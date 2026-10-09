@@ -3,6 +3,7 @@ import type { BoundingBox, FeatureCollection, MapData, Projection } from "../api
 import { metersPerDegree } from "../geo/localMeters";
 import { Animator } from "./buildAnimation";
 import { buildWorld, groundPlane, WORLD_GROUPS } from "./buildWorld";
+import { MATERIALS } from "./palette";
 import { toLocal } from "./projection";
 import type { RevealStep } from "./stagedBuild";
 
@@ -104,7 +105,7 @@ export function createStagedScene(scene: THREE.Scene, container: HTMLElement): S
       // The waiting animation: a slowly turning wireframe of the rectangle, until `fetched`.
       const { width, height } = bboxMeters(bbox);
       waiting = new THREE.Group();
-      const grid = new THREE.Mesh(new THREE.PlaneGeometry(width, height, 12, 12), new THREE.MeshBasicMaterial({ color: "#6f5a8c", wireframe: true }));
+      const grid = new THREE.Mesh(new THREE.PlaneGeometry(width, height, 12, 12), MATERIALS.waiting);
       grid.rotation.x = -Math.PI / 2;
       waiting.add(grid);
       scene.add(waiting);

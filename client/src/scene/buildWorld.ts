@@ -5,6 +5,7 @@ import { extrudeFootprints, flatGeometry, footprintShape, polygonShape } from ".
 import { MATERIALS, roadMaterial } from "./palette";
 import { toLocal, type Local } from "./projection";
 import { dedupeTwins, roadPolygon } from "./roadGeometry";
+import { shadeGeometry } from "./shading";
 
 /** The layer groups of a world, in order. `generated` is reserved for Milestone 11. */
 export const WORLD_GROUPS = ["ground", "area_features", "roads", "blocks", "buildings", "generated"] as const;
@@ -18,8 +19,8 @@ export const LAYER_ORDER = { ground: -50, green: -40, water: -39, roadNarrow: -3
 
 /** The ground plane over the given local extent. Shared by buildWorld and the staged build. */
 export function groundPlane(minX: number, maxX: number, minZ: number, maxZ: number): THREE.Mesh {
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(maxX - minX, maxZ - minZ), MATERIALS.ground);
-  ground.rotation.x = -Math.PI / 2;
+  // The rotation is baked into the geometry: the shade can't see a mesh rotation (shading.ts).
+  const ground = new THREE.Mesh(shadeGeometry(new THREE.PlaneGeometry(maxX - minX, maxZ - minZ).rotateX(-Math.PI / 2)), MATERIALS.ground);
   ground.position.set((minX + maxX) / 2, 0, (minZ + maxZ) / 2);
   ground.name = "ground:plane";
   ground.renderOrder = LAYER_ORDER.ground;

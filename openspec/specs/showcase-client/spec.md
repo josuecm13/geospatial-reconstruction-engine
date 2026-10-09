@@ -79,6 +79,21 @@ The scene view SHALL show the open area, or its selected boundary, as a low-poly
 - **WHEN** the selection changes to another boundary while a previous request is still loading
 - **THEN** only the response for the latest selection is drawn
 
+### Requirement: The client SHALL shade the scene by a fixed rule and draw it unlit
+The scene SHALL have no real-time lights. Each face SHALL be shaded as `shade(n) = AMBIENT + (1 - AMBIENT) * max(0, n . LIGHT_DIRECTION)`, with `n` the face's unit normal in world orientation, `LIGHT_DIRECTION` one fixed unit vector pointing toward the light, and `AMBIENT` one fixed constant (0.55). The shade SHALL be baked into a grey per-vertex `color` attribute on every vertex of the face, and every face material SHALL be unlit and multiply that shade into its color, so a face pointing at the light shows exactly its palette color. Every color of the scene (faces, background, grid, route, markers, the waiting wireframe) SHALL come from `scene/palette.ts` and nowhere else. The glTF export SHALL carry the same colors and shade: unlit materials (`KHR_materials_unlit`) and `COLOR_0` on every mesh primitive.
+
+#### Scenario: Two walls facing the same way
+- **WHEN** two buildings have walls with the same orientation, at different places in the scene
+- **THEN** those walls have the same shade
+
+#### Scenario: A wall facing away from the light
+- **WHEN** a face's normal points directly away from the light
+- **THEN** its color is its palette color multiplied by `AMBIENT`
+
+#### Scenario: The exported file
+- **WHEN** a user downloads the glTF of an open area and opens it in another viewer
+- **THEN** the faces show the same colors and shading as the scene view, with no lighting of the viewer's own
+
 ### Requirement: The client SHALL let a user fly over and walk through the scene
 The scene view SHALL offer two camera modes with one toggle (a corner button and the `V` key): fly, with orbit, pan, and zoom; and walk, a first-person view at 1.7 m above the ground, moving with WASD or the arrow keys at 1.4 m/s (4 m/s with Shift). Entering walk SHALL place the camera on the road nearest the centre facing north, and returning to fly SHALL restore the previous orbit view. While walking, the camera SHALL NOT pass through a building footprint; a blocked move SHALL slide along the wall where it can.
 

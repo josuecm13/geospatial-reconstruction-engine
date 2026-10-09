@@ -153,6 +153,10 @@ Ideas, not commitments. Once one is chosen, it becomes an issue in the milestone
 ### 3D and export
 - **3D mode**: extruded footprints (M8.1 heights, with a clear placeholder when height is
   unknown), roads at real width, and blocks as terrain.
+- **Shading** (#129): the scene has no lights. `scene/shading.ts` computes each face's shade from its
+  normal and a fixed light direction (`AMBIENT + (1 - AMBIENT) * max(0, n . LIGHT_DIRECTION)`), bakes
+  it into vertex colours, and the materials in `scene/palette.ts` (the only source of scene colours)
+  are unlit, so the glTF export (`KHR_materials_unlit`, `COLOR_0`) looks the same as the viewer.
 - **Fly and walk** (#66, shipped): the scene opens in fly mode (orbit, pan, zoom). A "Walk" button
   in its corner, or the `V` key, drops the camera to eye height (1.7 m) on the road nearest the
   centre, facing north; click the canvas to look around, WASD or the arrows to move (Shift runs),

@@ -98,7 +98,20 @@ describe("buildWorld", () => {
     expect(MATERIALS.buildingMeasured.depthWrite).toBe(true);
     expect(MATERIALS.buildingDefaulted.depthWrite).toBe(true);
     expect(MATERIALS.buildable.transparent).toBe(true);
-    expect(MATERIALS.buildable.opacity).toBe(0.45);
+    expect(MATERIALS.buildable.opacity).toBe(0.35);
+  });
+
+  it("draws every face unlit, with its shade baked into the vertex colors and no mesh rotation", () => {
+    const meshes: THREE.Mesh[] = [];
+    world.traverse((object) => (object as THREE.Mesh).isMesh && meshes.push(object as THREE.Mesh));
+    expect(meshes.length).toBeGreaterThan(0);
+    for (const mesh of meshes) {
+      const material = mesh.material as THREE.MeshBasicMaterial;
+      expect(material.isMeshBasicMaterial, mesh.name).toBe(true);
+      expect(material.vertexColors, mesh.name).toBe(true);
+      expect(mesh.geometry.getAttribute("color").count, mesh.name).toBe(mesh.geometry.getAttribute("position").count);
+      expect(mesh.rotation.toArray().slice(0, 3), mesh.name).toEqual([0, 0, 0]);
+    }
   });
 
   it("builds the ground plane in the first render slot", () => {

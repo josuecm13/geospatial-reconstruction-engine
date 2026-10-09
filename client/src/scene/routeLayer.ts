@@ -2,7 +2,9 @@ import * as THREE from "three";
 import type { Geometry, Position, Projection } from "../api/types";
 import { flatGeometry, footprintShape } from "./extrude";
 import { toLocal, toLonLat } from "./projection";
+import { MATERIALS } from "./palette";
 import { roadPolygon } from "./roadGeometry";
+import { shadeGeometry } from "./shading";
 
 /** Just above the road surfaces (LAYER_Y.roads = 0.05), so the ribbon doesn't z-fight them. */
 export const ROUTE_Y = 0.08;
@@ -11,10 +13,6 @@ const MARKER_HEIGHT = 8;
 
 /** Groups a click can land on: the ground, the area features, and the roads. Never buildings. */
 const PICKABLE_GROUPS = ["ground", "area_features", "roads"];
-
-const ROUTE_MATERIAL = new THREE.MeshBasicMaterial({ color: "#ff2d95", side: THREE.DoubleSide });
-const ORIGIN_MATERIAL = new THREE.MeshLambertMaterial({ color: "#1fa855" });
-const DESTINATION_MATERIAL = new THREE.MeshLambertMaterial({ color: "#d62828" });
 
 export interface RouteLayer {
   /** The scene object holding the markers and the ribbon. It is not part of the world, so it is not
@@ -66,13 +64,13 @@ export function createRouteLayer(camera: THREE.Camera, canvas: HTMLElement): Rou
       markers = [];
       if (!projection) return;
       for (const [point, material] of [
-        [origin, ORIGIN_MATERIAL],
-        [destination, DESTINATION_MATERIAL],
+        [origin, MATERIALS.origin],
+        [destination, MATERIALS.destination],
       ] as const) {
         if (!point) continue;
         const { x, z } = toLocal(projection, point);
-        const cone = new THREE.Mesh(new THREE.ConeGeometry(2.5, MARKER_HEIGHT, 12), material);
-        cone.rotation.x = Math.PI; // tip down, so the point of the cone is the picked spot
+        // Tip down, so the point of the cone is the picked spot; baked in, as the shade can't see a mesh rotation.
+        const cone = new THREE.Mesh(shadeGeometry(new THREE.ConeGeometry(2.5, MARKER_HEIGHT, 12).rotateX(Math.PI)), material);
         cone.position.set(x, MARKER_HEIGHT / 2, z);
         markers.push(cone);
         root.add(cone);
@@ -87,7 +85,7 @@ export function createRouteLayer(camera: THREE.Camera, canvas: HTMLElement): Rou
         ROUTE_WIDTH,
       );
       if (!outline.length) return;
-      ribbon = new THREE.Mesh(flatGeometry([footprintShape(outline)]), ROUTE_MATERIAL);
+      ribbon = new THREE.Mesh(flatGeometry([footprintShape(outline)]), MATERIALS.route);
       ribbon.position.y = ROUTE_Y;
       ribbon.name = "route:ribbon";
       root.add(ribbon);

@@ -3,6 +3,8 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { BoundingBox, MapData } from "../api/types";
 import { prefersReducedMotion } from "../locations/flyTo";
 import { buildWorld, LAYER_ORDER } from "../scene/buildWorld";
+import { COLORS, MATERIALS, SCENE_BACKGROUND } from "../scene/palette";
+import { shadeGeometry } from "../scene/shading";
 import { createAutoRotate, ROTATE_SPEED } from "../scene/autoRotate";
 import { createCameraModes } from "../scene/cameraModes";
 import { createFramingPolicy, overview, rectangleOverview } from "../scene/framing";
@@ -25,7 +27,7 @@ export interface SceneView extends SceneTarget {
 
 const EMPTY_HINT = "Open an import on the Map tab";
 
-/** The low-poly world of the open area: sky, light, and (once `setWorld` is called) the imported
+/** The low-poly world of the open area: background and (once `setWorld` is called) the imported
  * city. Before that, a placeholder ground and grid, and a hint. */
 export function createSceneView(container: HTMLElement, routing?: RoutingDeps): SceneView {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -33,18 +35,13 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps): 
   container.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color("#cfe3f2");
-  scene.add(new THREE.HemisphereLight("#ffffff", "#7a8b6f", 1.4));
-  const sun = new THREE.DirectionalLight("#fff4e0", 1.6);
-  sun.position.set(300, 500, 200);
-  scene.add(sun);
+  scene.background = new THREE.Color(SCENE_BACKGROUND);
 
   // The placeholder world, removed once a real one is loaded.
   const placeholder = new THREE.Group();
-  const placeholderGround = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), new THREE.MeshLambertMaterial({ color: "#d9d4c7", depthWrite: false }));
-  placeholderGround.rotation.x = -Math.PI / 2;
+  const placeholderGround = new THREE.Mesh(shadeGeometry(new THREE.PlaneGeometry(1000, 1000).rotateX(-Math.PI / 2)), MATERIALS.ground);
   placeholderGround.renderOrder = LAYER_ORDER.ground;
-  placeholder.add(placeholderGround, new THREE.GridHelper(1000, 20, "#b8b2a4", "#c8c2b4"));
+  placeholder.add(placeholderGround, new THREE.GridHelper(1000, 20, COLORS.gridCenter, COLORS.gridLine));
   scene.add(placeholder);
 
   const overlay = Object.assign(document.createElement("div"), { className: "scene-empty", textContent: EMPTY_HINT });

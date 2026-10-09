@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { describe, expect, it } from "vitest";
 import { Animator, easeOutCubic, progress, riseDuration, staggerDelay } from "./buildAnimation";
 
-const box = () => new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshLambertMaterial({ opacity: 0.5 }));
+const box = () => new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ opacity: 0.5, vertexColors: true }));
 
 describe("animation timing", () => {
   it("eases out and clamps", () => {
@@ -50,6 +50,7 @@ describe("Animator", () => {
     const clone = mesh.material as THREE.Material;
     expect(clone).not.toBe(original);
     expect(clone.opacity).toBe(0);
+    expect(clone.vertexColors).toBe(true); // the baked shade survives the clone
     animator.update(0.3); // halfway through 0.6 s: eased 0.875, of the material's own 0.5
     expect(clone.opacity).toBeCloseTo(0.4375);
     expect(original.opacity).toBe(0.5);
