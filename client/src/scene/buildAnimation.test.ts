@@ -59,6 +59,23 @@ describe("Animator", () => {
     expect(mesh.material).toBe(original);
   });
 
+  it("fades a building's edge lines too, on a clone of their shared material", async () => {
+    const animator = new Animator();
+    const shared = new THREE.LineBasicMaterial({ transparent: true, opacity: 0.35 });
+    const mesh = box();
+    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry), shared);
+    mesh.add(edges);
+    const done = animator.fadeIn([mesh]);
+    expect(edges.material).not.toBe(shared);
+    expect((edges.material as THREE.Material).opacity).toBe(0);
+    animator.update(0.3);
+    expect((edges.material as THREE.Material).opacity).toBeCloseTo(0.35 * 0.875);
+    expect(shared.opacity).toBe(0.35);
+    animator.update(0.4);
+    await done;
+    expect(edges.material).toBe(shared);
+  });
+
   it("skip finishes what is pending and makes later steps instant", async () => {
     const animator = new Animator();
     const first = box();

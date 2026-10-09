@@ -51,15 +51,16 @@ export class Animator {
     for (const tween of [...this.tweens]) this.complete(tween);
   }
 
-  /** Fades every mesh under `objects` from transparent to its own opacity, on cloned materials, so the shared ones stay untouched. */
+  /** Fades every mesh and line under `objects` (building edges included) from transparent to its own opacity, on cloned materials, so the shared ones stay untouched. */
   fadeIn(objects: THREE.Object3D[]): Promise<void> {
     if (this.instant) return Promise.resolve();
     const clones = new Map<THREE.Material, THREE.Material>();
-    const meshes: { mesh: THREE.Mesh; original: THREE.Material }[] = [];
+    const meshes: { mesh: THREE.Mesh | THREE.LineSegments; original: THREE.Material }[] = [];
     for (const object of objects) {
       object.traverse((node) => {
-        const mesh = node as THREE.Mesh;
-        if (!mesh.isMesh || Array.isArray(mesh.material)) return;
+        const mesh = node as THREE.Mesh | THREE.LineSegments;
+        if (!(mesh as THREE.Mesh).isMesh && !(mesh as THREE.LineSegments).isLineSegments) return;
+        if (Array.isArray(mesh.material)) return;
         const original = mesh.material as THREE.Material;
         let clone = clones.get(original);
         if (!clone) {

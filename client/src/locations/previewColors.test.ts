@@ -33,8 +33,9 @@ describe("PREVIEW_COLORS", () => {
     expect(PREVIEW_COLORS).not.toHaveProperty("block");
   });
 
-  it("shades the ground in a shadow by ambient light only", () => {
-    expect(PREVIEW_COLORS.shadow).toBe(hexTimes(COLORS.ground, AMBIENT));
+  it("shades the ground in a shadow by ambient light only, mixed half way to black so it shows on the dark ground", () => {
+    expect(PREVIEW_COLORS.shadow).toBe(hexTimes(COLORS.ground, AMBIENT * 0.5));
+    expect(lightness(PREVIEW_COLORS.shadow)).toBeLessThan(lightness(hexTimes(COLORS.ground, AMBIENT)));
     expect(lightness(PREVIEW_COLORS.shadow)).toBeLessThan(lightness(PREVIEW_COLORS.ground));
   });
 });

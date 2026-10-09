@@ -125,6 +125,11 @@ export function buildWorld(data: MapData): THREE.Group {
     const mesh = entity("building", feature, extrudeFootprints(shapes, height), material);
     mesh.userData.defaulted = defaulted;
     mesh.userData.height = height;
+    // A child, so it follows the build animation's scale.y. Not pickable (routeLayer raycasts recursively) and left out of the glTF export (exportGltf.ts).
+    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry, 1), MATERIALS.edge);
+    edges.name = "edges";
+    edges.raycast = () => {};
+    mesh.add(edges);
     groups.buildings.add(mesh);
   }
 
