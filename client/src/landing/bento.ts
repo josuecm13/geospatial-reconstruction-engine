@@ -63,7 +63,7 @@ function buildingPath(data: MapData, project: Project): SVGPathElement {
 // --- 01: the route across the place ---
 
 const ROUTE_W = 640;
-const ROUTE_H = 780;
+const ROUTE_H = 640;
 
 /** The network with the route on top (when there is one) and, over the route, its real distance. */
 function routeVisual(bbox: BoundingBox, data: MapData, route: Route | null): SVGSVGElement {

@@ -343,10 +343,9 @@ main > .page.landing { padding: var(--header-height) 0 0; background: var(--bg);
   .landing .bento { grid-template-columns: 1fr; grid-template-rows: none; }
   .landing .bento-route, .landing .bento-walk, .landing .bento-export { grid-column: auto; grid-row: auto; }
   .landing .bento-route { min-height: 0; justify-content: flex-start; }
-  .landing .bento-route .bento-visual { position: relative; height: 340px; }
+  .landing .bento-route .bento-visual { position: relative; height: 360px; }
   .landing .bento-route .bento-copy { padding-top: 28px; background: none; }
   .landing .bento-visual { height: 240px; }
-  .landing .bento-export { flex-direction: column; }
 }
 @media (prefers-reduced-motion: no-preference) {
   @keyframes pulse-block { 50% { opacity: 0.45; } }
