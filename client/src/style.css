@@ -201,12 +201,7 @@ main > .page.landing { padding: var(--header-height) 0 0; background: var(--bg);
 }
 .landing .landing-button.primary:hover { background: color-mix(in oklch, var(--accent) 85%, var(--text)); }
 .landing .landing-button:focus-visible, .landing a:focus-visible { outline: 3px solid var(--link); outline-offset: 2px; }
-.landing .landing-facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; padding-top: 40px; padding-bottom: 8px; }
-.landing .landing-fact { position: relative; padding: 20px; background: var(--surface-1); border: 1px solid var(--border); border-radius: 18px; corner-shape: squircle; }
 /* The "under the hood" band is itself --surface-1, so its cards step up one. */
-.landing .landing-hood .landing-fact, .landing .landing-hood .arch-card { background: var(--surface-2); }
-.landing .landing-fact h3 { margin: 0 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--link); }
-.landing .landing-fact p { margin: 0; line-height: 1.5; }
 /* Section rhythm: a full-width hairline with a short accent segment on top, generous padding, left-aligned. */
 .landing .landing-section { position: relative; padding: clamp(96px, 12vw, 168px) 0; }
 .landing .landing-section::before {
@@ -223,23 +218,6 @@ main > .page.landing { padding: var(--header-height) 0 0; background: var(--bg);
 .landing .landing-more:hover::after { translate: 6px 0; }
 .landing .landing-note { margin: 0 0 16px; opacity: 0.75; min-height: 1.2em; }
 .landing .landing-note[data-state="error"] { color: var(--danger); opacity: 1; font-weight: 600; }
-.landing .landing-arch { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; align-items: start; }
-.landing .arch-figure { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
-.landing .arch-diagram { display: block; width: 100%; height: auto; margin: 0 auto; }
-.landing .arch-stage { cursor: pointer; outline: none; }
-.landing .arch-stage rect { fill: var(--surface-2); stroke: var(--border); stroke-width: 1.5; transition: fill 0.12s, stroke 0.12s; }
-.landing .arch-stage:hover rect, .landing .arch-stage.is-active rect { fill: var(--surface-3); stroke: var(--link); }
-.landing .arch-stage:focus-visible rect { stroke: var(--link); stroke-width: 3; }
-.landing .arch-title { font-size: 15px; font-weight: 600; fill: var(--text); }
-.landing .arch-caption { font-size: 12px; fill: var(--text-muted); }
-.landing .arch-edge { fill: none; stroke: var(--text-muted); stroke-width: 2; }
-.landing .arch-arrowhead { fill: var(--text-muted); }
-.landing .arch-card { position: relative; background: var(--surface-1); border: 1px solid var(--border); border-radius: 18px; corner-shape: squircle; padding: 16px 18px; font-size: 14px; line-height: 1.45; }
-.landing .arch-card h3 { margin: 0 0 2px; font-size: 18px; }
-.landing .arch-sub { margin: 0 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.6; }
-.landing .arch-card ul { margin: 0 0 12px; padding-left: 18px; }
-.landing .arch-card a { color: var(--link); }
-.landing .arch-hint { margin: 0; opacity: 0.7; }
 .landing .landing-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px; }
 .landing .landing-hero:has(.landing-hero-grid) { display: flex; align-items: center; min-height: 80vh; padding: 40px 0; }
 .landing .landing-hero:has(.landing-hero-grid) .landing-inner { width: 100%; }
@@ -278,8 +256,6 @@ main > .page.landing { padding: var(--header-height) 0 0; background: var(--bg);
 .landing .landing-step h3 { margin: 0 0 12px; font-size: clamp(1.875rem, 1.3rem + 2vw, 2.75rem); font-weight: 650; line-height: 1.1; letter-spacing: -0.025em; }
 .landing .landing-step p { margin: 0; font-size: clamp(1.0625rem, 1rem + 0.5vw, 1.25rem); line-height: 1.5; }
 .landing .landing-step .landing-step-number { margin-bottom: 8px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--link); }
-.landing .landing-hood { background: var(--surface-1); padding-bottom: 48px; }
-.landing .landing-hood .landing-facts { padding-top: 16px; padding-bottom: 24px; }
 @media (max-width: 899px) {
   .landing .landing-hero:has(.landing-hero-grid) { min-height: 0; }
   .landing .landing-hero-grid, .landing .landing-story-grid { grid-template-columns: 1fr; }
@@ -293,10 +269,8 @@ main > .page.landing { padding: var(--header-height) 0 0; background: var(--bg);
   .landing .landing-skeleton { animation: none; }
   .landing .landing-step { transition: none; }
 }
-@media (max-width: 1099px) { .landing .landing-arch { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 719px) {
   .landing .landing-hero { padding: 36px 0 32px; }
-  .landing .landing-facts { grid-template-columns: 1fr; gap: 16px; }
   .landing .landing-inner { padding: 0 16px; }
 }
 
@@ -447,6 +421,51 @@ main > .page.landing { padding: var(--header-height) 0 0; background: var(--bg);
   .landing .cta-stage::before { animation: stage-check 11s linear infinite; animation-delay: calc(var(--k) * 0.9s); }
 }
 
+/* --- Under the hood: a spec sheet (in / out / for) over a live pipeline, drawn as a circuit (landing/architecture.ts) --- */
+.landing .landing-spec { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0 0 clamp(64px, 8vw, 112px); border-block: 1px solid var(--border); }
+.landing .landing-fact { padding: 28px 32px 36px; }
+.landing .landing-fact:first-child { padding-left: 0; }
+.landing .landing-fact:last-child { padding-right: 0; }
+.landing .landing-fact + .landing-fact { border-left: 1px solid var(--border); }
+.landing .landing-fact dt { margin: 0 0 20px; font: 500 0.75rem/1 var(--font-mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
+.landing .landing-fact dd { margin: 0; font-size: 1.375rem; line-height: 1.35; letter-spacing: -0.015em; color: var(--text); text-wrap: pretty; }
+.landing .arch-figure { padding: 8px 0 4px; }
+.landing .arch-diagram { display: block; width: 100%; height: auto; margin: 0 auto; overflow: visible; }
+.landing .arch-stage { cursor: pointer; outline: none; }
+.landing .arch-stage rect { fill: var(--surface-1); stroke: var(--border); stroke-width: 1.5px; transition: fill 0.15s, stroke 0.15s; }
+.landing .arch-stage:hover rect { stroke: var(--text-muted); }
+.landing .arch-stage.is-active { filter: drop-shadow(0 0 10px color-mix(in oklab, var(--accent) 55%, transparent)); }
+.landing .arch-stage.is-active rect { fill: var(--surface-2); stroke: var(--accent); stroke-width: 2px; }
+.landing .arch-stage:focus-visible rect { stroke: var(--link); stroke-width: 3px; }
+.landing .arch-number { font: 500 12px var(--font-mono); letter-spacing: 0.06em; fill: var(--text-muted); }
+.landing .arch-stage.is-active .arch-number { fill: var(--accent); }
+.landing .arch-title { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; fill: var(--text); }
+.landing .arch-edge { fill: none; stroke: var(--text-muted); stroke-width: 2px; stroke-linecap: round; stroke-dasharray: 4 6; }
+.landing .arch-arrowhead { fill: var(--text-muted); }
+.landing .arch-card { position: relative; max-width: 46rem; margin-top: 40px; padding: 22px 26px 26px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-1); font: 0.875rem/1.6 var(--font-mono); color: var(--text); }
+.landing .arch-card::before { content: "● ● ●"; display: block; margin-bottom: 16px; font-size: 0.5rem; letter-spacing: 0.4em; color: var(--border); }
+.landing .arch-cmd { margin: 0 0 12px; font: 500 0.9375rem/1.4 var(--font-mono); color: var(--text); }
+.landing .arch-prompt { color: var(--accent); }
+.landing .arch-out { margin: 0 0 16px; padding: 0; list-style: none; }
+.landing .arch-line { position: relative; padding-left: 2ch; color: var(--text-muted); text-wrap: pretty; }
+.landing .arch-line::before { content: "→"; position: absolute; left: 0; color: var(--accent); }
+.landing .arch-caret { display: inline-block; width: 0.6em; height: 1.1em; margin-left: 4px; vertical-align: text-bottom; background: var(--accent); }
+.landing .arch-doc { color: var(--link); text-decoration: none; overflow-wrap: anywhere; }
+.landing .arch-doc:hover { text-decoration: underline; }
+.landing .arch-hint { margin: 0; color: var(--text-muted); }
+@media (max-width: 899px) {
+  .landing .landing-spec { grid-template-columns: 1fr; }
+  .landing .landing-fact, .landing .landing-fact:first-child, .landing .landing-fact:last-child { padding: 28px 0; }
+  .landing .landing-fact + .landing-fact { border-left: 0; border-top: 1px solid var(--border); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  /* Data flowing left to right (and down, where the diagram wraps): the dashes travel the way the edge is drawn. */
+  @keyframes arch-flow { to { stroke-dashoffset: -20; } }
+  .landing .arch-edge { animation: arch-flow 1s linear infinite; }
+  @keyframes caret-blink { 50% { opacity: 0; } }
+  .landing .arch-caret { animation: caret-blink 1.1s steps(1) infinite; }
+}
+
 /* --- Locations gallery: the card (shared with the landing page) and the page's own layout under .locations --- */
 .visually-hidden {
   position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
@@ -564,14 +583,14 @@ main > .page.landing { padding: var(--header-height) 0 0; background: var(--bg);
 
 /* --- Cursor spotlight (ui/spotlight.ts sets --x and --y on the hovered card) --- */
 @media (hover: hover) {
-  .location-card::before, .bento-tile::before, .landing-fact::before, .arch-card::before {
+  .location-card::before, .bento-tile::before {
     content: ""; position: absolute; inset: 0; border-radius: inherit; corner-shape: inherit; pointer-events: none; opacity: 0;
     background: radial-gradient(420px circle at var(--x, 50%) var(--y, 50%), color-mix(in oklch, var(--accent) 14%, transparent), transparent 60%);
   }
-  .location-card:hover::before, .bento-tile:hover::before, .landing-fact:hover::before, .arch-card:hover::before { opacity: 1; }
+  .location-card:hover::before, .bento-tile:hover::before { opacity: 1; }
 }
 @media (hover: hover) and (prefers-reduced-motion: no-preference) {
-  .location-card::before, .bento-tile::before, .landing-fact::before, .arch-card::before { transition: opacity 240ms ease; }
+  .location-card::before, .bento-tile::before { transition: opacity 240ms ease; }
 }
 
 @media (prefers-reduced-motion: no-preference) {

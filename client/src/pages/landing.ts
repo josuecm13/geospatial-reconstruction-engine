@@ -35,12 +35,12 @@ const link = (href: string, text: string, className?: string): HTMLAnchorElement
 };
 
 const FACTS: readonly [string, string][] = [
-  ["What goes in", "A rectangle of up to 1 km² on the OpenStreetMap map, fetched live from Overpass."],
+  ["In", "A rectangle of up to 1 km² on the OpenStreetMap map, fetched live from Overpass."],
   [
-    "What comes out",
+    "Out",
     "A city model the engine owns: streets with lanes and widths, buildable blocks, buildings at the height OpenStreetMap gives them, and a road graph that can be routed over.",
   ],
-  ["What it is for", "Games, simulation, and art: places you can query, fly over, walk through, and export as glTF."],
+  ["For", "Games, simulation, and art: places you can query, fly over, walk through, and export as glTF."],
 ];
 
 /**
@@ -103,7 +103,7 @@ export const mount: Mount<{ page: "landing" }> = (el, ctx) => {
   const previews = new PreviewLoader(api);
 
   const page = element("div", "page landing");
-  cleanups.push(attachSpotlight(page, ".location-card, .bento-tile, .arch-card"));
+  cleanups.push(attachSpotlight(page, ".location-card, .bento-tile"));
   const importButton = (text: string, primary: boolean) => {
     const button = element("button", primary ? "landing-button primary" : "landing-button", text);
     button.type = "button";
@@ -131,22 +131,17 @@ export const mount: Mount<{ page: "landing" }> = (el, ctx) => {
   turnInner.append(turnCopy, selectionDemo());
   turn.append(turnInner);
 
-  // --- under the hood ---
-  const hood = element("section", "landing-hood");
+  // --- under the hood: a spec sheet (in / out / for) over the live pipeline ---
+  const hood = element("section", "landing-section landing-hood");
   const hoodInner = element("div", "landing-inner");
-  const facts = element("div", "landing-facts");
-  for (const [title, body] of FACTS) {
+  const facts = element("dl", "landing-spec");
+  for (const [label, body] of FACTS) {
     const item = element("div", "landing-fact");
-    item.append(element("h3", undefined, title), element("p", undefined, body));
+    item.append(element("dt", undefined, label), element("dd", undefined, body));
     facts.append(item);
   }
   const diagram = element("div", "landing-arch");
-  hoodInner.append(
-    element("h3", "landing-heading", "Under the hood"),
-    element("p", "landing-note", "For engineers: data moves through six stages. Point at one to see what it produces."),
-    facts,
-    diagram,
-  );
+  hoodInner.append(sectionHead("Engineering", "Under the hood", "Data moves through six stages. Point at one to see what it produces."), facts, diagram);
   hood.append(hoodInner);
 
   page.append(hero, journey, turn, hood);
