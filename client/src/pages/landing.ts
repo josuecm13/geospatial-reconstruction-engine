@@ -7,6 +7,7 @@ import { renderBento } from "../landing/bento";
 import { selectionDemo } from "../landing/selectionDemo";
 import type { FeaturedStage } from "../landing/featuredStage";
 import { pickFeatured } from "../landing/featured";
+import { renderFooter } from "../landing/footer";
 import { importTarget } from "../landing/importTarget";
 import { shareMapData } from "../landing/sharedMapData";
 import { STORY_STEPS } from "../landing/storySteps";
@@ -144,7 +145,7 @@ export const mount: Mount<{ page: "landing" }> = (el, ctx) => {
   hoodInner.append(sectionHead("Engineering", "Under the hood", "Data moves through six stages. Point at one to see what it produces."), facts, diagram);
   hood.append(hoodInner);
 
-  page.append(hero, journey, turn, hood);
+  page.append(hero, journey, turn, hood, renderFooter());
   el.replaceChildren(page);
   const disposeDiagram = renderArchitecture(diagram);
 
