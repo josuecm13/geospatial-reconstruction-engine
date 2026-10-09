@@ -1,5 +1,5 @@
 :root {
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
   color-scheme: dark;
   color: var(--text);
   --header-height: 48px;
@@ -22,6 +22,8 @@
   --warning: #e9b44c;
 }
 * { box-sizing: border-box; }
+h1, h2, h3 { text-wrap: balance; }
+p, .landing-lede { text-wrap: pretty; }
 html, body { margin: 0; height: 100%; }
 body { display: flex; flex-direction: column; background: var(--bg); }
 .app-header {
@@ -39,9 +41,10 @@ body { display: flex; flex-direction: column; background: var(--bg); }
 .view-tabs a {
   color: inherit;
   text-decoration: none;
-  padding: 6px 12px;
+  padding: 9px 12px;
   border-radius: 6px;
   font-size: 14px;
+  text-box: trim-both cap alphabetic;
 }
 .view-tabs a[aria-current="true"] { background: var(--surface-3); }
 .view-tabs[hidden] { display: none; }
@@ -79,7 +82,7 @@ body:has(#map-view[hidden]) .panel { display: none; }
 .panel button {
   display: block;
   width: 100%;
-  padding: 8px 10px;
+  padding: 10px 10px;
   margin: 6px 0;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -87,10 +90,11 @@ body:has(#map-view[hidden]) .panel { display: none; }
   color: var(--text);
   font: inherit;
   cursor: pointer;
+  text-box: trim-both cap alphabetic;
 }
 .panel button.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
 .panel button:disabled { opacity: 0.45; cursor: not-allowed; }
-.panel button.link { border: none; padding: 4px 0; margin: 0; text-align: left; color: var(--link); background: none; }
+.panel button.link { border: none; padding: 4px 0; margin: 0; text-align: left; color: var(--link); background: none; text-box: normal; }
 .area-readout { margin: 4px 0; font-variant-numeric: tabular-nums; }
 .area-readout[data-state="invalid"] { color: var(--danger); font-weight: 600; }
 .status { margin: 6px 0 0; min-height: 1.2em; }
@@ -132,7 +136,7 @@ body:has(#map-view[hidden]) .panel { display: none; }
 }
 .scene-actions { position: absolute; top: 48px; right: 12px; display: flex; flex-direction: row-reverse; gap: 8px; }
 .scene-mode, .scene-rotate {
-  padding: 4px 12px; border: 0; border-radius: 4px;
+  padding: 7px 12px; border: 0; border-radius: 4px; text-box: trim-both cap alphabetic;
   background: color-mix(in oklch, var(--surface-1) 90%, transparent); color: var(--text); font-size: 13px; cursor: pointer;
 }
 .scene-help {
@@ -150,7 +154,7 @@ body:has(#map-view[hidden]) .panel { display: none; }
 .scene-rotate[aria-pressed="true"] { background: var(--accent); color: var(--bg); }
 .scene-rotate:disabled { opacity: 0.5; cursor: default; }
 .scene-export {
-  padding: 4px 12px; border: 0; border-radius: 4px;
+  padding: 7px 12px; border: 0; border-radius: 4px; text-box: trim-both cap alphabetic;
   background: color-mix(in oklch, var(--surface-1) 90%, transparent); color: var(--text); font-size: 13px; cursor: pointer;
 }
 .scene-export:disabled { opacity: 0.5; cursor: default; }
@@ -161,7 +165,7 @@ body:has(#map-view[hidden]) .panel { display: none; }
 }
 @keyframes scene-building-pulse { 50% { opacity: 0.45; } }
 .scene-skip {
-  position: absolute; bottom: 16px; right: 12px; padding: 4px 12px; border: 0; border-radius: 4px;
+  position: absolute; bottom: 16px; right: 12px; padding: 7px 12px; border: 0; border-radius: 4px; text-box: trim-both cap alphabetic;
   background: color-mix(in oklch, var(--surface-1) 90%, transparent); color: var(--text); font-size: 13px; cursor: pointer;
 }
 
@@ -169,12 +173,12 @@ body:has(#map-view[hidden]) .panel { display: none; }
 main > .page.landing { padding: 0; background: var(--bg); }
 .landing .landing-inner { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
 .landing .landing-hero { background: var(--scene-background); color: var(--text); padding: 56px 0 48px; }
-.landing .landing-hero h2 { margin: 0 0 12px; font-size: 34px; line-height: 1.15; letter-spacing: -0.01em; }
-.landing .landing-lede { margin: 0 0 24px; max-width: 36em; font-size: 18px; line-height: 1.5; opacity: 0.88; }
+.landing .landing-hero h2 { margin: 0 0 12px; font-size: clamp(1.75rem, 1.3rem + 2vw, 2.5rem); font-weight: 650; line-height: 1.15; letter-spacing: -0.025em; }
+.landing .landing-lede { margin: 0 0 24px; max-width: 36em; font-size: clamp(1.0625rem, 1rem + 0.3vw, 1.25rem); line-height: 1.5; opacity: 0.88; }
 .landing .landing-actions { display: flex; flex-wrap: wrap; gap: 12px; }
 .landing .landing-button {
-  display: inline-block; padding: 10px 18px; border: 1px solid color-mix(in oklch, var(--text) 40%, transparent); border-radius: 8px;
-  background: transparent; color: inherit; font: inherit; font-size: 15px; text-decoration: none; cursor: pointer;
+  display: inline-block; padding: 14px 20px; border: 1px solid color-mix(in oklch, var(--text) 40%, transparent); border-radius: 8px;
+  background: transparent; color: inherit; font: inherit; font-size: 15px; text-decoration: none; cursor: pointer; text-box: trim-both cap alphabetic;
 }
 .landing .landing-button:hover { background: color-mix(in oklch, var(--text) 8%, transparent); }
 .landing .landing-button.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
@@ -183,7 +187,7 @@ main > .page.landing { padding: 0; background: var(--bg); }
 .landing .landing-facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; padding-top: 40px; padding-bottom: 8px; }
 .landing .landing-fact h3 { margin: 0 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--link); }
 .landing .landing-fact p { margin: 0; line-height: 1.5; }
-.landing .landing-heading { margin: 40px 0 6px; font-size: 22px; }
+.landing .landing-heading { margin: 40px 0 6px; font-size: clamp(1.375rem, 1.1rem + 1vw, 1.75rem); font-weight: 650; letter-spacing: -0.02em; }
 .landing .landing-heading-row { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
 .landing .landing-heading-row a { color: var(--link); }
 .landing .landing-note { margin: 0 0 16px; opacity: 0.75; min-height: 1.2em; }
@@ -209,9 +213,9 @@ main > .page.landing { padding: 0; background: var(--bg); }
 .landing .landing-hero:has(.landing-hero-grid) { display: flex; align-items: center; min-height: 80vh; padding: 40px 0; }
 .landing .landing-hero:has(.landing-hero-grid) .landing-inner { width: 100%; }
 .landing .landing-hero-grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 40px; align-items: center; }
-.landing .landing-hero-grid h2 { font-size: 44px; margin-bottom: 4px; }
+.landing .landing-hero-grid h2 { font-size: clamp(2.5rem, 1.6rem + 3vw, 4.25rem); line-height: 1.05; letter-spacing: -0.035em; margin-bottom: 4px; }
 .landing .landing-eyebrow { margin: 0 0 12px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--link); }
-.landing .landing-context { margin: 0 0 20px; font-size: 18px; opacity: 0.85; }
+.landing .landing-context { margin: 0 0 20px; font-size: clamp(1.0625rem, 1rem + 0.3vw, 1.25rem); opacity: 0.85; text-wrap: pretty; }
 .landing .landing-hero .landing-note { color: var(--text); opacity: 0.85; }
 .landing .landing-hero .landing-note[data-state="error"] { color: var(--danger); opacity: 1; }
 .landing .landing-stage { position: relative; overflow: hidden; background: var(--scene-background); }
@@ -229,8 +233,8 @@ main > .page.landing { padding: 0; background: var(--bg); }
 .landing .landing-steps { margin: 0; padding: 0; list-style: none; }
 .landing .landing-step { min-height: 70vh; display: flex; flex-direction: column; justify-content: center; opacity: 0.45; transition: opacity 0.3s ease; }
 .landing .landing-step.is-active { opacity: 1; }
-.landing .landing-step h3 { margin: 0 0 12px; font-size: 40px; line-height: 1.1; letter-spacing: -0.01em; }
-.landing .landing-step p { margin: 0; font-size: 20px; line-height: 1.5; }
+.landing .landing-step h3 { margin: 0 0 12px; font-size: clamp(1.875rem, 1.3rem + 2vw, 2.75rem); font-weight: 650; line-height: 1.1; letter-spacing: -0.025em; }
+.landing .landing-step p { margin: 0; font-size: clamp(1.0625rem, 1rem + 0.5vw, 1.25rem); line-height: 1.5; }
 .landing .landing-step .landing-step-number { margin-bottom: 8px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--link); }
 .landing .landing-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
 .landing .landing-tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 8px; }
@@ -245,13 +249,11 @@ main > .page.landing { padding: 0; background: var(--bg); }
 @media (max-width: 899px) {
   .landing .landing-hero:has(.landing-hero-grid) { min-height: 0; }
   .landing .landing-hero-grid, .landing .landing-story-grid, .landing .landing-tiles { grid-template-columns: 1fr; }
-  .landing .landing-hero-grid h2 { font-size: 32px; }
   .landing .landing-stage-hero { height: 45vh; }
   /* The stage stays pinned at the top while the steps scroll under it. */
   .landing .landing-story-stage { top: 56px; z-index: 1; padding: 8px 0; background: var(--bg); }
   .landing .landing-stage-story { height: 45vh; }
   .landing .landing-step { min-height: 55vh; }
-  .landing .landing-step h3 { font-size: 30px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .landing .landing-skeleton { animation: none; }
@@ -260,7 +262,6 @@ main > .page.landing { padding: 0; background: var(--bg); }
 @media (max-width: 1099px) { .landing .landing-arch { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 719px) {
   .landing .landing-hero { padding: 36px 0 32px; }
-  .landing .landing-hero h2 { font-size: 26px; }
   .landing .landing-facts { grid-template-columns: 1fr; gap: 16px; }
   .landing .landing-inner { padding: 0 16px; }
 }
@@ -291,7 +292,7 @@ main > .page.landing { padding: 0; background: var(--bg); }
 .location-preview-note { display: none; position: absolute; inset: 0; align-items: center; justify-content: center; color: var(--text-muted); font-size: 13px; }
 .location-preview[data-state="error"] .location-preview-note { display: flex; }
 .location-badge {
-  position: absolute; top: 10px; left: 10px; padding: 3px 10px; border-radius: 999px;
+  position: absolute; top: 10px; left: 10px; padding: 7px 10px; text-box: trim-both cap alphabetic; border-radius: 999px;
   background: color-mix(in oklch, var(--surface-3) 95%, transparent); color: var(--text); font-size: 12px; font-weight: 600;
 }
 .location-card[data-status="failed"] .location-badge { background: var(--danger); color: var(--bg); }
@@ -305,7 +306,7 @@ main > .page.landing { padding: 0; background: var(--bg); }
 .location-coords { font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .location-meta { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; font-size: 13px; color: var(--text-muted); }
 .location-open-3d {
-  position: relative; z-index: 1; align-self: flex-start; margin-top: 4px; padding: 4px 12px;
+  position: relative; z-index: 1; align-self: flex-start; margin-top: 4px; padding: 8px 12px; text-box: trim-both cap alphabetic;
   font-size: 12px; font-weight: 600; color: var(--link); text-decoration: none;
   background: color-mix(in oklch, var(--link) 12%, var(--surface-1)); border: 1px solid color-mix(in oklch, var(--link) 35%, var(--surface-1)); border-radius: 999px;
 }
@@ -319,11 +320,11 @@ main > .page.landing { padding: 0; background: var(--bg); }
 .page.locations { background: var(--bg); }
 .locations > * { max-width: 1240px; margin-left: auto; margin-right: auto; }
 .locations-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px 32px; margin-bottom: 8px; }
-.locations-head h2 { margin: 0; font-size: 30px; letter-spacing: -0.01em; }
+.locations-head h2 { margin: 0; font-size: clamp(1.75rem, 1.4rem + 1.4vw, 2.25rem); font-weight: 650; letter-spacing: -0.025em; }
 .locations-lede { margin: 4px 0 0; color: var(--text-muted); }
 .locations-tools { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .locations-import {
-  padding: 8px 14px; border-radius: 8px; background: var(--accent); color: var(--bg); font-weight: 600; text-decoration: none; white-space: nowrap;
+  padding: 12px 14px; border-radius: 8px; background: var(--accent); color: var(--bg); font-weight: 600; text-decoration: none; white-space: nowrap; text-box: trim-both cap alphabetic;
 }
 .locations-import:hover { background: color-mix(in oklch, var(--accent) 85%, var(--text)); }
 .locations-import:focus-visible { outline: 3px solid var(--link); outline-offset: 2px; }
@@ -333,12 +334,12 @@ main > .page.landing { padding: 0; background: var(--bg); }
 /* The search icon is a data URI, which can't read a custom property: its stroke (%23a8b2b9) is the value of --text-muted. */
 .locations-tools input { width: 260px; max-width: 100%; padding-left: 34px; background: var(--surface-2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%23a8b2b9' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='7' cy='7' r='5'/%3E%3Cpath d='M11 11l4 4'/%3E%3C/svg%3E") 11px 50% no-repeat; }
 .locations-tools input:focus-visible, .locations-tools select:focus-visible { outline: 3px solid var(--link); outline-offset: 1px; }
-.locations-count { margin-top: 0; margin-bottom: 16px; font-size: 13px; color: var(--text-muted); min-height: 1.2em; }
+.locations-count { margin-top: 0; margin-bottom: 16px; font-variant-numeric: tabular-nums; font-size: 13px; color: var(--text-muted); min-height: 1.2em; }
 .locations-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; list-style: none; padding: 0; margin-top: 0; margin-bottom: 24px; }
 .locations-grid > li[hidden] { display: none; }
 .locations-message { padding: 32px 16px; text-align: center; color: var(--text-muted); }
 .locations-message[hidden] { display: none; }
-.locations-retry { padding: 8px 16px; border: 1px solid var(--accent); border-radius: 8px; background: var(--accent); color: var(--bg); font: inherit; cursor: pointer; }
+.locations-retry { padding: 12px 16px; text-box: trim-both cap alphabetic; border: 1px solid var(--accent); border-radius: 8px; background: var(--accent); color: var(--bg); font: inherit; cursor: pointer; }
 .location-skeleton { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
 .location-skeleton .location-preview { animation: scene-building-pulse 1.4s ease-in-out infinite; }
 .location-skeleton .bar { height: 12px; border-radius: 6px; background: var(--surface-3); width: 55%; }

@@ -1,3 +1,4 @@
+import "@fontsource-variable/inter";
 import "./style.css";
 import { ApiClient } from "./api/client";
 import { CurrentArea } from "./importing/recentImports";
