@@ -10,6 +10,7 @@ import { STORY_STEPS } from "../landing/storySteps";
 import { renderLocationCard } from "../locations/card";
 import { formatCentre, toCard } from "../locations/cardModel";
 import { PreviewLoader, type PreviewTarget } from "../locations/preview";
+import { attachSpotlight } from "../ui/spotlight";
 import type { Mount } from "./types";
 
 const RECENT_LIMIT = 6;
@@ -80,6 +81,7 @@ export const mount: Mount<{ page: "landing" }> = (el, ctx) => {
   const previews = new PreviewLoader(api);
 
   const page = element("div", "page landing");
+  cleanups.push(attachSpotlight(page, ".location-card, .landing-tile, .landing-fact, .arch-card"));
   const importButton = (text: string, primary: boolean) => {
     const button = element("button", primary ? "landing-button primary" : "landing-button", text);
     button.type = "button";

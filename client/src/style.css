@@ -186,9 +186,22 @@ main > .page.landing { padding: var(--header-height) 0 0; background: var(--bg);
 }
 .landing .landing-button:hover { background: color-mix(in oklch, var(--text) 8%, transparent); }
 .landing .landing-button.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
+@property --angle { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+/* A 1px conic-gradient ring on the edge of the primary button: the gradient fills the pseudo-element, and the mask
+   (content box excluded from the full box) leaves only the 1px padding ring. `--angle` is spun below, under motion. */
+.landing .landing-button.primary { position: relative; }
+.landing .landing-button.primary::before {
+  content: ""; position: absolute; inset: -1px; padding: 1px; border-radius: inherit; pointer-events: none;
+  background: conic-gradient(from var(--angle), var(--accent), color-mix(in oklch, var(--accent) 35%, var(--text)), var(--accent) 40%, color-mix(in oklch, var(--accent) 60%, var(--bg)) 70%, var(--accent));
+  mask: linear-gradient(var(--bg) 0 0) content-box, linear-gradient(var(--bg) 0 0);
+  mask-composite: exclude;
+}
 .landing .landing-button.primary:hover { background: color-mix(in oklch, var(--accent) 85%, var(--text)); }
 .landing .landing-button:focus-visible, .landing a:focus-visible { outline: 3px solid var(--link); outline-offset: 2px; }
-.landing .landing-facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; padding-top: 40px; padding-bottom: 8px; }
+.landing .landing-facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; padding-top: 40px; padding-bottom: 8px; }
+.landing .landing-fact { position: relative; padding: 20px; background: var(--surface-1); border: 1px solid var(--border); border-radius: 18px; corner-shape: squircle; }
+/* The "under the hood" band is itself --surface-1, so its cards step up one. */
+.landing .landing-hood .landing-fact, .landing .landing-hood .arch-card { background: var(--surface-2); }
 .landing .landing-fact h3 { margin: 0 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--link); }
 .landing .landing-fact p { margin: 0; line-height: 1.5; }
 .landing .landing-heading { margin: 40px 0 6px; font-size: clamp(1.375rem, 1.1rem + 1vw, 1.75rem); font-weight: 650; letter-spacing: -0.02em; }
@@ -207,7 +220,7 @@ main > .page.landing { padding: var(--header-height) 0 0; background: var(--bg);
 .landing .arch-caption { font-size: 12px; fill: var(--text-muted); }
 .landing .arch-edge { fill: none; stroke: var(--text-muted); stroke-width: 2; }
 .landing .arch-arrowhead { fill: var(--text-muted); }
-.landing .arch-card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; font-size: 14px; line-height: 1.45; }
+.landing .arch-card { position: relative; background: var(--surface-1); border: 1px solid var(--border); border-radius: 18px; corner-shape: squircle; padding: 16px 18px; font-size: 14px; line-height: 1.45; }
 .landing .arch-card h3 { margin: 0 0 2px; font-size: 18px; }
 .landing .arch-sub { margin: 0 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.6; }
 .landing .arch-card ul { margin: 0 0 12px; padding-left: 18px; }
@@ -218,7 +231,18 @@ main > .page.landing { padding: var(--header-height) 0 0; background: var(--bg);
 .landing .landing-hero:has(.landing-hero-grid) .landing-inner { width: 100%; }
 .landing .landing-hero-grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 40px; align-items: center; }
 .landing .landing-hero-grid h2 { font-size: clamp(2.5rem, 1.6rem + 3vw, 4.25rem); line-height: 1.05; letter-spacing: -0.035em; margin-bottom: 4px; }
-.landing .landing-eyebrow { margin: 0 0 12px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--link); }
+.landing .landing-eyebrow {
+  display: inline-flex; align-items: center; gap: 8px; margin: 0 0 14px; padding: 9px 14px; border-radius: 999px; background: var(--surface-2);
+  font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--link); text-box: trim-both cap alphabetic;
+}
+.landing .landing-eyebrow::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+/* A soft accent glow behind the text column. The stage is opaque, so a glow behind it would only show as a seam at its edge;
+   this one fades to transparent (closest-side) before the column's edge, so the hero stays flat where the 3D scene meets it. */
+.landing .landing-hero-grid .landing-hero-text { position: relative; z-index: 0; }
+.landing .landing-hero-grid .landing-hero-text::before {
+  content: ""; position: absolute; inset: -25% 0 -25% -35%; z-index: -1; pointer-events: none;
+  background: radial-gradient(closest-side, color-mix(in oklch, var(--accent) 10%, transparent), transparent);
+}
 .landing .landing-context { margin: 0 0 20px; font-size: clamp(1.0625rem, 1rem + 0.3vw, 1.25rem); opacity: 0.85; text-wrap: pretty; }
 .landing .landing-hero .landing-note { color: var(--text); opacity: 0.85; }
 .landing .landing-hero .landing-note[data-state="error"] { color: var(--danger); opacity: 1; }
@@ -241,7 +265,7 @@ main > .page.landing { padding: var(--header-height) 0 0; background: var(--bg);
 .landing .landing-step p { margin: 0; font-size: clamp(1.0625rem, 1rem + 0.5vw, 1.25rem); line-height: 1.5; }
 .landing .landing-step .landing-step-number { margin-bottom: 8px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--link); }
 .landing .landing-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
-.landing .landing-tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 8px; }
+.landing .landing-tile { position: relative; background: var(--surface-1); border: 1px solid var(--border); border-radius: 18px; corner-shape: squircle; padding: 20px; display: flex; flex-direction: column; gap: 8px; }
 .landing .landing-tile h4 { margin: 0; font-size: 18px; }
 .landing .landing-tile p { margin: 0; line-height: 1.5; flex: 1; }
 .landing .landing-tile a { color: var(--link); font-weight: 600; }
@@ -277,7 +301,7 @@ main > .page.landing { padding: var(--header-height) 0 0; background: var(--bg);
 }
 .location-card {
   position: relative; display: flex; flex-direction: column; height: 100%; overflow: hidden;
-  background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px;
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 18px; corner-shape: squircle;
   box-shadow: 0 1px 2px color-mix(in oklch, var(--bg) 40%, transparent), 0 4px 14px color-mix(in oklch, var(--bg) 40%, transparent);
   transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
 }
@@ -344,7 +368,7 @@ main > .page.landing { padding: var(--header-height) 0 0; background: var(--bg);
 .locations-message { padding: 32px 16px; text-align: center; color: var(--text-muted); }
 .locations-message[hidden] { display: none; }
 .locations-retry { padding: 12px 16px; text-box: trim-both cap alphabetic; border: 1px solid var(--accent); border-radius: 8px; background: var(--accent); color: var(--bg); font: inherit; cursor: pointer; }
-.location-skeleton { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.location-skeleton { background: var(--surface-1); border: 1px solid var(--border); border-radius: 18px; corner-shape: squircle; overflow: hidden; }
 .location-skeleton .location-preview { animation: scene-building-pulse 1.4s ease-in-out infinite; }
 .location-skeleton .bar { height: 12px; border-radius: 6px; background: var(--surface-3); width: 55%; }
 .location-skeleton .bar.wide { height: 16px; width: 80%; }
@@ -381,4 +405,21 @@ main > .page.landing { padding: var(--header-height) 0 0; background: var(--bg);
   }
   /* The step's own opacity (dimmed until active) is its end state, so this only fades it in. */
   .landing .landing-step { animation: reveal-fade linear both; animation-timeline: view(); animation-range: entry 0% entry 60%; }
+}
+
+/* --- Cursor spotlight (ui/spotlight.ts sets --x and --y on the hovered card) --- */
+@media (hover: hover) {
+  .location-card::before, .landing-tile::before, .landing-fact::before, .arch-card::before {
+    content: ""; position: absolute; inset: 0; border-radius: inherit; corner-shape: inherit; pointer-events: none; opacity: 0;
+    background: radial-gradient(420px circle at var(--x, 50%) var(--y, 50%), color-mix(in oklch, var(--accent) 14%, transparent), transparent 60%);
+  }
+  .location-card:hover::before, .landing-tile:hover::before, .landing-fact:hover::before, .arch-card:hover::before { opacity: 1; }
+}
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .location-card::before, .landing-tile::before, .landing-fact::before, .arch-card::before { transition: opacity 240ms ease; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes cta-spin { to { --angle: 360deg; } }
+  .landing .landing-button.primary::before { animation: cta-spin 6s linear infinite; }
 }
