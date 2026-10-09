@@ -157,6 +157,7 @@ Ideas, not commitments. Once one is chosen, it becomes an issue in the milestone
   normal and a fixed light direction (`AMBIENT + (1 - AMBIENT) * max(0, n . LIGHT_DIRECTION)`), bakes
   it into vertex colours, and the materials in `scene/palette.ts` (the only source of scene colours)
   are unlit, so the glTF export (`KHR_materials_unlit`, `COLOR_0`) looks the same as the viewer.
+- **Dark theme** (#133): the interface, the 3D scene (night clay, pale edge lines on buildings that the glTF export leaves out) and the 2D map (OpenFreeMap's dark basemap) are dark; `style.css` takes every colour from its `:root` tokens (a test enforces it and 4.5:1 text contrast), and `views/mapColors.ts` holds the 2D overlay colours.
 - **Fly and walk** (#66, shipped): the scene opens in fly mode (orbit, pan, zoom). A "Walk" button
   in its corner, or the `V` key, drops the camera to eye height (1.7 m) on the road nearest the
   centre, facing north; click the canvas to look around, WASD or the arrows to move (Shift runs),
