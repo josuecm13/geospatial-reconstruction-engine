@@ -20,7 +20,7 @@ export class MapDataLayers {
       id: "engine-area-features",
       type: "fill",
       source: sourceId("area_features"),
-      paint: { "fill-color": ["match", ["get", "kind"], "water", MAP_COLORS.water, MAP_COLORS.green], "fill-opacity": 0.7 },
+      paint: { "fill-color": ["match", ["get", "kind"], "water", MAP_COLORS.water, MAP_COLORS.green], "fill-opacity": 0.9 },
     });
     map.addLayer({
       id: "engine-blocks",

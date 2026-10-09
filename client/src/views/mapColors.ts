@@ -1,4 +1,13 @@
+import * as THREE from "three";
 import { COLORS } from "../scene/palette";
+
+/**
+ * How far the scene's road, water and green colours are lifted toward `COLORS.edge` for the 2D basemap (a linear-space
+ * mix, so the tiers keep their order). The 3D palette's dark colours are only 1.7-2.5:1 against the basemap's #0c0c0c;
+ * at 0.1 every road tier is 3.2:1 or more, in order (wide 3.9, normal 3.5, narrow 3.2), and water and green 3.3 and 3.7.
+ */
+export const MAP_LIFT = 0.1;
+export const lifted = (color: string): string => `#${new THREE.Color(color).lerp(new THREE.Color(COLORS.edge), MAP_LIFT).getHexString()}`;
 
 /**
  * Every paint colour of the 2D map's overlays (mapDataLayers.ts, boundaries/boundaryTool.ts,
@@ -7,11 +16,11 @@ import { COLORS } from "../scene/palette";
  * so the two views agree; the rest are chosen to read on dark.
  */
 export const MAP_COLORS = {
-  water: COLORS.water,
-  green: COLORS.green,
-  roadWide: COLORS.roadWide,
-  roadNormal: COLORS.roadNormal,
-  roadNarrow: COLORS.roadNarrow,
+  water: lifted(COLORS.water),
+  green: lifted(COLORS.green),
+  roadWide: lifted(COLORS.roadWide),
+  roadNormal: lifted(COLORS.roadNormal),
+  roadNarrow: lifted(COLORS.roadNarrow),
   buildingMeasured: COLORS.buildingMeasured,
   // Dimmer and cool, as in 3D: the height was assumed.
   buildingDefaulted: COLORS.buildingDefaulted,
