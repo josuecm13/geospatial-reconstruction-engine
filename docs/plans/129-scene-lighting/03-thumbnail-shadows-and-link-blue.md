@@ -57,3 +57,9 @@ list the `#2f7dd1` text uses outside the landing page with their ratios in your 
 
 Commits: one per issue, Conventional Commits referencing #131 / #132, ending with
 `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>`.
+
+## Also: red CI check
+
+`client/src/scene/buildWorld.test.ts` ("gives the flat materials no depth write, and the building
+materials one") still expects `MATERIALS.buildable.opacity` to be 0.45; #131 made it 0.35. Update the
+expectation (own `test(client):` commit).
