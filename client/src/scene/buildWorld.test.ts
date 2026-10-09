@@ -98,7 +98,7 @@ describe("buildWorld", () => {
     expect(MATERIALS.buildingMeasured.depthWrite).toBe(true);
     expect(MATERIALS.buildingDefaulted.depthWrite).toBe(true);
     expect(MATERIALS.buildable.transparent).toBe(true);
-    expect(MATERIALS.buildable.opacity).toBe(0.45);
+    expect(MATERIALS.buildable.opacity).toBe(0.35);
   });
 
   it("draws every face unlit, with its shade baked into the vertex colors and no mesh rotation", () => {
