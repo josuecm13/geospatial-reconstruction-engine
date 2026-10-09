@@ -56,7 +56,7 @@ body { display: flex; flex-direction: column; background: var(--bg); timeline-sc
    header (which is in flow above it, so the explore views below size as before) and pads its content by the header's height,
    so content scrolls beneath the glass. Its scroll position is the `--page` timeline that the header and the reveals read. */
 main > .page { position: absolute; inset: calc(-1 * var(--header-height)) 0 0 0; overflow: auto; padding: calc(var(--header-height) + 24px) 32px 24px; box-sizing: border-box; scroll-timeline: --page block; }
-.api-status { margin-left: auto; font-size: 13px; opacity: 0.8; }
+.api-status { margin-left: auto; padding: 0; border: 0; background: none; color: inherit; font: inherit; font-size: 13px; opacity: 0.8; cursor: default; anchor-name: --api-status; }
 .api-status[data-state="ok"]::before { content: "● "; color: var(--ok); }
 .api-status[data-state="down"]::before { content: "● "; color: var(--danger); }
 main { flex: 1; position: relative; }
@@ -90,8 +90,8 @@ body:has(#map-view[hidden]) .panel { display: none; }
   padding: 10px 10px;
   margin: 6px 0;
   border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--surface-2);
+  border-radius: 8px;
+  background: transparent;
   color: var(--text);
   font: inherit;
   cursor: pointer;
@@ -141,12 +141,13 @@ body:has(#map-view[hidden]) .panel { display: none; }
 }
 .scene-actions { position: absolute; top: 48px; right: 12px; display: flex; flex-direction: row-reverse; gap: 8px; }
 .scene-mode, .scene-rotate {
-  padding: 7px 12px; border: 0; border-radius: 4px; text-box: trim-both cap alphabetic;
-  background: color-mix(in oklch, var(--surface-1) 90%, transparent); color: var(--text); font-size: 13px; cursor: pointer;
+  padding: 7px 12px; border: 1px solid var(--border); border-radius: 8px; text-box: trim-both cap alphabetic;
+  background: transparent; color: var(--text); font-size: 13px; cursor: pointer;
 }
+.scene-mode { anchor-name: --walk; } /* the Walk button, which the help text is anchored to */
 .scene-help {
-  position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
-  padding: 6px 12px; border-radius: 4px; background: color-mix(in oklch, var(--surface-2) 85%, transparent); color: var(--text); font-size: 13px;
+  position: absolute; position-anchor: --walk; position-area: top; position-try-fallbacks: flip-block; margin: 8px;
+  padding: 6px 12px; color: var(--text); font-size: 13px; width: max-content; max-width: min(360px, calc(100% - 24px));
 }
 .route-panel {
   position: absolute; top: 84px; right: 12px; width: 240px; padding: 6px 8px; border-radius: 4px;
@@ -156,17 +157,16 @@ body:has(#map-view[hidden]) .panel { display: none; }
 .route-output { margin-top: 4px; }
 .route-error { color: var(--danger); }
 .route-warning { color: var(--warning); }
-.scene-rotate[aria-pressed="true"] { background: var(--accent); color: var(--bg); }
+.scene-rotate[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); }
 .scene-rotate:disabled { opacity: 0.5; cursor: default; }
 .scene-export {
-  padding: 7px 12px; border: 0; border-radius: 4px; text-box: trim-both cap alphabetic;
-  background: color-mix(in oklch, var(--surface-1) 90%, transparent); color: var(--text); font-size: 13px; cursor: pointer;
+  padding: 7px 12px; border: 1px solid var(--border); border-radius: 8px; text-box: trim-both cap alphabetic;
+  background: transparent; color: var(--text); font-size: 13px; cursor: pointer;
 }
 .scene-export:disabled { opacity: 0.5; cursor: default; }
 .scene-building {
   position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
   padding: 6px 14px; border-radius: 4px; background: color-mix(in oklch, var(--surface-2) 85%, transparent); color: var(--text); font-size: 14px;
-  animation: scene-building-pulse 1.4s ease-in-out infinite;
 }
 @keyframes scene-building-pulse { 50% { opacity: 0.45; } }
 .scene-skip {
@@ -362,7 +362,9 @@ main > .page.landing { padding: var(--header-height) 0 0; background: var(--bg);
 }
 /* The search icon is a data URI, which can't read a custom property: its stroke (%23a8b2b9) is the value of --text-muted. */
 .locations-tools input { width: 260px; max-width: 100%; padding-left: 34px; background: var(--surface-2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%23a8b2b9' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='7' cy='7' r='5'/%3E%3Cpath d='M11 11l4 4'/%3E%3C/svg%3E") 11px 50% no-repeat; }
-.locations-tools input:focus-visible, .locations-tools select:focus-visible { outline: 3px solid var(--link); outline-offset: 1px; }
+.locations-tools input:focus-visible, .locations-tools select:focus-visible, .panel .field :is(input, select):focus-visible {
+  outline: 2px solid color-mix(in oklch, var(--accent) 80%, transparent); outline-offset: 1px;
+}
 .locations-count { margin-top: 0; margin-bottom: 16px; font-variant-numeric: tabular-nums; font-size: 13px; color: var(--text-muted); min-height: 1.2em; }
 .locations-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; list-style: none; padding: 0; margin-top: 0; margin-bottom: 24px; }
 .locations-grid > li[hidden] { display: none; }
@@ -439,4 +441,49 @@ main > .page.landing { padding: var(--header-height) 0 0; background: var(--bg);
   ::view-transition-group(place) { animation-duration: 450ms; animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1); }
   /* Fill the morphing box instead of stretching the old and new pictures between the two aspect ratios. */
   ::view-transition-old(place), ::view-transition-new(place) { height: 100%; width: 100%; object-fit: cover; }
+}
+
+/* --- Overlays: frosted glass over the map and the 3D scene --- */
+.panel, .scene-actions, .scene-toggle, .route-panel, .scene-help, .feature-popup, .selection-label, .scene-empty, .api-tip {
+  background: color-mix(in oklch, var(--surface-1) 72%, transparent);
+  backdrop-filter: blur(16px) saturate(1.3);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  corner-shape: squircle;
+  box-shadow: 0 8px 24px color-mix(in oklch, var(--bg) 55%, transparent);
+  color: var(--text);
+}
+.scene-actions { padding: 6px; }
+.scene-toggle, .route-panel, .scene-empty { padding: 8px 12px; }
+.selection-label { padding: 3px 10px; }
+/* MapLibre's popup draws its own white box and tip around `.feature-popup`; the glass is on `.feature-popup` instead. */
+.maplibregl-popup-content { padding: 0; background: none; box-shadow: none; color: var(--text); }
+.maplibregl-popup-tip { display: none; }
+.maplibregl-popup-close-button { color: var(--text-muted); }
+.feature-popup { padding: 10px 28px 10px 14px; font-size: 13px; }
+
+/* Buttons in the overlays: ghost by default, --accent for the primary one, hover and pressed steps from color-mix. */
+.panel button:not(.link):hover, .scene-mode:hover, .scene-rotate:hover, .scene-export:hover { background: color-mix(in oklch, var(--text) 9%, transparent); }
+.panel button:not(.link):active, .scene-mode:active, .scene-rotate:active, .scene-export:active { background: color-mix(in oklch, var(--text) 16%, transparent); }
+.panel button.primary:hover, .scene-rotate[aria-pressed="true"]:hover { background: color-mix(in oklch, var(--accent) 85%, var(--text)); }
+.panel button.primary:active, .scene-rotate[aria-pressed="true"]:active { background: color-mix(in oklch, var(--accent) 80%, var(--bg)); }
+.panel button:disabled:hover, .scene-rotate:disabled:hover, .scene-export:disabled:hover { background: transparent; }
+.panel button:focus-visible, .scene-mode:focus-visible, .scene-rotate:focus-visible, .scene-export:focus-visible { outline: 2px solid color-mix(in oklch, var(--accent) 80%, transparent); outline-offset: 1px; }
+
+/* The API status tooltip: a hint popover on the header's status pill, shown on hover or focus through `interestfor`. */
+.api-tip {
+  position-anchor: --api-status; position-area: bottom span-left; position-try-fallbacks: flip-block; margin: 8px 0 0; padding: 6px 12px;
+  inset: auto; font-size: 13px; max-width: 320px; overflow: visible;
+}
+
+/* Overlays that appear (a `hidden` removed, an element added, a popover opened) fade and rise 6px in, and out again when hidden. */
+@media (prefers-reduced-motion: no-preference) {
+  .route-panel, .scene-help, .scene-empty, .scene-building, .feature-popup, .api-tip, .locations-grid .location-card {
+    transition: opacity 180ms ease, translate 180ms ease, display 180ms allow-discrete, overlay 180ms allow-discrete;
+  }
+  .route-panel[hidden], .scene-help[hidden], .scene-empty[hidden], .scene-building[hidden], .api-tip:not(:popover-open) { display: none; opacity: 0; translate: 0 6px; }
+  @starting-style {
+    .route-panel, .scene-help, .scene-empty, .scene-building, .feature-popup, .api-tip:popover-open, .locations-grid .location-card { opacity: 0; translate: 0 6px; }
+  }
+  .scene-building { animation: scene-building-pulse 1.4s ease-in-out infinite; }
 }
