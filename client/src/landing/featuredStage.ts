@@ -56,10 +56,6 @@ export async function createFeaturedStage({ api, areaId, slots, onReady }: Featu
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(BACKGROUND);
-    scene.add(new THREE.HemisphereLight("#ffffff", "#7a8b6f", 1.4));
-    const sun = new THREE.DirectionalLight("#fff4e0", 1.6);
-    sun.position.set(300, 500, 200);
-    scene.add(sun);
 
     world = buildWorld(data);
     scene.add(world);

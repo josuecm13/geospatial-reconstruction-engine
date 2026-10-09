@@ -101,6 +101,19 @@ describe("buildWorld", () => {
     expect(MATERIALS.buildable.opacity).toBe(0.45);
   });
 
+  it("draws every face unlit, with its shade baked into the vertex colors and no mesh rotation", () => {
+    const meshes: THREE.Mesh[] = [];
+    world.traverse((object) => (object as THREE.Mesh).isMesh && meshes.push(object as THREE.Mesh));
+    expect(meshes.length).toBeGreaterThan(0);
+    for (const mesh of meshes) {
+      const material = mesh.material as THREE.MeshBasicMaterial;
+      expect(material.isMeshBasicMaterial, mesh.name).toBe(true);
+      expect(material.vertexColors, mesh.name).toBe(true);
+      expect(mesh.geometry.getAttribute("color").count, mesh.name).toBe(mesh.geometry.getAttribute("position").count);
+      expect(mesh.rotation.toArray().slice(0, 3), mesh.name).toEqual([0, 0, 0]);
+    }
+  });
+
   it("builds the ground plane in the first render slot", () => {
     const ground = groundPlane(-10, 10, -5, 5);
     expect(ground.name).toBe("ground:plane");

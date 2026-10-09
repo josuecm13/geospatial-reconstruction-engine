@@ -54,6 +54,15 @@ describe("exportWorld", () => {
     expect(report.issues.numErrors).toBe(0);
   });
 
+  it("exports unlit materials and the baked shade as vertex colors, so the file looks like the viewer", async () => {
+    const json = jsonChunk(await exportWorld(buildWorld(data)));
+    expect(json.extensionsUsed).toContain("KHR_materials_unlit");
+    expect(json.materials.length).toBeGreaterThan(0);
+    for (const material of json.materials) expect(material.extensions).toHaveProperty("KHR_materials_unlit");
+    expect(json.meshes.length).toBeGreaterThan(0);
+    for (const mesh of json.meshes) for (const primitive of mesh.primitives) expect(primitive.attributes).toHaveProperty("COLOR_0");
+  });
+
   it("names nodes by layer and id, and leaves out the hidden buildable-area layer", async () => {
     const json = jsonChunk(await exportWorld(buildWorld(data)));
     const names = json.nodes.map((n: { name?: string }) => n.name);
