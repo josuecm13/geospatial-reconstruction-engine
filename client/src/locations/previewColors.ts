@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { COLORS, SCENE_BACKGROUND } from "../scene/palette";
-import { shade } from "../scene/shading";
+import { AMBIENT, LIGHT_DIRECTION, shade } from "../scene/shading";
 
 const UP = shade(new THREE.Vector3(0, 1, 0));
 /** The south-facing wall of a building, the side the raised preview shows. */
@@ -25,7 +25,6 @@ export const PREVIEW_COLORS = {
   hatch: withAlpha(clay(COLORS.ground, UP * EDGE), 0.25),
   water: clay(COLORS.water, UP),
   green: clay(COLORS.green, UP),
-  block: withAlpha(clay(COLORS.buildable, UP), 0.35),
   roadWide: clay(COLORS.roadWide, UP),
   roadNormal: clay(COLORS.roadNormal, UP),
   roadNarrow: clay(COLORS.roadNarrow, UP),
@@ -34,4 +33,15 @@ export const PREVIEW_COLORS = {
   buildingDefaulted: clay(COLORS.buildingDefaulted, UP),
   buildingDefaultedWall: clay(COLORS.buildingDefaulted, WALL),
   buildingEdge: clay(COLORS.buildingMeasured, UP * EDGE * EDGE),
+  /** The ground in a building's shadow: lit by ambient light only. */
+  shadow: clay(COLORS.ground, AMBIENT),
 } as const;
+
+/**
+ * Where the top of a `heightMeters` building's shadow lands relative to its roof, in preview pixels (x right/east,
+ * y down/south): a point at height h casts its shadow `-(l.x, l.z) * h / l.y` metres along the ground, l being the light.
+ */
+export function shadowOffset(heightMeters: number, pxPerMetre: number): [number, number] {
+  const k = (heightMeters * pxPerMetre) / LIGHT_DIRECTION.y;
+  return [-LIGHT_DIRECTION.x * k + 0, -LIGHT_DIRECTION.z * k + 0]; // + 0 turns -0 into 0
+}

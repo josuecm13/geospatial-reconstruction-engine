@@ -4,7 +4,7 @@ import { LruCache, previewKey, TaskQueue } from "./previewScheduler";
 import { previewTransform, projectToPreview, type PreviewTransform } from "./previewTransform";
 import { prefersReducedMotion } from "./flyTo";
 import { buildingHeight } from "../scene/buildingHeight";
-import { PREVIEW_COLORS } from "./previewColors";
+import { PREVIEW_COLORS, shadowOffset } from "./previewColors";
 import { easeOut, groundScale, raiseBuilding, sortFarToNear, type FlatBuilding, type Point, type RaiseView } from "./raisedPreview";
 
 /** A preview is drawn at this size and scaled by CSS: sharp on a 2x screen at the gallery's card width. */
@@ -16,6 +16,8 @@ export const CONCURRENT_PREVIEWS = 3;
 const CACHED_PREVIEWS = 48;
 /** Map-data kept for the raised view: much larger than a picture, so only the few most recent previews keep theirs. */
 const CACHED_MAP_DATA = 6;
+/** Footprint copies a shadow is swept through, from the building to the tip of its shadow. */
+const SHADOW_STEPS = 8;
 const RAISE_MS = 450;
 const METERS_PER_DEGREE_LATITUDE = (6_371_000 * Math.PI) / 180;
 
@@ -48,7 +50,7 @@ function fillPolygons(ctx: CanvasRenderingContext2D, t: PreviewTransform, geomet
   ctx.fillStyle = fill;
   if (stroke) {
     ctx.strokeStyle = stroke;
-    ctx.lineWidth = 0.6;
+    ctx.lineWidth = 0.8;
     ctx.lineJoin = "round";
   }
   for (const geometry of geometries) {
@@ -80,6 +82,23 @@ function strokeRoads(ctx: CanvasRenderingContext2D, t: PreviewTransform, data: M
       });
       ctx.stroke();
     }
+  }
+}
+
+/** Casts each building's shadow on the ground: its footprint swept along the offset the scene's light gives its height. */
+function fillShadows(ctx: CanvasRenderingContext2D, t: PreviewTransform, data: MapData): void {
+  const pxPerMetre = t.scale / METERS_PER_DEGREE_LATITUDE;
+  ctx.fillStyle = PREVIEW_COLORS.shadow;
+  for (const feature of data.buildings.features) {
+    const [dx, dy] = shadowOffset(buildingHeight(feature.properties).height, pxPerMetre);
+    ctx.beginPath();
+    for (let step = 0; step <= SHADOW_STEPS; step++) {
+      ctx.save();
+      ctx.translate((dx * step) / SHADOW_STEPS, (dy * step) / SHADOW_STEPS);
+      for (const polygon of polygonsOf(feature.geometry)) tracePolygon(ctx, t, polygon);
+      ctx.restore();
+    }
+    ctx.fill("nonzero");
   }
 }
 
@@ -140,9 +159,9 @@ function drawScene(ctx: CanvasRenderingContext2D, bbox: BoundingBox, data: MapDa
       const shapes = data.area_features.features.filter((f) => (kind === "water") === (f.properties.kind === "water")).map((f) => f.geometry);
       fillPolygons(ctx, t, shapes, fill);
     }
-    fillPolygons(ctx, t, data.blocks.features.map((f) => f.geometry), PREVIEW_COLORS.block);
     strokeRoads(ctx, t, data);
     if (!view) {
+      fillShadows(ctx, t, data);
       for (const defaulted of [false, true]) {
         const shapes = data.buildings.features.filter((f) => buildingHeight(f.properties).defaulted === defaulted).map((f) => f.geometry);
         fillPolygons(ctx, t, shapes, defaulted ? PREVIEW_COLORS.buildingDefaulted : PREVIEW_COLORS.building, PREVIEW_COLORS.buildingEdge);
@@ -195,7 +214,7 @@ function drawScene(ctx: CanvasRenderingContext2D, bbox: BoundingBox, data: MapDa
 }
 
 /**
- * Draws an area's footprint on a canvas: the rectangle as ground, area features tinted, blocks faint, roads stroked at their
+ * Draws an area's footprint on a canvas: the rectangle as ground, area features tinted, roads stroked at their
  * generated width, buildings filled. With no map-data (the import has not completed) it is the bare, hatched rectangle.
  */
 export function renderPreview(bbox: BoundingBox, data: MapData | null): HTMLCanvasElement {

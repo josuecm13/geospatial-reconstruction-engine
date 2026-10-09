@@ -1,8 +1,8 @@
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
 import { COLORS, SCENE_BACKGROUND } from "../scene/palette";
-import { shade } from "../scene/shading";
-import { PREVIEW_COLORS } from "./previewColors";
+import { AMBIENT, LIGHT_DIRECTION, shade } from "../scene/shading";
+import { PREVIEW_COLORS, shadowOffset } from "./previewColors";
 
 const UP = shade(new THREE.Vector3(0, 1, 0));
 const SOUTH = shade(new THREE.Vector3(0, 0, 1));
@@ -29,8 +29,36 @@ describe("PREVIEW_COLORS", () => {
     expect(lightness(PREVIEW_COLORS.buildingEdge)).toBeLessThan(lightness(PREVIEW_COLORS.buildingWall));
   });
 
-  it("builds the translucent block colour from the buildable palette colour", () => {
-    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hexTimes(COLORS.buildable, UP).slice(i, i + 2), 16));
-    expect(PREVIEW_COLORS.block).toBe(`rgba(${r}, ${g}, ${b}, 0.35)`);
+  it("does not draw the buildable blocks, which the 3D scene hides by default", () => {
+    expect(PREVIEW_COLORS).not.toHaveProperty("block");
+  });
+
+  it("shades the ground in a shadow by ambient light only", () => {
+    expect(PREVIEW_COLORS.shadow).toBe(hexTimes(COLORS.ground, AMBIENT));
+    expect(lightness(PREVIEW_COLORS.shadow)).toBeLessThan(lightness(PREVIEW_COLORS.ground));
+  });
+});
+
+describe("shadowOffset", () => {
+  it("is zero for a zero height", () => {
+    expect(shadowOffset(0, 2)).toEqual([0, 0]);
+  });
+
+  it("points away from the light: east and north (right and up on screen) for the current light", () => {
+    expect(LIGHT_DIRECTION.x).toBeLessThan(0); // light from the west
+    expect(LIGHT_DIRECTION.z).toBeGreaterThan(0); // and the south
+    const [dx, dy] = shadowOffset(10, 1);
+    expect(dx).toBeGreaterThan(0);
+    expect(dy).toBeLessThan(0);
+    expect(dx).toBeCloseTo(-LIGHT_DIRECTION.x * 10 / LIGHT_DIRECTION.y);
+    expect(dy).toBeCloseTo(-LIGHT_DIRECTION.z * 10 / LIGHT_DIRECTION.y);
+  });
+
+  it("scales linearly with height and with the pixels per metre", () => {
+    const [dx, dy] = shadowOffset(5, 1.5);
+    const [dx2, dy2] = shadowOffset(10, 1.5);
+    expect(dx2).toBeCloseTo(2 * dx);
+    expect(dy2).toBeCloseTo(2 * dy);
+    expect(shadowOffset(5, 3)[0]).toBeCloseTo(2 * dx);
   });
 });
