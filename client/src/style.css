@@ -1,5 +1,7 @@
 :root {
   font-family: "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* Eyebrows, numbers, stage names, file names and coordinates. */
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
   color-scheme: dark;
   color: var(--text);
   --header-height: 48px;
@@ -205,9 +207,20 @@ main > .page.landing { padding: var(--header-height) 0 0; background: var(--bg);
 .landing .landing-hood .landing-fact, .landing .landing-hood .arch-card { background: var(--surface-2); }
 .landing .landing-fact h3 { margin: 0 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--link); }
 .landing .landing-fact p { margin: 0; line-height: 1.5; }
-.landing .landing-heading { margin: 40px 0 6px; font-size: clamp(1.375rem, 1.1rem + 1vw, 1.75rem); font-weight: 650; letter-spacing: -0.02em; }
-.landing .landing-heading-row { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
-.landing .landing-heading-row a { color: var(--link); }
+/* Section rhythm: a full-width hairline with a short accent segment on top, generous padding, left-aligned. */
+.landing .landing-section { position: relative; padding: clamp(96px, 12vw, 168px) 0; }
+.landing .landing-section::before {
+  content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(to right, var(--accent) 0 96px, var(--border) 96px);
+}
+.landing .landing-story { padding-bottom: 0; } /* the steps are tall on their own */
+.landing .landing-section-head { margin: 0 0 clamp(40px, 5vw, 72px); max-width: 46rem; }
+.landing .landing-section-eyebrow { margin: 0 0 20px; font: 500 0.8125rem/1 var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); }
+.landing .landing-heading { margin: 0; font-size: clamp(2rem, 1.2rem + 2.6vw, 3.5rem); font-weight: 650; line-height: 1.04; letter-spacing: -0.035em; text-wrap: balance; }
+.landing .landing-section-lede { margin: 20px 0 0; max-width: 34em; font-size: clamp(1.0625rem, 1rem + 0.3vw, 1.25rem); line-height: 1.5; color: var(--text-muted); text-wrap: pretty; }
+.landing .landing-more { display: inline-flex; gap: 8px; margin-top: 20px; font: 500 0.875rem var(--font-mono); color: var(--text); text-decoration: none; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+.landing .landing-more::after { content: "→"; transition: translate 0.2s ease; }
+.landing .landing-more:hover::after { translate: 6px 0; }
 .landing .landing-note { margin: 0 0 16px; opacity: 0.75; min-height: 1.2em; }
 .landing .landing-note[data-state="error"] { color: var(--danger); opacity: 1; font-weight: 600; }
 .landing .landing-arch { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; align-items: start; }
@@ -227,7 +240,7 @@ main > .page.landing { padding: var(--header-height) 0 0; background: var(--bg);
 .landing .arch-card ul { margin: 0 0 12px; padding-left: 18px; }
 .landing .arch-card a { color: var(--link); }
 .landing .arch-hint { margin: 0; opacity: 0.7; }
-.landing .landing-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px; padding-bottom: 56px; }
+.landing .landing-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px; }
 .landing .landing-hero:has(.landing-hero-grid) { display: flex; align-items: center; min-height: 80vh; padding: 40px 0; }
 .landing .landing-hero:has(.landing-hero-grid) .landing-inner { width: 100%; }
 .landing .landing-hero-grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 40px; align-items: center; }
@@ -256,7 +269,7 @@ main > .page.landing { padding: var(--header-height) 0 0; background: var(--bg);
 .landing .landing-skeleton { border-radius: 16px; background: var(--scene-background); animation: scene-building-pulse 1.4s ease-in-out infinite; }
 .landing .landing-skeleton-text { height: 260px; background: color-mix(in oklch, var(--text) 8%, transparent); }
 .landing .landing-skeleton-stage { height: min(70vh, 560px); }
-.landing .landing-story-grid { display: grid; grid-template-columns: minmax(0, 6fr) minmax(0, 5fr); gap: 40px; align-items: start; }
+.landing .landing-story-grid { margin-top: 24px; display: grid; grid-template-columns: minmax(0, 6fr) minmax(0, 5fr); gap: 40px; align-items: start; }
 .landing .landing-story-stage { position: sticky; top: calc(var(--header-height) + 72px); padding: 16px 0; }
 .landing .landing-stage-story { height: min(70vh, 560px); }
 .landing .landing-steps { margin: 0; padding: 0; list-style: none; }
@@ -265,19 +278,13 @@ main > .page.landing { padding: var(--header-height) 0 0; background: var(--bg);
 .landing .landing-step h3 { margin: 0 0 12px; font-size: clamp(1.875rem, 1.3rem + 2vw, 2.75rem); font-weight: 650; line-height: 1.1; letter-spacing: -0.025em; }
 .landing .landing-step p { margin: 0; font-size: clamp(1.0625rem, 1rem + 0.5vw, 1.25rem); line-height: 1.5; }
 .landing .landing-step .landing-step-number { margin-bottom: 8px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--link); }
-.landing .landing-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
-.landing .landing-tile { position: relative; background: var(--surface-1); border: 1px solid var(--border); border-radius: 18px; corner-shape: squircle; padding: 20px; display: flex; flex-direction: column; gap: 8px; }
-.landing .landing-tile h4 { margin: 0; font-size: 18px; }
-.landing .landing-tile p { margin: 0; line-height: 1.5; flex: 1; }
-.landing .landing-tile a { color: var(--link); font-weight: 600; }
-.landing .landing-doing { padding-bottom: 24px; }
 .landing .landing-turn { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 24px; padding-top: 8px; padding-bottom: 56px; }
 .landing .landing-turn .landing-lede { margin-bottom: 0; }
 .landing .landing-hood { background: var(--surface-1); padding-bottom: 48px; }
 .landing .landing-hood .landing-facts { padding-top: 16px; padding-bottom: 24px; }
 @media (max-width: 899px) {
   .landing .landing-hero:has(.landing-hero-grid) { min-height: 0; }
-  .landing .landing-hero-grid, .landing .landing-story-grid, .landing .landing-tiles { grid-template-columns: 1fr; }
+  .landing .landing-hero-grid, .landing .landing-story-grid { grid-template-columns: 1fr; }
   .landing .landing-stage-hero { height: 45vh; }
   /* The stage stays pinned at the top while the steps scroll under it. */
   .landing .landing-story-stage { top: calc(var(--header-height) + 56px); z-index: 1; padding: 8px 0; background: var(--bg); }
@@ -294,6 +301,98 @@ main > .page.landing { padding: var(--header-height) 0 0; background: var(--bg);
   .landing .landing-facts { grid-template-columns: 1fr; gap: 16px; }
   .landing .landing-inner { padding: 0 16px; }
 }
+
+/* --- The capability bento: visuals drawn from the featured place's own data (landing/bento.ts) ---
+   Blends of two near-neutral tokens use `in oklab`: in oklch their hue is powerless and Chrome reads it as 0, a red tint. */
+@property --lift-scroll { syntax: "<number>"; inherits: true; initial-value: 1; }
+@property --lift-hover { syntax: "<number>"; inherits: true; initial-value: 0; }
+.landing .bento { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(300px, auto)); gap: 16px; }
+.landing .bento-tile { position: relative; overflow: hidden; display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 20px; corner-shape: squircle; background: var(--surface-1); }
+.landing .bento-route { grid-column: span 4; grid-row: span 2; min-height: 600px; justify-content: flex-end; }
+.landing .bento-walk, .landing .bento-export { grid-column: span 2; }
+.landing .bento-export { flex-direction: column-reverse; justify-content: flex-end; }
+.landing .bento-copy { position: relative; z-index: 1; padding: 28px 28px 24px; }
+.landing .bento-route .bento-copy { padding-top: 120px; background: linear-gradient(to top, var(--surface-1) 35%, transparent); }
+.landing .bento-index { font: 500 0.8125rem/1 var(--font-mono); letter-spacing: 0.1em; color: var(--text-muted); }
+.landing .bento-title { margin: 12px 0 8px; font-size: clamp(1.5rem, 1.1rem + 1vw, 2rem); font-weight: 650; line-height: 1.1; letter-spacing: -0.03em; text-wrap: balance; }
+.landing .bento-body { margin: 0; max-width: 28em; line-height: 1.5; color: var(--text-muted); text-wrap: pretty; }
+.landing .bento-link { display: inline-flex; align-items: center; gap: 10px; margin-top: 20px; padding-bottom: 4px; border-bottom: 1px solid var(--border); font-weight: 600; color: var(--text); text-decoration: none; }
+.landing .bento-link:hover { border-bottom-color: var(--accent); }
+.landing .bento-arrow { display: inline-block; font-family: var(--font-mono); color: var(--accent); transition: translate 0.2s ease; }
+.landing .bento-link:hover .bento-arrow, .landing .bento-link:focus-visible .bento-arrow { translate: 6px 0; }
+
+.landing .bento-visual { position: relative; height: 200px; }
+.landing .bento-route .bento-visual { position: absolute; inset: 0; height: auto; }
+.landing .bento-visual[data-state="error"]::after { content: "Preview unavailable"; position: absolute; inset: 0; display: grid; place-items: center; font: 0.75rem var(--font-mono); color: var(--text-muted); }
+.landing .bento-svg { display: block; width: 100%; height: 100%; }
+.landing .bento-bounds { fill: none; stroke: color-mix(in oklab, var(--text) 22%, transparent); stroke-dasharray: 6 5; }
+.landing .bento-footprint { fill: color-mix(in oklab, var(--text) 9%, transparent); stroke: none; }
+.landing .bento-road { fill: none; stroke: var(--text-muted); stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.landing .bento-road-narrow { stroke-width: 0.8px; opacity: 0.3; }
+.landing .bento-road-normal { stroke-width: 1.2px; opacity: 0.5; }
+.landing .bento-road-wide { stroke-width: 1.8px; opacity: 0.75; }
+.landing .bento-route-glow, .landing .bento-route-line { fill: none; stroke: var(--accent); stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1 2; vector-effect: non-scaling-stroke; }
+.landing .bento-route-glow { stroke-width: 10px; opacity: 0.18; }
+.landing .bento-route-line { stroke-width: 3.5px; }
+.landing .bento-marker { stroke-width: 2.5px; }
+.landing .bento-marker-start { fill: var(--bg); stroke: var(--text); }
+.landing .bento-marker-end { fill: var(--accent); stroke: var(--bg); }
+.landing .bento-route-label { position: absolute; top: 24px; right: 28px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; font-family: var(--font-mono); }
+.landing .bento-route-kicker { font-size: 0.75rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-muted); }
+.landing .bento-route-label strong { font-size: clamp(1.5rem, 1.1rem + 1.2vw, 2.25rem); font-weight: 500; letter-spacing: -0.03em; color: var(--accent); }
+
+/* The street: stone facades converging on a vanishing point. Tones come from the tokens; heights come from the data. */
+.landing .wt-sky-near { stop-color: color-mix(in oklab, var(--accent) 24%, var(--surface-1)); }
+.landing .wt-sky-far { stop-color: var(--surface-1); }
+.landing .wt-ground { fill: var(--surface-1); }
+.landing .wt-pavement { fill: var(--surface-3); }
+.landing .wt-road { fill: color-mix(in oklab, var(--surface-1) 55%, var(--bg)); }
+.landing .wt-centre { fill: color-mix(in oklab, var(--text) 50%, transparent); }
+.landing .wt-facade { fill: color-mix(in oklab, var(--text) 64%, var(--surface-2)); }
+.landing .wt-end { fill: color-mix(in oklab, var(--text) 38%, var(--surface-1)); }
+.landing .wt-assumed .wt-facade { fill: color-mix(in oklab, var(--text-muted) 48%, var(--surface-2)); }
+.landing .wt-assumed .wt-end { fill: color-mix(in oklab, var(--text-muted) 30%, var(--surface-1)); }
+.landing .wt-floor { fill: none; stroke: color-mix(in oklab, var(--bg) 50%, transparent); stroke-width: 0.6px; }
+.landing .wt-step { fill: var(--accent); }
+
+/* The exploded stack: three isometric planes that pull apart on hover or focus and as the tile scrolls into view. */
+.landing .stack-layer { --lift: calc(14px + 48px * max(var(--lift-scroll), var(--lift-hover))); transform: translateY(calc(var(--i) * var(--lift) * -1)); }
+.landing .stack-plane { fill: color-mix(in oklab, var(--surface-3) 80%, transparent); stroke: var(--text-muted); stroke-width: 1px; vector-effect: non-scaling-stroke; }
+.landing .stack-plane-clear { fill: color-mix(in oklab, var(--surface-2) 60%, transparent); stroke: color-mix(in oklab, var(--text) 40%, transparent); }
+.landing .stack-layer .bento-road-narrow { stroke-width: 0.5px; }
+.landing .stack-layer .bento-road-normal { stroke-width: 0.8px; }
+.landing .stack-layer .bento-road-wide { stroke-width: 1.2px; }
+.landing .stack-layer-roads .bento-road { stroke: var(--text); }
+.landing .stack-layer-buildings .bento-footprint { fill: color-mix(in oklab, var(--text) 85%, transparent); }
+.landing .stack-label { font: 500 9px var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; fill: var(--text-muted); }
+.landing .bento-chip { position: absolute; right: 24px; top: 24px; z-index: 1; display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); font: 500 0.75rem var(--font-mono); color: var(--text); }
+.landing .bento-chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+@media (max-width: 899px) {
+  .landing .bento { grid-template-columns: 1fr; grid-template-rows: none; }
+  .landing .bento-route, .landing .bento-walk, .landing .bento-export { grid-column: auto; grid-row: auto; }
+  .landing .bento-route { min-height: 0; justify-content: flex-start; }
+  .landing .bento-route .bento-visual { position: relative; height: 340px; }
+  .landing .bento-route .bento-copy { padding-top: 28px; background: none; }
+  .landing .bento-visual { height: 240px; }
+  .landing .bento-export { flex-direction: column; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes pulse-block { 50% { opacity: 0.45; } }
+  .landing .bento-visual[data-state="loading"] { background: color-mix(in oklab, var(--text) 4%, transparent); animation: pulse-block 1.4s ease-in-out infinite; }
+  /* The route draws itself as its tile scrolls into view; its end marker lands last. */
+  @keyframes route-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+  @keyframes marker-in { from { opacity: 0; scale: 0.3; } }
+  .landing .bento-route-glow, .landing .bento-route-line { animation: route-draw linear both; animation-timeline: view(); animation-range: entry 30% cover 45%; }
+  .landing .bento-marker { transform-box: fill-box; transform-origin: center; animation: marker-in linear both; animation-timeline: view(); animation-range: entry 25% entry 45%; }
+  .landing .bento-marker-end { animation-range: cover 40% cover 50%; }
+  /* Footsteps light up one after another, away from the viewer. */
+  @keyframes step-forward { 0%, 100% { opacity: 0.15; } 30% { opacity: 1; } }
+  .landing .wt-step { animation: step-forward 2.8s ease-in-out infinite; animation-delay: calc(var(--k) * 0.22s); }
+  /* The stack pulls apart with the scroll, or on hover and focus. */
+  @keyframes pull-apart { from { --lift-scroll: 0; } }
+  .landing .bento-export { animation: pull-apart linear both; animation-timeline: view(); animation-range: entry 20% cover 45%; transition: --lift-hover 0.5s cubic-bezier(0.2, 0.8, 0.2, 1); }
+}
+.landing .bento-export:hover, .landing .bento-export:focus-within { --lift-hover: 1; }
 
 /* --- Locations gallery: the card (shared with the landing page) and the page's own layout under .locations --- */
 .visually-hidden {
@@ -400,7 +499,7 @@ main > .page.landing { padding: var(--header-height) 0 0; background: var(--bg);
   /* Fade and rise as they enter the page's viewport; the end state is whatever the element's own style is. */
   @keyframes reveal-rise { from { opacity: 0; translate: 0 24px; } }
   @keyframes reveal-fade { from { opacity: 0; } }
-  .landing .landing-heading, .landing .landing-tile, .landing .landing-fact, .landing .arch-figure, .landing .arch-card, .landing .landing-cards > *,
+  .landing .landing-section-head, .landing .bento-tile, .landing .landing-fact, .landing .arch-figure, .landing .arch-card, .landing .landing-cards > *,
   .locations-grid > li {
     --stagger: min(calc((sibling-index() - 1) * 6%), 30%);
     animation: reveal-rise linear both; animation-timeline: view();
@@ -412,14 +511,14 @@ main > .page.landing { padding: var(--header-height) 0 0; background: var(--bg);
 
 /* --- Cursor spotlight (ui/spotlight.ts sets --x and --y on the hovered card) --- */
 @media (hover: hover) {
-  .location-card::before, .landing-tile::before, .landing-fact::before, .arch-card::before {
+  .location-card::before, .bento-tile::before, .landing-fact::before, .arch-card::before {
     content: ""; position: absolute; inset: 0; border-radius: inherit; corner-shape: inherit; pointer-events: none; opacity: 0;
     background: radial-gradient(420px circle at var(--x, 50%) var(--y, 50%), color-mix(in oklch, var(--accent) 14%, transparent), transparent 60%);
   }
-  .location-card:hover::before, .landing-tile:hover::before, .landing-fact:hover::before, .arch-card:hover::before { opacity: 1; }
+  .location-card:hover::before, .bento-tile:hover::before, .landing-fact:hover::before, .arch-card:hover::before { opacity: 1; }
 }
 @media (hover: hover) and (prefers-reduced-motion: no-preference) {
-  .location-card::before, .landing-tile::before, .landing-fact::before, .arch-card::before { transition: opacity 240ms ease; }
+  .location-card::before, .bento-tile::before, .landing-fact::before, .arch-card::before { transition: opacity 240ms ease; }
 }
 
 @media (prefers-reduced-motion: no-preference) {

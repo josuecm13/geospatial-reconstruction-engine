@@ -3,9 +3,11 @@ import { useErrorReporter } from "../errors/errorReporter";
 import { IMPORT_MESSAGES } from "../importing/errorMessages";
 import { CurrentArea } from "../importing/recentImports";
 import { renderArchitecture } from "../landing/architecture";
+import { renderBento } from "../landing/bento";
 import type { FeaturedStage } from "../landing/featuredStage";
 import { pickFeatured } from "../landing/featured";
 import { importTarget } from "../landing/importTarget";
+import { shareMapData } from "../landing/sharedMapData";
 import { STORY_STEPS } from "../landing/storySteps";
 import { renderLocationCard } from "../locations/card";
 import { formatCentre, toCard } from "../locations/cardModel";
@@ -31,12 +33,6 @@ const link = (href: string, text: string, className?: string): HTMLAnchorElement
   return a;
 };
 
-const TILES: readonly [string, string][] = [
-  ["Walk through it", "Drop to street level and move through the place, stopped by its buildings: press Walk."],
-  ["Route across it", "Pick two points and the engine finds the way along the real street graph: click two points."],
-  ["Export it as glTF", "Take the whole model into a game engine or a modelling tool: Download glTF."],
-];
-
 const FACTS: readonly [string, string][] = [
   ["What goes in", "A rectangle of up to 1 km² on the OpenStreetMap map, fetched live from Overpass."],
   [
@@ -45,6 +41,28 @@ const FACTS: readonly [string, string][] = [
   ],
   ["What it is for", "Games, simulation, and art: places you can query, fly over, walk through, and export as glTF."],
 ];
+
+/**
+ * The head every section opens with: a mono eyebrow (its number is filled in by `renumber`, in page order), a display
+ * heading, and at most one sentence of lede.
+ */
+const sectionHead = (name: string, title: string, lede?: string): HTMLElement => {
+  const head = element("header", "landing-section-head");
+  const eyebrow = element("p", "landing-section-eyebrow", name);
+  eyebrow.dataset.name = name;
+  head.append(eyebrow, element("h3", "landing-heading", title));
+  if (lede) head.append(element("p", "landing-section-lede", lede));
+  return head;
+};
+
+/** Numbers the visible sections' eyebrows `01 — NAME`, `02 — NAME`, ... in page order, skipping hidden ones. */
+const renumber = (page: HTMLElement): void => {
+  let n = 0;
+  for (const eyebrow of page.querySelectorAll<HTMLElement>(".landing-section-eyebrow")) {
+    if (eyebrow.closest("[hidden]")) continue;
+    eyebrow.textContent = `${String(++n).padStart(2, "0")} — ${eyebrow.dataset.name}`;
+  }
+};
 
 /** Runs `callback` once the browser is idle after first paint; returns a canceller. */
 const afterPaint = (callback: () => void): (() => void) => {
@@ -73,7 +91,9 @@ const previewTarget = (area: ImportArea): PreviewTarget => ({ id: area.id, impor
  * the places built so far, the way in to a new import, and the pipeline for engineers.
  */
 export const mount: Mount<{ page: "landing" }> = (el, ctx) => {
-  const { api, router } = ctx;
+  const { router } = ctx;
+  const shared = shareMapData(ctx.api);
+  const api = shared.api; // the featured place's map-data is fetched once for the preview, the stage and the capability visuals
   let disposed = false;
   let areas: ImportArea[] = [];
   let stage: FeaturedStage | null = null;
@@ -82,7 +102,7 @@ export const mount: Mount<{ page: "landing" }> = (el, ctx) => {
   const previews = new PreviewLoader(api);
 
   const page = element("div", "page landing");
-  cleanups.push(attachSpotlight(page, ".location-card, .landing-tile, .landing-fact, .arch-card"));
+  cleanups.push(attachSpotlight(page, ".location-card, .bento-tile, .arch-card"));
   const importButton = (text: string, primary: boolean) => {
     const button = element("button", primary ? "landing-button primary" : "landing-button", text);
     button.type = "button";
@@ -179,7 +199,7 @@ export const mount: Mount<{ page: "landing" }> = (el, ctx) => {
     hero.replaceChildren(heroInner);
 
     // --- the story: a sticky stage beside four steps that scroll ---
-    const story = element("section", "landing-story");
+    const story = element("section", "landing-section landing-story");
     const storyInner = element("div", "landing-inner landing-story-grid");
     const storyStage = element("div", "landing-stage landing-stage-story");
     storyStage.append(previewHost(`A map of ${label}`));
@@ -195,7 +215,7 @@ export const mount: Mount<{ page: "landing" }> = (el, ctx) => {
     });
     storyInner.append(stageColumn, steps);
     const storyHeading = element("div", "landing-inner");
-    storyHeading.append(element("h3", "landing-heading", "How a place is rebuilt"));
+    storyHeading.append(sectionHead("How it is built", "How a place is rebuilt", "Four steps from an OpenStreetMap rectangle to a model you can walk through."));
     story.append(storyHeading, storyInner);
 
     const setActive = (index: number) => {
@@ -216,26 +236,26 @@ export const mount: Mount<{ page: "landing" }> = (el, ctx) => {
       cleanups.push(() => observer.disconnect());
     }
 
-    // --- what you can do with it ---
-    const doing = element("section", "landing-inner landing-doing");
-    doing.append(element("h3", "landing-heading", "What you can do with it"));
-    const tiles = element("div", "landing-tiles");
-    for (const [title, body] of TILES) {
-      const tile = element("div", "landing-tile");
-      tile.append(element("h4", undefined, title), element("p", undefined, body), link(sceneHref, "Open the scene"));
-      tiles.append(tile);
-    }
-    doing.append(tiles);
+    // --- what you can do with it: a bento of visuals drawn from the featured place ---
+    const doing = element("section", "landing-section landing-doing");
+    const doingInner = element("div", "landing-inner");
+    const bento = element("div", "bento");
+    doingInner.append(sectionHead("Capabilities", "What you can do with it", "Route across it, walk through it, take it away as glTF."), bento);
+    doing.append(doingInner);
+    cleanups.push(renderBento(bento, { api, areaId: area.id, bbox: area.bbox, sceneHref }));
 
     // --- places built so far: the gallery's cards ---
-    const recent = element("section", "landing-inner");
+    const recent = element("section", "landing-section landing-recent");
+    const recentInner = element("div", "landing-inner");
     const grid = element("div", "landing-cards");
-    const row = element("div", "landing-heading-row");
-    row.append(element("h3", "landing-heading", "Places built so far"), link("/locations", "See all locations"));
-    recent.append(row, grid);
+    const head = sectionHead("Locations", "Places built so far");
+    head.append(link("/locations", "See all locations", "landing-more"));
+    recentInner.append(head, grid);
+    recent.append(recentInner);
     grid.replaceChildren(...areas.map((a) => renderLocationCard(toCard(a), { previews })));
 
     journey.replaceChildren(story, doing, recent);
+    renumber(page);
 
     // The 2D previews stand in for the stage until the 3D one is ready, and stay if it can't be built.
     for (const slot of [heroStage, storyStage]) previews.attach(slot.querySelector<HTMLElement>(".landing-stage-fallback")!, previewTarget(area));
@@ -265,8 +285,13 @@ export const mount: Mount<{ page: "landing" }> = (el, ctx) => {
       if (disposed) return;
       areas = list;
       const featured = pickFeatured(list, configured);
-      if (featured) renderFeatured(featured);
-      else renderInvitation();
+      if (featured) {
+        shared.share(featured.id);
+        renderFeatured(featured);
+      } else {
+        renderInvitation();
+      }
+      renumber(page);
     },
     (error) => {
       if (disposed) return;
