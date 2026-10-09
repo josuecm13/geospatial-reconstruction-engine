@@ -1,5 +1,6 @@
 import * as maplibregl from "maplibre-gl";
 import type { BoundaryProperties, FeatureCollection, Geometry, Position } from "../api/types";
+import { MAP_COLORS } from "../views/mapColors";
 import { closeRing, simplifyFreehand } from "./boundaryGeometry";
 
 export type TraceMode = "vertices" | "freehand";
@@ -42,21 +43,21 @@ export class BoundaryTool {
       type: "fill",
       source: TRACE_SOURCE,
       filter: ["==", ["geometry-type"], "Polygon"],
-      paint: { "fill-color": "#f28c28", "fill-opacity": 0.15 },
+      paint: { "fill-color": MAP_COLORS.boundaryDraft, "fill-opacity": 0.15 },
     });
     map.addLayer({
       id: "boundary-trace-line",
       type: "line",
       source: TRACE_SOURCE,
       layout: { "line-cap": "round", "line-join": "round" },
-      paint: { "line-color": "#f28c28", "line-width": 3 },
+      paint: { "line-color": MAP_COLORS.boundaryDraft, "line-width": 3 },
     });
     map.addLayer({
       id: "boundary-trace-points",
       type: "circle",
       source: TRACE_SOURCE,
       filter: ["==", ["geometry-type"], "Point"],
-      paint: { "circle-radius": 4, "circle-color": "#fff", "circle-stroke-color": "#f28c28", "circle-stroke-width": 2 },
+      paint: { "circle-radius": 4, "circle-color": MAP_COLORS.handleFill, "circle-stroke-color": MAP_COLORS.boundaryDraft, "circle-stroke-width": 2 },
     });
   }
 
@@ -228,13 +229,13 @@ export class SavedBoundaryLayers {
       id: "boundary-saved-fill",
       type: "fill",
       source: SAVED_SOURCE,
-      paint: { "fill-color": "#7b3fb3", "fill-opacity": ["case", ["get", "selected"], 0.18, 0] },
+      paint: { "fill-color": MAP_COLORS.boundarySaved, "fill-opacity": ["case", ["get", "selected"], 0.18, 0] },
     });
     map.addLayer({
       id: "boundary-saved-line",
       type: "line",
       source: SAVED_SOURCE,
-      paint: { "line-color": "#7b3fb3", "line-width": ["case", ["get", "selected"], 3, 1] },
+      paint: { "line-color": MAP_COLORS.boundarySaved, "line-width": ["case", ["get", "selected"], 3, 1] },
     });
   }
 

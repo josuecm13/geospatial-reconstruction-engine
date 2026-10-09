@@ -14,17 +14,23 @@ const sources = [
     .map((name) => join(sceneDir, name)),
   join(viewsDir, "sceneView.ts"),
   join(__dirname, "..", "landing", "featuredStage.ts"),
+  // The 2D map's overlay colours live in views/mapColors.ts.
+  join(viewsDir, "mapDataLayers.ts"),
+  join(__dirname, "..", "boundaries", "boundaryTool.ts"),
+  join(__dirname, "..", "importing", "rectangleTool.ts"),
 ];
 
 /** A hex colour in a string (`#rgb`, `#rrggbb`), a `0x` colour, or a material built outside the palette. */
-const FORBIDDEN = [/["'`]#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?["'`]/, /\b0x[0-9a-fA-F]{6}\b/, /new THREE\.\w*Material\(/];
+const FORBIDDEN = [/["'`]#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?["'`]/, /\b0x[0-9a-fA-F]{6}\b/, /new THREE\.\w*Material\(/, /\b(?:rgba?|hsla?)\(/];
 
-describe("palette.ts is the only source of scene colors", () => {
+describe("palette.ts is the only source of scene colors, and mapColors.ts of the 2D map's", () => {
   it("covers the scene sources and the scene view", () => {
     expect(sources.length).toBeGreaterThan(10);
     expect(sources.some((path) => path.endsWith("sceneView.ts"))).toBe(true);
     expect(sources.some((path) => path.endsWith("featuredStage.ts"))).toBe(true);
     expect(sources.some((path) => path.endsWith("palette.ts"))).toBe(false);
+    for (const name of ["mapDataLayers.ts", "boundaryTool.ts", "rectangleTool.ts"]) expect(sources.some((path) => path.endsWith(name)), name).toBe(true);
+    expect(sources.some((path) => path.endsWith("mapColors.ts"))).toBe(false);
   });
 
   it.each(sources)("%s has no color literal or material of its own", (path) => {
