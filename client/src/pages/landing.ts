@@ -11,6 +11,7 @@ import { renderLocationCard } from "../locations/card";
 import { formatCentre, toCard } from "../locations/cardModel";
 import { PreviewLoader, type PreviewTarget } from "../locations/preview";
 import { attachSpotlight } from "../ui/spotlight";
+import { claimPlace } from "../ui/viewTransition";
 import type { Mount } from "./types";
 
 const RECENT_LIMIT = 6;
@@ -164,7 +165,12 @@ export const mount: Mount<{ page: "landing" }> = (el, ctx) => {
     heroStage.append(previewHost(`A map of ${label}`));
     const text = element("div", "landing-hero-text");
     const actions = element("div", "landing-actions");
-    actions.append(link(sceneHref, "Explore this place", "landing-button primary"), importButton("Rebuild your own", false));
+    const explore = link(sceneHref, "Explore this place", "landing-button primary");
+    // The hero stage morphs into the explore view; the name goes on before the router's delegated click handler navigates.
+    explore.addEventListener("click", (event) => {
+      if (event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) claimPlace(heroStage);
+    });
+    actions.append(explore, importButton("Rebuild your own", false));
     text.append(element("p", "landing-eyebrow", "Rebuilt from OpenStreetMap"), element("h2", undefined, label));
     if (area.place_context) text.append(element("p", "landing-context", area.place_context));
     text.append(element("p", "landing-lede", "A city block by block: streets with lanes, buildable blocks, buildings at their height."), actions);

@@ -10,6 +10,7 @@ import { SceneLoader } from "../scene/sceneLoader";
 import { SelectionStore, type Scope } from "../state/selection";
 import { MapDataLayers } from "../views/mapDataLayers";
 import { createMapView } from "../views/mapView";
+import { claimPlace } from "../ui/viewTransition";
 import type { SceneView } from "../views/sceneView";
 import type { Mount } from "./types";
 
@@ -43,6 +44,9 @@ export const mount: Mount<ExploreRoute> = (el, ctx) => {
     </aside>
     <section id="scene-view" class="view" aria-label="3D scene" hidden></section>`;
   const pick = (id: string) => el.querySelector<HTMLElement>(`#${id}`)!;
+  // The view this page opens with takes the name a card's preview or the hero stage left with, so the swap morphs into it.
+  // The page host releases the name once the transition is over.
+  claimPlace(pick(start.view === "scene" ? "scene-view" : "map-view"));
 
   let disposed = false;
   // True while the page is moving the selection to match the route; selection changes made then are not user changes.

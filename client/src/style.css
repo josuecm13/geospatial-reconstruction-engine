@@ -38,6 +38,7 @@ body { display: flex; flex-direction: column; background: var(--bg); timeline-sc
   border-bottom: 1px solid var(--border);
   color: var(--text);
 }
+.app-header { view-transition-name: app-header; } /* the header stays put while the page under it swaps */
 .app-header h1 { font-size: 15px; font-weight: 600; margin: 0; }
 .view-tabs { display: flex; gap: 4px; }
 .view-tabs a {
@@ -422,4 +423,20 @@ main > .page.landing { padding: var(--header-height) 0 0; background: var(--bg);
 @media (prefers-reduced-motion: no-preference) {
   @keyframes cta-spin { to { --angle: 360deg; } }
   .landing .landing-button.primary::before { animation: cta-spin 6s linear infinite; }
+}
+
+/* --- Page swaps (View Transitions, started by pages/host.ts): the page slides a little and fades, by direction; a shared
+   "place" element (a card's preview or the hero stage, then the explore view) morphs between its two boxes. --- */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes page-out-left { to { opacity: 0; translate: -2% 0; } }
+  @keyframes page-in-from-right { from { opacity: 0; translate: 2% 0; } }
+  @keyframes page-out-right { to { opacity: 0; translate: 2% 0; } }
+  @keyframes page-in-from-left { from { opacity: 0; translate: -2% 0; } }
+  :root:active-view-transition-type(forward)::view-transition-old(root) { animation: page-out-left 200ms ease-in both; }
+  :root:active-view-transition-type(forward)::view-transition-new(root) { animation: page-in-from-right 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+  :root:active-view-transition-type(back)::view-transition-old(root) { animation: page-out-right 200ms ease-in both; }
+  :root:active-view-transition-type(back)::view-transition-new(root) { animation: page-in-from-left 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+  ::view-transition-group(place) { animation-duration: 450ms; animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1); }
+  /* Fill the morphing box instead of stretching the old and new pictures between the two aspect ratios. */
+  ::view-transition-old(place), ::view-transition-new(place) { height: 100%; width: 100%; object-fit: cover; }
 }
