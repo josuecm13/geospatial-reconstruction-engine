@@ -4,6 +4,7 @@ import { LruCache, previewKey, TaskQueue } from "./previewScheduler";
 import { previewTransform, projectToPreview, type PreviewTransform } from "./previewTransform";
 import { prefersReducedMotion } from "./flyTo";
 import { buildingHeight } from "../scene/buildingHeight";
+import { PREVIEW_COLORS } from "./previewColors";
 import { easeOut, groundScale, raiseBuilding, sortFarToNear, type FlatBuilding, type Point, type RaiseView } from "./raisedPreview";
 
 /** A preview is drawn at this size and scaled by CSS: sharp on a 2x screen at the gallery's card width. */
@@ -17,21 +18,6 @@ const CACHED_PREVIEWS = 48;
 const CACHED_MAP_DATA = 6;
 const RAISE_MS = 450;
 const METERS_PER_DEGREE_LATITUDE = (6_371_000 * Math.PI) / 180;
-
-const COLORS = {
-  background: ["#1b252d", "#26343f"],
-  ground: "#2f414e",
-  edge: "rgba(244, 241, 234, 0.35)",
-  water: "rgba(79, 148, 207, 0.9)",
-  green: "rgba(77, 125, 88, 0.85)",
-  block: "rgba(201, 179, 122, 0.2)",
-  roadWide: "#e0a33a",
-  roadNormal: "#f4f1ea",
-  roadNarrow: "#93a1ac",
-  building: "#a08cc4",
-  buildingEdge: "#2a1f3d",
-  buildingWall: "#7d6aa3",
-} as const;
 
 // --- drawing ---
 
@@ -83,7 +69,7 @@ function strokeRoads(ctx: CanvasRenderingContext2D, t: PreviewTransform, data: M
   const roads = [...data.road_segments.features].sort((a, b) => order[a.properties.lane_type] - order[b.properties.lane_type]);
   for (const road of roads) {
     const { lane_type: laneType, width_meters: widthMeters } = road.properties;
-    ctx.strokeStyle = laneType === "wide" ? COLORS.roadWide : laneType === "narrow" ? COLORS.roadNarrow : COLORS.roadNormal;
+    ctx.strokeStyle = laneType === "wide" ? PREVIEW_COLORS.roadWide : laneType === "narrow" ? PREVIEW_COLORS.roadNarrow : PREVIEW_COLORS.roadNormal;
     ctx.lineWidth = Math.max(1.3, (widthMeters / METERS_PER_DEGREE_LATITUDE) * t.scale);
     for (const line of linesOf(road.geometry)) {
       ctx.beginPath();
@@ -97,33 +83,35 @@ function strokeRoads(ctx: CanvasRenderingContext2D, t: PreviewTransform, data: M
   }
 }
 
+/** A building as the raised view draws it: `defaulted` when its height was assumed, which the scene shows in a cooler grey. */
+interface ClayBuilding extends FlatBuilding {
+  defaulted: boolean;
+}
+
 /** Everything the raised view needs, projected to flat canvas pixels once so a frame only applies the tilt. */
 export interface RaisePrep {
   bbox: BoundingBox;
   data: MapData;
-  buildings: FlatBuilding[];
+  buildings: ClayBuilding[];
   pxPerMetre: number;
 }
 
 /** Pre-projects the buildings' footprints (outer rings) to canvas space, with their heights, sorted far to near. */
 export function prepareRaise(bbox: BoundingBox, data: MapData): RaisePrep {
   const t = previewTransform(bbox, PREVIEW_WIDTH, PREVIEW_HEIGHT, PADDING);
-  const buildings: FlatBuilding[] = [];
+  const buildings: ClayBuilding[] = [];
   for (const feature of data.buildings.features) {
-    const { height } = buildingHeight(feature.properties);
+    const { height, defaulted } = buildingHeight(feature.properties);
     for (const polygon of polygonsOf(feature.geometry)) {
       if (!polygon[0]?.length) continue;
-      buildings.push({ ring: polygon[0].map(([lon, lat]) => projectToPreview(t, lon, lat) as Point), height });
+      buildings.push({ ring: polygon[0].map(([lon, lat]) => projectToPreview(t, lon, lat) as Point), height, defaulted });
     }
   }
   return { bbox, data, buildings: sortFarToNear(buildings), pxPerMetre: t.scale / METERS_PER_DEGREE_LATITUDE };
 }
 
 function drawScene(ctx: CanvasRenderingContext2D, bbox: BoundingBox, data: MapData | null, raise: { prep: RaisePrep; t: number } | null): void {
-  const backdrop = ctx.createLinearGradient(0, 0, PREVIEW_WIDTH, PREVIEW_HEIGHT);
-  backdrop.addColorStop(0, COLORS.background[0]);
-  backdrop.addColorStop(1, COLORS.background[1]);
-  ctx.fillStyle = backdrop;
+  ctx.fillStyle = PREVIEW_COLORS.background;
   ctx.fillRect(0, 0, PREVIEW_WIDTH, PREVIEW_HEIGHT);
 
   const pivotY = PREVIEW_HEIGHT / 2;
@@ -140,7 +128,7 @@ function drawScene(ctx: CanvasRenderingContext2D, bbox: BoundingBox, data: MapDa
   const t = previewTransform(bbox, PREVIEW_WIDTH, PREVIEW_HEIGHT, PADDING);
   const [west, north] = projectToPreview(t, bbox.min_longitude, bbox.max_latitude);
   const [east, south] = projectToPreview(t, bbox.max_longitude, bbox.min_latitude);
-  ctx.fillStyle = COLORS.ground;
+  ctx.fillStyle = PREVIEW_COLORS.ground;
   ctx.fillRect(west, north, east - west, south - north);
 
   ctx.save();
@@ -148,15 +136,20 @@ function drawScene(ctx: CanvasRenderingContext2D, bbox: BoundingBox, data: MapDa
   ctx.rect(west, north, east - west, south - north);
   ctx.clip();
   if (data) {
-    for (const [kind, fill] of [["water", COLORS.water], [null, COLORS.green]] as const) {
+    for (const [kind, fill] of [["water", PREVIEW_COLORS.water], [null, PREVIEW_COLORS.green]] as const) {
       const shapes = data.area_features.features.filter((f) => (kind === "water") === (f.properties.kind === "water")).map((f) => f.geometry);
       fillPolygons(ctx, t, shapes, fill);
     }
-    fillPolygons(ctx, t, data.blocks.features.map((f) => f.geometry), COLORS.block);
+    fillPolygons(ctx, t, data.blocks.features.map((f) => f.geometry), PREVIEW_COLORS.block);
     strokeRoads(ctx, t, data);
-    if (!view) fillPolygons(ctx, t, data.buildings.features.map((f) => f.geometry), COLORS.building, COLORS.buildingEdge);
+    if (!view) {
+      for (const defaulted of [false, true]) {
+        const shapes = data.buildings.features.filter((f) => buildingHeight(f.properties).defaulted === defaulted).map((f) => f.geometry);
+        fillPolygons(ctx, t, shapes, defaulted ? PREVIEW_COLORS.buildingDefaulted : PREVIEW_COLORS.building, PREVIEW_COLORS.buildingEdge);
+      }
+    }
   } else {
-    ctx.strokeStyle = "rgba(244, 241, 234, 0.12)";
+    ctx.strokeStyle = PREVIEW_COLORS.hatch;
     ctx.lineWidth = 1;
     ctx.beginPath();
     for (let offset = -(south - north); offset < east - west; offset += 18) {
@@ -167,7 +160,7 @@ function drawScene(ctx: CanvasRenderingContext2D, bbox: BoundingBox, data: MapDa
   }
   ctx.restore();
 
-  ctx.strokeStyle = COLORS.edge;
+  ctx.strokeStyle = PREVIEW_COLORS.edge;
   ctx.lineWidth = 1.5;
   ctx.setLineDash([6, 5]);
   ctx.strokeRect(west, north, east - west, south - north);
@@ -177,7 +170,7 @@ function drawScene(ctx: CanvasRenderingContext2D, bbox: BoundingBox, data: MapDa
     ctx.setLineDash([]);
     ctx.lineWidth = 0.6;
     ctx.lineJoin = "round";
-    ctx.strokeStyle = COLORS.buildingEdge;
+    ctx.strokeStyle = PREVIEW_COLORS.buildingEdge;
     const trace = (points: Point[]) => {
       ctx.beginPath();
       points.forEach(([x, y], i) => (i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)));
@@ -185,14 +178,14 @@ function drawScene(ctx: CanvasRenderingContext2D, bbox: BoundingBox, data: MapDa
     };
     for (const building of raise.prep.buildings) {
       const { walls, roof } = raiseBuilding(view, building);
-      ctx.fillStyle = COLORS.buildingWall;
+      ctx.fillStyle = building.defaulted ? PREVIEW_COLORS.buildingDefaultedWall : PREVIEW_COLORS.buildingWall;
       for (const wall of walls) {
         trace(wall);
         ctx.fill();
         ctx.stroke();
       }
       if (roof.length) {
-        ctx.fillStyle = COLORS.building;
+        ctx.fillStyle = building.defaulted ? PREVIEW_COLORS.buildingDefaulted : PREVIEW_COLORS.building;
         trace(roof);
         ctx.fill();
         ctx.stroke();
