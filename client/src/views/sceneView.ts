@@ -3,7 +3,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { BoundingBox, MapData } from "../api/types";
 import { prefersReducedMotion } from "../locations/flyTo";
 import { buildWorld, LAYER_ORDER } from "../scene/buildWorld";
-import { COLORS, MATERIALS } from "../scene/palette";
+import { COLORS, MATERIALS, SCENE_BACKGROUND } from "../scene/palette";
 import { shadeGeometry } from "../scene/shading";
 import { createAutoRotate, ROTATE_SPEED } from "../scene/autoRotate";
 import { createCameraModes } from "../scene/cameraModes";
@@ -27,7 +27,7 @@ export interface SceneView extends SceneTarget {
 
 const EMPTY_HINT = "Open an import on the Map tab";
 
-/** The low-poly world of the open area: sky and (once `setWorld` is called) the imported
+/** The low-poly world of the open area: background and (once `setWorld` is called) the imported
  * city. Before that, a placeholder ground and grid, and a hint. */
 export function createSceneView(container: HTMLElement, routing?: RoutingDeps): SceneView {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -35,7 +35,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps): 
   container.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(COLORS.sky);
+  scene.background = new THREE.Color(SCENE_BACKGROUND);
 
   // The placeholder world, removed once a real one is loaded.
   const placeholder = new THREE.Group();
