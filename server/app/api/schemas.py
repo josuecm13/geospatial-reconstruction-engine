@@ -140,6 +140,26 @@ class ProjectionOut(BaseModel):
 OSM_ATTRIBUTION = "© OpenStreetMap contributors"
 
 
+class ElevationGridOut(BaseModel):
+    """The area's ground: `heights` is rows x cols metres above sea level, row-major from the
+    south edge, west to east, starting at the south-west `origin`."""
+
+    origin: CoordinateIn
+    lat_step: float
+    lon_step: float
+    rows: int
+    cols: int
+    heights: list[float]
+
+
+class ElevationOut(BaseModel):
+    source: str
+    attribution: str
+    version: int
+    smoothing_meters: float
+    grid: ElevationGridOut
+
+
 class MapDataOut(BaseModel):
     attribution: str = OSM_ATTRIBUTION
     scope: ScopeOut
@@ -151,6 +171,8 @@ class MapDataOut(BaseModel):
     buildings: FeatureCollection
     pois: FeatureCollection
     area_features: FeatureCollection
+    # Null until the area has been analysed (or when the terrain source was unavailable).
+    elevation: ElevationOut | None = None
 
 
 class TracedBoundaryCreate(BaseModel):

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import uuid
 from collections.abc import AsyncIterator
 
@@ -13,11 +14,12 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.api.background_import import PROVIDER, background_import_work
+from app.api.background_import import PROVIDER, analyse_elevation, background_import_work
 from app.api.dependencies import (
     SessionScope,
     completed_import_area,
     composed_import_area_ids,
+    get_elevation_source,
     get_geocoder,
     get_import_jobs,
     get_job_session_scope,
@@ -57,6 +59,7 @@ from app.domain.enums import ImportStatus
 from app.domain.import_area import ImportArea
 from app.domain.local_projection import local_projection_for
 from app.domain.traced_boundary import TracedBoundary
+from app.ingestion.elevation_source import ElevationUnavailable, TerrainTilesSource
 from app.ingestion.jobs import ImportAlreadyRunning, ImportJob, ImportJobRegistry
 from app.ingestion.overpass import IncompleteSourceResponse, OverpassClient
 from app.ingestion.service import OSMIngestionService
@@ -69,6 +72,7 @@ from app.persistence.repositories.poi import PointOfInterestRepository
 from app.persistence.repositories.road_graph import NavigableNodeRepository, RoadSegmentRepository
 
 router = APIRouter(tags=["import-areas"])
+logger = logging.getLogger(__name__)
 
 
 KEEP_ALIVE_SECONDS = 15.0
@@ -96,6 +100,7 @@ def create_import_area(
     jobs: ImportJobRegistry = Depends(get_import_jobs),
     session_scope: SessionScope = Depends(get_job_session_scope),
     geocoder: Geocoder | None = Depends(get_geocoder),
+    elevation_source: TerrainTilesSource | None = Depends(get_elevation_source),
 ) -> ImportAreaOut | JSONResponse:
     bbox = BoundingBox(
         min_corner=Coordinate(body.bbox.min_latitude, body.bbox.min_longitude),
@@ -106,7 +111,7 @@ def create_import_area(
     if existing is not None and jobs.is_running(existing.id):
         raise _import_in_progress(existing.id)
     if body.background:
-        return _start_background_import(body, bbox, session, overpass, jobs, session_scope, geocoder)
+        return _start_background_import(body, bbox, session, overpass, jobs, session_scope, geocoder, elevation_source)
     payload = body.payload
     if payload is None:
         try:
@@ -127,6 +132,10 @@ def create_import_area(
     named = name_area(areas, result.import_area, geocoder)
     # The import committed before the lookup; the name needs its own commit or the session's close drops it.
     session.commit()
+    try:
+        analyse_elevation(session, named, elevation_source)
+    except ElevationUnavailable as exc:
+        logger.warning("elevation for area %s unavailable, the import stays flat: %s", named.id, exc)
     return import_area_out(
         named, result.block_count, result.linked_building_count, result.skipped_restriction_count,
         result.skipped_feature_count,
@@ -141,6 +150,7 @@ def _start_background_import(
     jobs: ImportJobRegistry,
     session_scope: SessionScope,
     geocoder: Geocoder | None,
+    elevation_source: TerrainTilesSource | None,
 ) -> JSONResponse:
     try:
         area = ImportAreaRepository(session).get_or_create(PROVIDER, bbox)
@@ -150,7 +160,7 @@ def _start_background_import(
         session.rollback()
         raise ApiError(409, "import_conflict", "a concurrent request already created this import area") from exc
     try:
-        jobs.start(area.id, background_import_work(bbox, body.payload, overpass, session_scope, geocoder))
+        jobs.start(area.id, background_import_work(bbox, body.payload, overpass, session_scope, geocoder, elevation_source))
     except ImportAlreadyRunning as exc:
         raise _import_in_progress(area.id) from exc
     started = ImportStartedOut(import_area_id=area.id, events_url=f"/import-areas/{area.id}/events")

@@ -11,6 +11,8 @@ from typing import Any
 from app.api.schemas import (
     BoundingBoxIn,
     CoordinateIn,
+    ElevationGridOut,
+    ElevationOut,
     Feature,
     FeatureCollection,
     ImportAreaOut,
@@ -22,6 +24,7 @@ from app.domain.block import Block
 from app.domain.bounding_box import BoundingBox, Coordinate
 from app.domain.building import Building
 from app.domain.cross_section import SegmentCrossSection
+from app.domain.elevation import TERRAIN_ATTRIBUTION, StoredGrid
 from app.domain.geometry import LineString, MultiPolygon, Polygon
 from app.domain.import_area import ImportArea
 from app.domain.local_projection import LocalProjection
@@ -101,6 +104,28 @@ def poi_feature(poi: PointOfInterest) -> Feature:
         geometry=point_geometry(poi.point),
         properties={"category": poi.category.value, "name": poi.name, "import_area_id": poi.import_area_id},
     )
+
+
+def elevation_out(stored: StoredGrid | None) -> dict[str, Any] | None:
+    """The `elevation` object of map-data and the `elevation` stage; heights are rounded to 0.1 m.
+    None when the area has no grid."""
+    if stored is None:
+        return None
+    grid = stored.grid
+    return ElevationOut(
+        source=stored.source,
+        attribution=TERRAIN_ATTRIBUTION,
+        version=stored.version,
+        smoothing_meters=stored.smoothing_meters,
+        grid=ElevationGridOut(
+            origin=CoordinateIn(latitude=grid.origin.latitude, longitude=grid.origin.longitude),
+            lat_step=grid.lat_step,
+            lon_step=grid.lon_step,
+            rows=grid.rows,
+            cols=grid.cols,
+            heights=[round(height, 1) for height in grid.heights],
+        ),
+    ).model_dump(mode="json")
 
 
 def building_feature(building: Building) -> Feature:

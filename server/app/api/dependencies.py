@@ -14,6 +14,7 @@ import os
 import uuid
 from collections.abc import Callable, Generator
 from contextlib import AbstractContextManager, contextmanager
+from functools import lru_cache
 
 from fastapi import Depends, Query
 from sqlalchemy import create_engine
@@ -25,6 +26,7 @@ from app.config.settings import load_settings
 from app.domain.enums import ImportStatus
 from app.domain.import_area import ImportArea
 from app.domain.traced_boundary import TracedBoundary
+from app.ingestion.elevation_source import DEFAULT_TERRAIN_URL, TerrainTilesSource
 from app.ingestion.jobs import ImportJobRegistry, get_registry
 from app.ingestion.geocoder import DEFAULT_GEOCODER_URL, NominatimGeocoder
 from app.ingestion.overpass import DEFAULT_OVERPASS_URL, OverpassClient
@@ -141,3 +143,21 @@ def get_geocoder() -> NominatimGeocoder | None:
     if url.strip().lower() in ("", "off"):
         return None
     return NominatimGeocoder(url=url)
+
+
+@lru_cache(maxsize=None)
+def _terrain_source(url: str) -> TerrainTilesSource:
+    return TerrainTilesSource(url_template=url)
+
+
+def get_elevation_source() -> TerrainTilesSource | None:
+    """The terrain source that gives an import area its elevation, or None when `ELEVATION_URL=off`
+    (or set to an empty string) disables it. `ELEVATION_URL` is the tile URL template. One source
+    per URL lives for the process, so its tile cache serves every request. Tests override this so
+    they never reach the network."""
+    url = os.environ.get("ELEVATION_URL")
+    if url is None:
+        url = DEFAULT_TERRAIN_URL
+    if url.strip().lower() in ("", "off"):
+        return None
+    return _terrain_source(url)
