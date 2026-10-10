@@ -113,8 +113,9 @@ class Fingerprint:
 
 @dataclass(frozen=True)
 class BuildingMeasure:
-    """One real building against its nearest frontage edge. `start_m` and `end_m` are its extent
-    along that edge, measured from the edge's start (they can run past either end)."""
+    """One real building against its nearest frontage ring (`edge_index` is the ring's index).
+    `start_m` and `end_m` are its extent along that ring, measured from the ring's start; `end_m`
+    runs past the ring's length when the building straddles the start."""
 
     edge_index: int
     start_m: float
