@@ -14,7 +14,7 @@ CREATE TYPE import_status AS ENUM ('pending', 'importing', 'completed', 'failed'
 CREATE TYPE road_classification AS ENUM ('motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'residential', 'service', 'unclassified');
 CREATE TYPE building_category AS ENUM ('residential', 'commercial', 'industrial', 'civic', 'unspecified');
 CREATE TYPE poi_category AS ENUM ('food_and_drink', 'shopping', 'health', 'education', 'transit', 'other');
-CREATE TYPE area_feature_kind AS ENUM ('park', 'water', 'green_space');
+CREATE TYPE area_feature_kind AS ENUM ('park', 'water', 'green_space', 'forest', 'farmland', 'cemetery', 'railway', 'industrial');
 CREATE TYPE movement_kind AS ENUM ('left', 'right', 'straight', 'u_turn');
 CREATE TYPE restriction_kind AS ENUM ('none', 'no_left_turn', 'no_right_turn', 'no_straight_on', 'no_u_turn', 'only_left_turn', 'only_right_turn', 'only_straight_on');
 ```
