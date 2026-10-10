@@ -5,8 +5,15 @@ from sqlalchemy import exists, func, or_, select
 from sqlalchemy.orm import Session, aliased
 
 from app.domain.block import Block
+from app.domain.enums import RoadClassification
 from app.persistence.geometry import geom_to_multipolygon, geom_to_polygon, polygon_to_geom
-from app.persistence.models import BlockBoundarySegmentModel, BlockModel, ImportAreaModel
+from app.persistence.models import (
+    BlockBoundarySegmentModel,
+    BlockModel,
+    ImportAreaModel,
+    RoadModel,
+    RoadSegmentModel,
+)
 
 
 class BlockRepository:
@@ -103,6 +110,18 @@ class BlockRepository:
             .order_by(BlockBoundarySegmentModel.sequence_order)
         ).scalars().all()
         return tuple(rows)
+
+    def bounding_road_classes(self, block_id: uuid.UUID) -> tuple[RoadClassification, ...]:
+        """The distinct classifications of the roads whose segments bound the block, for choosing
+        its default fingerprint (the strongest wins: see `strongest_road_group`)."""
+        rows = self.session.execute(
+            select(RoadModel.classification)
+            .join(RoadSegmentModel, RoadSegmentModel.road_id == RoadModel.id)
+            .join(BlockBoundarySegmentModel, BlockBoundarySegmentModel.road_segment_id == RoadSegmentModel.id)
+            .where(BlockBoundarySegmentModel.block_id == block_id)
+            .distinct()
+        ).scalars().all()
+        return tuple(RoadClassification(row) for row in rows)
 
     @staticmethod
     def _to_domain(model: BlockModel, bounding_segment_ids: tuple[uuid.UUID, ...]) -> Block:
