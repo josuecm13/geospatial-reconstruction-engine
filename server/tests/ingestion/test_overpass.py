@@ -49,6 +49,7 @@ import httpx
 
 from app.domain.bounding_box import BoundingBox, Coordinate
 from app.ingestion.overpass import (
+    QUERY_TIMEOUT_SECONDS,
     USER_AGENT,
     IncompleteSourceResponse,
     OverpassClient,
@@ -80,7 +81,7 @@ def test_query_is_south_west_north_east_and_asks_only_for_used_relations():
     query = build_query(BBOX)
 
     box = "52.5292,13.4005,52.5302,13.4021"
-    assert query.startswith("[out:json][timeout:60];")
+    assert query.startswith(f"[out:json][timeout:{QUERY_TIMEOUT_SECONDS}];")
     assert f"node({box})->.inside;" in query and f"way({box})" in query
     assert f"rel({box})[type=multipolygon]" in query and "rel(bn.inside)[type=restriction]" in query
     assert "nwr(" not in query and query.endswith("out geom;")
