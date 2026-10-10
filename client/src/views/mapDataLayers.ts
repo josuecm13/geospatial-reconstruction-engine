@@ -20,7 +20,20 @@ export class MapDataLayers {
       id: "engine-area-features",
       type: "fill",
       source: sourceId("area_features"),
-      paint: { "fill-color": ["match", ["get", "kind"], "water", MAP_COLORS.water, MAP_COLORS.green], "fill-opacity": 0.9 },
+      paint: {
+        "fill-color": [
+          "match",
+          ["get", "kind"],
+          "water", MAP_COLORS.water,
+          "forest", MAP_COLORS.forest,
+          "farmland", MAP_COLORS.farmland,
+          "cemetery", MAP_COLORS.cemetery,
+          "railway", MAP_COLORS.railway,
+          "industrial", MAP_COLORS.industrial,
+          MAP_COLORS.green,
+        ],
+        "fill-opacity": 0.9,
+      },
     });
     map.addLayer({
       id: "engine-blocks",

@@ -18,6 +18,11 @@ export const lifted = (color: string): string => `#${new THREE.Color(color).lerp
 export const MAP_COLORS = {
   water: lifted(COLORS.water),
   green: lifted(COLORS.green),
+  forest: lifted(COLORS.forest),
+  farmland: lifted(COLORS.farmland),
+  cemetery: lifted(COLORS.cemetery),
+  railway: lifted(COLORS.railway),
+  industrial: lifted(COLORS.industrial),
   roadWide: lifted(COLORS.roadWide),
   roadNormal: lifted(COLORS.roadNormal),
   roadNarrow: lifted(COLORS.roadNarrow),
@@ -25,6 +30,17 @@ export const MAP_COLORS = {
   // Dimmer and cool, as in 3D: the height was assumed.
   buildingDefaulted: COLORS.buildingDefaulted,
   buildingOutline: COLORS.edge,
+  // Cool blue, as in 3D: generated, not observed.
+  buildingGenerated: COLORS.buildingGenerated,
+  /** Block outlines: eligible (crisp), reference (exemplar), selected. */
+  blockOutline: COLORS.blockOutline,
+  blockReference: COLORS.blockReference,
+  blockSelected: COLORS.blockSelected,
+  /** Generation zones, by reason. */
+  zoneWater: COLORS.zoneWater,
+  zoneSteep: COLORS.zoneSteep,
+  zoneLanduse: COLORS.zoneLanduse,
+  zoneSetback: COLORS.zoneSetback,
   buildable: COLORS.buildable,
   buildableOutline: COLORS.buildable,
   blockMedian: "#c9a24a",

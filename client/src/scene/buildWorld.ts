@@ -2,7 +2,7 @@ import * as THREE from "three";
 import type { Feature, Geometry, MapData, Position, Projection } from "../api/types";
 import { buildingHeight } from "./buildingHeight";
 import { drapedGeometry, extrudeFootprints, flatGeometry, footprintShape, polygonShape } from "./extrude";
-import { MATERIALS, roadMaterial } from "./palette";
+import { areaFeatureMaterial, MATERIALS, roadMaterial } from "./palette";
 import { toLocal, type Local } from "./projection";
 import { dedupeTwins, roadPolygon } from "./roadGeometry";
 import { shadeGeometry } from "./shading";
@@ -110,7 +110,7 @@ export function buildWorld(data: MapData, roadMode: RoadMode = DEFAULT_ROAD_MODE
     polygons.forEach((rings) => grow(rings[0]));
     const drawn = clipped(polygons);
     if (!drawn.length) continue;
-    const material = feature.properties.kind === "water" ? MATERIALS.water : MATERIALS.green;
+    const material = areaFeatureMaterial(feature.properties.kind);
     const mesh = entity("area_feature", feature, surface(drawn), material);
     mesh.position.y = LAYER_Y.area_features;
     mesh.renderOrder = feature.properties.kind === "water" ? LAYER_ORDER.water : LAYER_ORDER.green;

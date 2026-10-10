@@ -21,6 +21,23 @@ describe("MAP_COLORS on the dark basemap", () => {
     expect(MAP_COLORS.water).not.toBe(MAP_COLORS.green);
   });
 
+  it("draws the land-use kinds at 3:1 or more, apart from park green and from each other", () => {
+    const kinds = ["forest", "farmland", "cemetery", "railway", "industrial"] as const;
+    for (const kind of kinds) {
+      expect(contrast(MAP_COLORS[kind], BASEMAP), kind).toBeGreaterThanOrEqual(3);
+      expect(MAP_COLORS[kind], kind).not.toBe(MAP_COLORS.green);
+    }
+    expect(new Set(kinds.map((kind) => MAP_COLORS[kind])).size).toBe(kinds.length);
+  });
+
+  it("draws generated buildings, zones and block outlines readable on the basemap, generated apart from the others", () => {
+    for (const key of ["buildingGenerated", "blockOutline", "blockReference", "blockSelected", "zoneWater", "zoneSteep", "zoneLanduse", "zoneSetback"] as const) {
+      expect(contrast(MAP_COLORS[key], BASEMAP), key).toBeGreaterThanOrEqual(3);
+    }
+    expect(MAP_COLORS.buildingGenerated).not.toBe(MAP_COLORS.buildingMeasured);
+    expect(MAP_COLORS.buildingGenerated).not.toBe(MAP_COLORS.buildingDefaulted);
+  });
+
   it("derives the lifted colours from the 3D palette, lighter than the scene's own", () => {
     expect(MAP_COLORS.roadNormal).toBe(lifted(COLORS.roadNormal));
     expect(luminance(MAP_COLORS.roadNormal)).toBeGreaterThan(luminance(COLORS.roadNormal));

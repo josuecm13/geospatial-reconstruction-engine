@@ -54,6 +54,23 @@ describe("buildWorld", () => {
     expect(world.userData).toMatchObject({ scope: data.scope, projection: data.projection, attribution: data.attribution });
   });
 
+  it("draws each land-use kind in its own material, and an unknown kind as green", () => {
+    const kinds = ["water", "forest", "farmland", "cemetery", "railway", "industrial", "park", "quarry"];
+    const landuse = buildWorld({
+      ...data,
+      area_features: fc(kinds.map((kind, i) => ({ type: "Feature" as const, id: kind, geometry: { type: "Polygon" as const, coordinates: square(-84, 9.999 - i * 0.0003) }, properties: { kind, import_area_id: "area-1" } }))),
+    });
+    const material = (kind: string) => (landuse.getObjectByName(`area_feature:${kind}`) as THREE.Mesh).material;
+    expect(material("forest")).toBe(MATERIALS.forest);
+    expect(material("farmland")).toBe(MATERIALS.farmland);
+    expect(material("cemetery")).toBe(MATERIALS.cemetery);
+    expect(material("railway")).toBe(MATERIALS.railway);
+    expect(material("industrial")).toBe(MATERIALS.industrial);
+    expect(material("water")).toBe(MATERIALS.water);
+    expect(material("park")).toBe(MATERIALS.green);
+    expect(material("quarry")).toBe(MATERIALS.green);
+  });
+
   it("names entity meshes <layer>:<id> and records their properties", () => {
     expect(names("buildings")).toEqual(["building:bu1", "building:bu2"]);
     expect(names("area_features")).toEqual(["area_feature:a1", "area_feature:a2"]);
