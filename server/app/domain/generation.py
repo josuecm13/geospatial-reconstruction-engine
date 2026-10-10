@@ -189,10 +189,12 @@ def fingerprint_of(
     """The medians and spreads of a block's measured buildings. Without any gap (one building per
     edge) the side gap is 0."""
     levels = [measure.levels for measure in measures if measure.levels is not None]
+    # A building with no frontage (width 0) is interior: it has no width, depth or setback to learn.
+    fronting = [measure for measure in measures if measure.width_m > 0] or list(measures)
     return Fingerprint(
-        width=spread([measure.width_m for measure in measures]),
-        depth=spread([measure.depth_m for measure in measures]),
-        front_setback=spread([measure.front_setback_m for measure in measures]),
+        width=spread([measure.width_m for measure in fronting]),
+        depth=spread([measure.depth_m for measure in fronting]),
+        front_setback=spread([measure.front_setback_m for measure in fronting]),
         side_gap=spread(list(gaps)) if gaps else Spread(0.0, 0.0),
         median_levels=median(levels) if levels else None,
         coverage=coverage,

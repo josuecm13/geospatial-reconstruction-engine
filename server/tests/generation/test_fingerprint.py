@@ -140,7 +140,7 @@ def test_coverage_is_not_lost_where_the_frontage_ring_is_split_into_short_edges(
 
     assert measurement is not None
     assert measurement.frontage_m == pytest.approx(220.0, abs=0.01)
-    assert measurement.coverage == pytest.approx(176 / 220, abs=0.01)  # 0.8; clipping per edge gave about half
+    assert measurement.coverage == pytest.approx(192 / 220, abs=0.01)  # 176 m of the long fronts plus 16 m of the short ends the rows face
     assert [round(measure.width_m, 2) for measure in measurement.measures] == [8.0] * 22
 
 
@@ -167,8 +167,8 @@ def test_a_building_straddling_the_rings_start_wraps_and_the_wrap_gap_is_measure
     wrapped = max(measurement.measures, key=lambda measure: measure.end_m)
     assert wrapped.end_m > measurement.frontage_m  # runs past the end of the ring, into its start
     assert wrapped.width_m == pytest.approx(20.0, abs=0.01)
-    assert sorted(measurement.side_gaps) == pytest.approx([6.0, 124.0], abs=0.01)  # 6 m across the start
-    assert measurement.coverage == pytest.approx(30 / 160, abs=0.001)
+    assert sorted(measurement.side_gaps) == pytest.approx([6.0, 100.0], abs=0.01)  # 6 m across the start
+    assert measurement.coverage == pytest.approx(38 / 160, abs=0.001)  # the corner's 20, the neighbour's 10 and 8 seen from the east end
 
 
 def test_houses_behind_the_sidewalk_count_but_a_building_deep_inside_does_not():
@@ -195,7 +195,7 @@ def test_a_building_belongs_to_the_nearest_of_several_rings():
     assert measurement is not None
     assert measurement.frontage_m == pytest.approx(320.0, abs=0.01)
     assert [measure.edge_index for measure in measurement.measures] == [1]
-    assert measurement.coverage == pytest.approx(10 / 320, abs=0.001)
+    assert measurement.coverage == pytest.approx(26 / 320, abs=0.001)  # 10 m on its street, 8 m from each short end
 
 
 def test_a_through_block_building_is_two_frontage_runs_not_one_giant_one():
@@ -215,10 +215,36 @@ def test_a_through_block_building_is_two_frontage_runs_not_one_giant_one():
 def test_a_deep_house_near_a_corner_is_one_run_on_its_own_street():
     block = _block(100, 40)
 
-    measurement = measure_block(block, [_house(10, 3, 16, 11)])
+    measurement = measure_block(block, [_house(30, 3, 36, 11)])
 
     assert measurement is not None
     (measure,) = measurement.measures
     assert len(measure.runs) == 1
     assert measure.width_m == pytest.approx(6.0, abs=0.01)
-    assert measurement.coverage == pytest.approx(6 / 280, abs=0.001)
+    assert measurement.coverage == pytest.approx(6 / 280, abs=0.001)  # 30 m from either short end: out of ray reach
+
+
+def test_a_building_covering_most_of_the_block_is_never_wider_than_its_frontage():
+    block = _block(100, 60)
+
+    measurement = measure_block(block, [_house(2, 2, 98, 58)])
+
+    assert measurement is not None
+    (measure,) = measurement.measures
+    assert measure.width_m == pytest.approx(96.0, abs=0.01)  # the long side; the 2 m uncovered at each corner split the runs
+    assert measure.width_m < measurement.frontage_m
+    assert [round(end - start) for start, end in sorted(measure.runs)] == [96, 56, 96, 56]
+    assert measurement.coverage == pytest.approx(304 / 320, abs=0.001)
+
+
+def test_a_fully_built_rectangle_has_widths_equal_to_the_house_frontages():
+    block = _block(100, 20)
+    houses = [_house(10 * index, 0, 10 * index + 10, 5) for index in range(10)]
+    houses += [_house(10 * index, 15, 10 * index + 10, 20) for index in range(10)]
+
+    measurement = measure_block(block, houses)
+
+    assert measurement is not None
+    # Sixteen houses front only their street; the four at the ends also face the short ends, round the corner.
+    assert sorted(round(measure.width_m, 2) for measure in measurement.measures) == [10.0] * 16 + [15.0] * 4
+    assert measurement.coverage == pytest.approx(220 / 240, abs=0.001)
