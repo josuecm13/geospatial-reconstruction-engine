@@ -120,7 +120,9 @@ def test_levels_height_and_the_ground_come_from_the_fingerprint_and_grid():
     assert {footprint.levels for footprint in flat.footprints} == {2}
     assert {footprint.height_meters for footprint in flat.footprints} == {6.0}
     assert {footprint.base_elevation_meters for footprint in flat.footprints} == {None}
-    assert {footprint.base_elevation_meters for footprint in on_ground.footprints} == {pytest.approx(12.5)}
+    elevations = {footprint.base_elevation_meters for footprint in on_ground.footprints}
+    assert len(elevations) == 1
+    assert next(iter(elevations)) == pytest.approx(12.5)
 
 
 def test_a_feedback_count_gives_exactly_that_many_in_walk_order_from_the_same_lots():
