@@ -273,6 +273,41 @@ def test_a_run_is_stale_when_its_blocks_or_its_terrain_differ():
     assert stale_reasons(**same, run_elevation_version=None, current_elevation_version=1) == [StaleReason.TERRAIN_CHANGED]
 
 
+def test_sampled_dimensions_are_seeded_and_clamped_to_half_and_one_and_a_half_times_the_median():
+    import random
+
+    from app.domain.generation import Spread, sample_dimension
+
+    wide = Spread(10.0, 100.0)  # a huge spread: draws hit the clamps
+    draws = [sample_dimension(random.Random(f"s:{index}"), wide) for index in range(200)]
+    assert min(draws) == 5.0 and max(draws) == 15.0
+    assert sample_dimension(random.Random("a"), wide) == sample_dimension(random.Random("a"), wide)
+    assert sample_dimension(random.Random("a"), Spread(0.0, 0.0)) == 0.0
+
+
+def test_evenly_spaced_indices_are_distinct_ordered_and_spread_out():
+    from app.domain.generation import evenly_spaced_indices
+
+    assert evenly_spaced_indices(10, 3) == [1, 5, 8]
+    assert evenly_spaced_indices(4, 4) == [0, 1, 2, 3]
+    assert evenly_spaced_indices(3, 9) == [0, 1, 2]
+    assert evenly_spaced_indices(5, 0) == []
+
+
+def test_the_calibration_factor_needs_two_blocks_and_is_clamped():
+    from app.domain.generation import calibration_factor, with_narrower_lots
+
+    assert calibration_factor([4], [2]) is None
+    assert calibration_factor([4, 2], [2, 2]) == pytest.approx(1.5)
+    assert calibration_factor([40, 20], [2, 2]) == 2.0
+    assert calibration_factor([1, 0], [8, 8]) == 0.5
+    assert calibration_factor([1, 1], [0, 0]) is None
+
+    base = default_fingerprint(RoadClassGroup.LOCAL, SettlementStyle.REGULAR)
+    narrower = with_narrower_lots(base, 2.0)
+    assert narrower.width.median == base.width.median / 2 and narrower.depth == base.depth
+
+
 def test_a_fingerprint_survives_its_json_form():
     original = default_fingerprint(RoadClassGroup.COLLECTOR, SettlementStyle.SPARSE)
     assert fingerprint_from_dict(fingerprint_to_dict(original)) == original

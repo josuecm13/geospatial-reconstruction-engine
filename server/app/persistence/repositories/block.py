@@ -46,6 +46,10 @@ class BlockRepository:
     def list_for_import_area(self, import_area_id: uuid.UUID) -> list[Block]:
         return self._list(select(BlockModel).where(BlockModel.import_area_id == import_area_id))
 
+    def ids_for_import_area(self, import_area_id: uuid.UUID) -> list[uuid.UUID]:
+        """Just the ids of the area's own blocks, for the road-graph hash of a generation run."""
+        return list(self.session.scalars(select(BlockModel.id).where(BlockModel.import_area_id == import_area_id)))
+
     def list_composable(self, inner_area_ids: list[uuid.UUID], outer_area_id: uuid.UUID) -> list[Block]:
         """The inner areas' whole blocks that the outer area does not hold itself.
 

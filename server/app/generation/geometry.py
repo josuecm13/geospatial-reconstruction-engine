@@ -62,3 +62,30 @@ def as_multipolygon(geometry: BaseGeometry) -> ShapelyMultiPolygon:
 
 def multipolygon_from_local(projection: LocalProjection, geometry: BaseGeometry) -> MultiPolygon:
     return tuple(polygon_from_local(projection, polygon) for polygon in polygons_of(geometry))
+
+
+_SLIT_WIDTH_METERS = 0.002
+
+
+def solid_polygons(geometry: BaseGeometry) -> list[ShapelyPolygon]:
+    """Every polygon in a geometry with its holes opened up, because the domain's polygons have no
+    holes. A hole is joined to the outside by a 2 mm slit straight up from a point inside it, which
+    leaves a valid polygon that covers the same ground to within the slit."""
+    solid: list[ShapelyPolygon] = []
+    pending = polygons_of(geometry)
+    while pending:
+        polygon = pending.pop()
+        if not polygon.interiors:
+            solid.append(polygon)
+            continue
+        hole = ShapelyPolygon(polygon.interiors[0])
+        anchor = hole.representative_point()
+        slit = ShapelyLineString([(anchor.x, anchor.y), (anchor.x, polygon.bounds[3] + 1.0)]).buffer(
+            _SLIT_WIDTH_METERS, cap_style="flat"
+        )
+        opened = polygons_of(polygon.difference(slit))
+        if len(opened) == 1 and len(opened[0].interiors) == len(polygon.interiors):
+            solid.append(ShapelyPolygon(polygon.exterior))  # the slit did not open it: keep the outline
+        else:
+            pending.extend(opened)
+    return sorted(solid, key=lambda part: part.bounds)

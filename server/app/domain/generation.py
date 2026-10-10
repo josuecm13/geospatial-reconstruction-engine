@@ -4,6 +4,7 @@ fingerprints, defaults and matching. No shapely, no database."""
 import enum
 import hashlib
 import math
+import random
 import statistics
 import uuid
 from collections.abc import Iterable, Mapping, Sequence
@@ -511,3 +512,63 @@ class StoredBlockFeedback:
 
     feedback: BlockFeedback
     orphaned: bool = field(default=False)
+
+
+# Generating lots (contract 6).
+MIN_FOOTPRINT_SQUARE_METERS = 15.0
+LEVEL_HEIGHT_METERS = 3.0
+IQR_TO_SIGMA = 1.35
+LOT_CLAMP_LOW, LOT_CLAMP_HIGH = 0.5, 1.5  # a sampled dimension stays within these times its median
+INFORMAL_ROTATION_DEGREES = 8.0
+INFORMAL_OFFSET_METERS = 1.0
+CALIBRATION_MIN_BLOCKS = 2
+CALIBRATION_CLAMP_LOW, CALIBRATION_CLAMP_HIGH = 0.5, 2.0
+CALIBRATION_RADIUS_METERS = 500.0
+
+
+def sample_dimension(rng: random.Random, value: Spread) -> float:
+    """A normal draw with the median as its mean and IQR / 1.35 as its sigma, kept within
+    [0.5, 1.5] times the median. Always consumes one draw, so the sequence of draws doesn't depend
+    on how large the numbers are."""
+    sigma = value.iqr / IQR_TO_SIGMA
+    drawn = rng.gauss(value.median, sigma)
+    return min(max(drawn, LOT_CLAMP_LOW * value.median), LOT_CLAMP_HIGH * value.median)
+
+
+def evenly_spaced_indices(total: int, count: int) -> list[int]:
+    """`count` distinct indices into `total` items, spread evenly and in order; every index when
+    `count >= total`."""
+    if count >= total:
+        return list(range(total))
+    return [int((position + 0.5) * total / count) for position in range(count)]
+
+
+def levels_of(fingerprint: Fingerprint) -> int:
+    """Whole storeys from the fingerprint's median levels; at least one."""
+    return max(1, round(fingerprint.median_levels)) if fingerprint.median_levels is not None else 1
+
+
+def calibration_factor(feedback_counts: Sequence[int], generated_counts: Sequence[int]) -> float | None:
+    """The clamped ratio of what people reported to what the previous run generated, over blocks
+    that had both; None when fewer than two blocks, or when nothing was generated there. Lot widths
+    are divided by it: more real buildings than generated means narrower lots."""
+    if len(feedback_counts) < CALIBRATION_MIN_BLOCKS or len(feedback_counts) != len(generated_counts):
+        return None
+    generated = sum(generated_counts)
+    if generated <= 0:
+        return None
+    ratio = sum(feedback_counts) / generated
+    return min(max(ratio, CALIBRATION_CLAMP_LOW), CALIBRATION_CLAMP_HIGH)
+
+
+def with_narrower_lots(fingerprint: Fingerprint, factor: float) -> Fingerprint:
+    """The fingerprint with its lot width (median and spread) divided by `factor`."""
+    return Fingerprint(
+        width=Spread(fingerprint.width.median / factor, fingerprint.width.iqr / factor),
+        depth=fingerprint.depth,
+        front_setback=fingerprint.front_setback,
+        side_gap=fingerprint.side_gap,
+        median_levels=fingerprint.median_levels,
+        coverage=fingerprint.coverage,
+        style=fingerprint.style,
+    )
