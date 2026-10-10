@@ -128,18 +128,22 @@ def elevation_out(stored: StoredGrid | None) -> dict[str, Any] | None:
     ).model_dump(mode="json")
 
 
-def building_feature(building: Building) -> Feature:
-    return Feature(
-        id=building.id,
-        geometry=polygon_geometry(building.geom),
-        properties={
-            "category": building.category.value,
-            "block_id": building.block_id,
-            "height_meters": building.height_meters,
-            "levels": building.levels,
-            "import_area_id": building.import_area_id,
-        },
-    )
+# Marks "no elevation requested": the stages and spatial queries don't carry elevation properties,
+# while map-data always does (null when the area has none).
+NOT_REQUESTED: Any = object()
+
+
+def building_feature(building: Building, base_elevation_meters: float | None = NOT_REQUESTED) -> Feature:
+    properties = {
+        "category": building.category.value,
+        "block_id": building.block_id,
+        "height_meters": building.height_meters,
+        "levels": building.levels,
+        "import_area_id": building.import_area_id,
+    }
+    if base_elevation_meters is not NOT_REQUESTED:
+        properties["base_elevation_meters"] = base_elevation_meters
+    return Feature(id=building.id, geometry=polygon_geometry(building.geom), properties=properties)
 
 
 def area_feature_feature(feature: AreaFeature) -> Feature:
@@ -165,11 +169,17 @@ def block_feature(block: Block) -> Feature:
     )
 
 
-def segment_feature(entry: RoadSegmentWithStreet, cross_section: SegmentCrossSection) -> Feature:
+def segment_feature(
+    entry: RoadSegmentWithStreet,
+    cross_section: SegmentCrossSection,
+    elevation: tuple[tuple[float, ...], tuple[float, ...]] | None = NOT_REQUESTED,
+) -> Feature:
     """`lane_count` is the generated count for the segment's direction; what the
-    source stated (or null) stays visible as `source_lane_count`."""
+    source stated (or null) stays visible as `source_lane_count`. `elevation` is the stored
+    (exact, smoothed) vertex heights, or None when there are none; omitted, no elevation
+    properties are added."""
     segment = entry.segment
-    return Feature(
+    feature = Feature(
         id=segment.id,
         geometry=linestring_geometry(segment.geom),
         properties={
@@ -189,6 +199,11 @@ def segment_feature(entry: RoadSegmentWithStreet, cross_section: SegmentCrossSec
             },
         },
     )
+    if elevation is not NOT_REQUESTED:
+        exact, smoothed = elevation if elevation is not None else (None, None)
+        feature.properties["elevation_exact"] = list(exact) if exact is not None else None
+        feature.properties["elevation_smoothed"] = list(smoothed) if smoothed is not None else None
+    return feature
 
 
 def segment_feature_plain(segment: RoadSegment) -> Feature:
