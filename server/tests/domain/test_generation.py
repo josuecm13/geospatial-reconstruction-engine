@@ -236,3 +236,43 @@ def test_no_candidate_within_500_metres_means_defaults():
     assert best_reference(_SUBJECT, []) is None
     assert best_reference(_SUBJECT, [_candidate(uuid.uuid4(), distance_m=500.1)]) is None
     assert best_reference(_SUBJECT, [_candidate(uuid.uuid4(), distance_m=500.0)]) is not None
+
+
+from app.domain.generation import (  # noqa: E402
+    BlockFeedback,
+    InvalidBlockFeedback,
+    StaleReason,
+    fingerprint_from_dict,
+    fingerprint_to_dict,
+    road_graph_hash,
+    stale_reasons,
+)
+
+
+def test_block_feedback_needs_exactly_one_of_count_or_no_buildings():
+    block_id, area_id = uuid.uuid4(), uuid.uuid4()
+    assert BlockFeedback(block_id, area_id, building_count=0).target_count == 0
+    assert BlockFeedback(block_id, area_id, no_buildings=True).target_count == 0
+    for kwargs in ({}, {"building_count": 2, "no_buildings": True}, {"building_count": -1}):
+        with pytest.raises(InvalidBlockFeedback):
+            BlockFeedback(block_id, area_id, **kwargs)
+
+
+def test_the_road_graph_hash_ignores_order_and_changes_with_the_block_set():
+    first, second = uuid.uuid4(), uuid.uuid4()
+    assert road_graph_hash([first, second]) == road_graph_hash([second, first])
+    assert road_graph_hash([first, second]) != road_graph_hash([first])
+
+
+def test_a_run_is_stale_when_its_blocks_or_its_terrain_differ():
+    same = dict(run_road_graph_hash="a", current_road_graph_hash="a")
+    assert stale_reasons(**same, run_elevation_version=None, current_elevation_version=None) == []
+    assert stale_reasons(
+        run_road_graph_hash="a", current_road_graph_hash="b", run_elevation_version=1, current_elevation_version=2
+    ) == [StaleReason.ROADS_CHANGED, StaleReason.TERRAIN_CHANGED]
+    assert stale_reasons(**same, run_elevation_version=None, current_elevation_version=1) == [StaleReason.TERRAIN_CHANGED]
+
+
+def test_a_fingerprint_survives_its_json_form():
+    original = default_fingerprint(RoadClassGroup.COLLECTOR, SettlementStyle.SPARSE)
+    assert fingerprint_from_dict(fingerprint_to_dict(original)) == original

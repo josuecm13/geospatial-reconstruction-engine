@@ -2,14 +2,18 @@
 fingerprints, defaults and matching. No shapely, no database."""
 
 import enum
+import hashlib
 import math
 import statistics
 import uuid
-from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any
 
 from app.domain.block import Block
 from app.domain.enums import RoadClassification
+from app.domain.geometry import MultiPolygon, Polygon
 
 MIN_GENERATION_BUILDABLE_SQUARE_METERS = 30.0
 
@@ -303,3 +307,207 @@ def best_reference(subject: MatchProfile, candidates: Iterable[ReferenceCandidat
     if not in_range:
         return None
     return min(in_range, key=lambda candidate: (match_score(subject, candidate), str(candidate.block_id)))
+
+
+# Stored generation: runs, generated buildings, zones and feedback (contract 7).
+ALGORITHM_VERSION = "frontage-lots-v1"
+
+
+class CountSource(str, enum.Enum):
+    """Why a block has the number of generated buildings it has."""
+
+    REFERENCE = "reference"  # the fingerprint of a matched exemplar
+    DEFAULT = "default"  # the road-class defaults, no exemplar was near
+    FEEDBACK = "feedback"  # a person said how many
+
+
+def road_graph_hash(block_ids: Iterable[uuid.UUID]) -> str:
+    """The sha256 of an area's own block ids, sorted and newline-joined. A run is stale (roads
+    changed) once the area's current hash differs: a re-import that adds, removes or re-derives
+    a block changes the ids."""
+    joined = "\n".join(sorted(str(block_id) for block_id in block_ids))
+    return hashlib.sha256(joined.encode("utf-8")).hexdigest()
+
+
+class StaleReason(str, enum.Enum):
+    ROADS_CHANGED = "roads_changed"
+    TERRAIN_CHANGED = "terrain_changed"
+
+
+def stale_reasons(
+    *,
+    run_road_graph_hash: str,
+    current_road_graph_hash: str,
+    run_elevation_version: int | None,
+    current_elevation_version: int | None,
+) -> list[StaleReason]:
+    reasons: list[StaleReason] = []
+    if run_road_graph_hash != current_road_graph_hash:
+        reasons.append(StaleReason.ROADS_CHANGED)
+    if run_elevation_version != current_elevation_version:
+        reasons.append(StaleReason.TERRAIN_CHANGED)
+    return reasons
+
+
+def fingerprint_to_dict(value: Fingerprint) -> dict[str, Any]:
+    """The JSON stored for a fingerprint."""
+
+    def pair(item: Spread) -> dict[str, float]:
+        return {"median": item.median, "iqr": item.iqr}
+
+    return {
+        "width": pair(value.width),
+        "depth": pair(value.depth),
+        "front_setback": pair(value.front_setback),
+        "side_gap": pair(value.side_gap),
+        "median_levels": value.median_levels,
+        "coverage": value.coverage,
+        "style": value.style.value,
+    }
+
+
+def fingerprint_from_dict(data: Mapping[str, Any]) -> Fingerprint:
+    def pair(key: str) -> Spread:
+        return Spread(float(data[key]["median"]), float(data[key]["iqr"]))
+
+    return Fingerprint(
+        width=pair("width"),
+        depth=pair("depth"),
+        front_setback=pair("front_setback"),
+        side_gap=pair("side_gap"),
+        median_levels=data["median_levels"],
+        coverage=data["coverage"],
+        style=SettlementStyle(data["style"]),
+    )
+
+
+@dataclass(frozen=True)
+class GeneratedBuilding:
+    """A building the generator placed. Never a measured one: it lives apart from `Building`."""
+
+    id: uuid.UUID | None
+    run_id: uuid.UUID | None
+    block_id: uuid.UUID
+    geom: Polygon
+    height_meters: float
+    levels: int
+    base_elevation_meters: float | None
+    style: SettlementStyle
+    reference_block_id: uuid.UUID | None
+    count_source: CountSource
+    # The area whose run placed it; filled when read back.
+    import_area_id: uuid.UUID | None = None
+
+
+@dataclass(frozen=True)
+class GenerationZone:
+    """A part of a block that generation kept clear, for display."""
+
+    id: uuid.UUID | None
+    run_id: uuid.UUID | None
+    block_id: uuid.UUID
+    reason: ZoneReason
+    geom: MultiPolygon
+
+
+@dataclass(frozen=True)
+class BlockAssignment:
+    """What generation decided for one eligible block: its style, the exemplar it learned from
+    (None for defaults), how many lots the algorithm found before any feedback applied, and the
+    calibration ratio applied to its lot width (None when none was)."""
+
+    style: SettlementStyle
+    reference_block_id: uuid.UUID | None
+    lot_count: int
+    calibration_ratio: float | None = None
+
+
+@dataclass(frozen=True)
+class GenerationRun:
+    """A stored run, as read back. `parameters` holds what the run used: thresholds, the
+    calibration ratio, the eligible block count, the blocks that fell short of their feedback count,
+    and a `blocks` mapping from block id to its `BlockAssignment` as JSON."""
+
+    id: uuid.UUID
+    import_area_id: uuid.UUID
+    seed: int
+    algorithm_version: str
+    parameters: Mapping[str, Any]
+    elevation_version: int | None
+    road_graph_hash: str
+    building_count: int
+    block_count: int
+    created_at: datetime
+
+    @property
+    def eligible_block_count(self) -> int:
+        return int(self.parameters.get("eligible_block_count", 0))
+
+    @property
+    def calibration_ratio(self) -> float | None:
+        return self.parameters.get("calibration_ratio")
+
+    @property
+    def feedback_shortfall_block_ids(self) -> list[uuid.UUID]:
+        return [uuid.UUID(value) for value in self.parameters.get("feedback_shortfall_block_ids", [])]
+
+    def assignments(self) -> dict[uuid.UUID, BlockAssignment]:
+        result: dict[uuid.UUID, BlockAssignment] = {}
+        for block_id, item in self.parameters.get("blocks", {}).items():
+            reference = item.get("reference_block_id")
+            result[uuid.UUID(block_id)] = BlockAssignment(
+                style=SettlementStyle(item["style"]),
+                reference_block_id=uuid.UUID(reference) if reference else None,
+                lot_count=int(item["lot_count"]),
+                calibration_ratio=item.get("calibration_ratio"),
+            )
+        return result
+
+
+@dataclass(frozen=True)
+class NewGenerationRun:
+    """A run to store: the same fields as `GenerationRun` without the ones the database assigns."""
+
+    import_area_id: uuid.UUID
+    seed: int
+    parameters: Mapping[str, Any]
+    elevation_version: int | None
+    road_graph_hash: str
+    building_count: int
+    block_count: int
+    algorithm_version: str = ALGORITHM_VERSION
+
+
+class InvalidBlockFeedback(ValueError):
+    pass
+
+
+@dataclass(frozen=True)
+class BlockFeedback:
+    """What a person says about a block: how many buildings it really has, or that it has none.
+    Exactly one of the two."""
+
+    block_id: uuid.UUID
+    import_area_id: uuid.UUID
+    building_count: int | None = None
+    no_buildings: bool = False
+    updated_at: datetime | None = None
+
+    def __post_init__(self) -> None:
+        if (self.building_count is None) == (not self.no_buildings):
+            raise InvalidBlockFeedback("exactly one of building_count and no_buildings must be set")
+        if self.building_count is not None and self.building_count < 0:
+            raise InvalidBlockFeedback("building_count must be 0 or more")
+
+    @property
+    def target_count(self) -> int:
+        """The number of buildings the feedback asks for."""
+        return 0 if self.no_buildings else int(self.building_count or 0)
+
+
+@dataclass(frozen=True)
+class StoredBlockFeedback:
+    """Feedback as listed for an area. `orphaned` when its block no longer exists."""
+
+    feedback: BlockFeedback
+    orphaned: bool = field(default=False)
