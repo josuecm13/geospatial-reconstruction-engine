@@ -158,7 +158,12 @@ describe("splitByLines", () => {
 
 describe("terrain extent", () => {
   it("is the grid in local metres, and null when flat", () => {
-    expect(terrain.extent()).toEqual({ minX: 0, maxX: 3, minZ: -2, maxZ: 0 });
+    // Through the lon/lat projection, so compare to float precision (it gives 2.999999999999936 and -0).
+    const extent = terrain.extent()!;
+    expect(extent.minX).toBeCloseTo(0, 9);
+    expect(extent.maxX).toBeCloseTo(3, 9);
+    expect(extent.minZ).toBeCloseTo(-2, 9);
+    expect(extent.maxZ).toBeCloseTo(0, 9);
     expect(flatTerrain().extent()).toBeNull();
   });
 });
