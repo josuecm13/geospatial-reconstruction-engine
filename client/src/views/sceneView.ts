@@ -2,13 +2,14 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { BoundingBox, MapData } from "../api/types";
 import { prefersReducedMotion } from "../locations/flyTo";
-import { buildWorld, LAYER_ORDER } from "../scene/buildWorld";
+import { buildWorld, DEFAULT_ROAD_MODE, LAYER_ORDER, setRoadMode } from "../scene/buildWorld";
 import { COLORS, MATERIALS, SCENE_BACKGROUND } from "../scene/palette";
 import { shadeGeometry } from "../scene/shading";
 import { createAutoRotate, ROTATE_SPEED } from "../scene/autoRotate";
 import { createCameraModes } from "../scene/cameraModes";
 import { createFramingPolicy, overview, rectangleOverview } from "../scene/framing";
 import { createExportButton } from "../scene/exportButton";
+import { createTerrainControls, type TerrainDeps } from "../scene/terrainControls";
 import { createRoutePanel, type RoutingDeps } from "../scene/routePanel";
 import type { SceneTarget } from "../scene/sceneLoader";
 import { bboxMeters, createStagedScene, type StagedHandle } from "../scene/stagedScene";
@@ -29,7 +30,7 @@ const EMPTY_HINT = "Open an import on the Map tab";
 
 /** The low-poly world of the open area: background and (once `setWorld` is called) the imported
  * city. Before that, a placeholder ground and grid, and a hint. */
-export function createSceneView(container: HTMLElement, routing?: RoutingDeps): SceneView {
+export function createSceneView(container: HTMLElement, routing?: RoutingDeps, terrain?: TerrainDeps): SceneView {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(window.devicePixelRatio);
   container.appendChild(renderer.domElement);
@@ -45,15 +46,31 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps): 
   scene.add(placeholder);
 
   const overlay = Object.assign(document.createElement("div"), { className: "scene-empty", textContent: EMPTY_HINT });
-  const toggle = Object.assign(document.createElement("label"), { className: "scene-toggle", hidden: true });
+  const toggle = Object.assign(document.createElement("div"), { className: "scene-toggle", hidden: true });
   const buildable = Object.assign(document.createElement("input"), { type: "checkbox" });
-  toggle.append(buildable, " Show buildable area");
-  container.append(overlay, toggle);
+  const buildableLabel = document.createElement("label");
+  buildableLabel.append(buildable, " Show buildable area");
+  // Only for an area with terrain: roads follow the smoothed heights (a low-pass of the ground) or the exact ones.
+  const smooth = Object.assign(document.createElement("input"), { type: "checkbox", checked: DEFAULT_ROAD_MODE === "smoothed" });
+  const smoothLabel = Object.assign(document.createElement("label"), { hidden: true });
+  smoothLabel.append(smooth, " Smooth roads");
+  toggle.append(buildableLabel, smoothLabel);
+  // The OSM credit is on the 2D map; the scene credits the terrain when it has one (see the world's `elevation`).
+  const credit = Object.assign(document.createElement("div"), { className: "scene-attribution", hidden: true });
+  container.append(overlay, toggle, credit);
   let world: THREE.Group | undefined;
   buildable.addEventListener("change", () => {
     const blocks = world?.getObjectByName("blocks");
     if (blocks) blocks.visible = buildable.checked;
   });
+  const roadMode = () => (smooth.checked ? "smoothed" : "exact");
+  smooth.addEventListener("change", () => world && setRoadMode(world, roadMode()));
+  /** What the toggles and the credit show for the world on screen (`undefined`: no finished world). */
+  const showTerrain = (data: MapData | undefined) => {
+    smoothLabel.hidden = !data?.elevation;
+    credit.hidden = !data?.elevation;
+    credit.textContent = data?.elevation ? `${data.attribution} · ${data.elevation.attribution}` : "";
+  };
 
   const removeWorld = () => {
     if (!world) return;
@@ -88,6 +105,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps): 
   const routes = routing && createRoutePanel(container, scene, camera, renderer.domElement, routing, () => modes.mode === "fly");
 
   const exporter = createExportButton(actions);
+  const terrainControls = terrain && createTerrainControls(actions, container, terrain);
   const rotateButton = Object.assign(document.createElement("button"), { className: "scene-rotate", type: "button", textContent: "Rotate", hidden: true });
   const showRotate = () => rotateButton.setAttribute("aria-pressed", String(rotate.enabled));
   showRotate();
@@ -129,9 +147,11 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps): 
     camera,
     setWorld(data: MapData) {
       removeWorld();
-      world = buildWorld(data);
+      world = buildWorld(data, roadMode());
       world.getObjectByName("blocks")!.visible = buildable.checked;
       scene.add(world);
+      showTerrain(data);
+      terrainControls?.setWorld(!data.elevation);
       modes.setWorld(world);
       routes?.setWorld(world);
       exporter.setWorld(world);
@@ -159,6 +179,8 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps): 
       routes?.setWorld(undefined);
       exporter.setWorld(undefined);
       framing.stagedStarted();
+      showTerrain(undefined);
+      terrainControls?.setWorld(false);
       const build = staged.begin(bbox);
       world = build.world;
       world.getObjectByName("blocks")!.visible = buildable.checked;
@@ -197,6 +219,8 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps): 
       routes?.setWorld(undefined);
       exporter.setWorld(undefined);
       scene.add(placeholder);
+      showTerrain(undefined);
+      terrainControls?.setWorld(false);
       overlay.textContent = message;
       overlay.hidden = false;
       toggle.hidden = true;

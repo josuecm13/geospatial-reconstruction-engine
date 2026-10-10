@@ -27,9 +27,9 @@ beyond parity.
 | Skipped building and area ways on import (`skipped_feature_count`: not a closed ring in OSM) | `POST /import-areas` | shipped | — | Mention it in the import summary when it isn't zero |
 | Live Overpass import: omit `payload` and the box is fetched live | `POST /import-areas` | shipped | done | The main entry point. Takes seconds, so show progress. `upstream_unavailable` (503) means retry later |
 | Background import: `background: true` answers 202 with an `events_url`, runs the import in the server, and refuses a second import of the same area (409 `import_in_progress`) | `POST /import-areas` | shipped | done | The staged build animation starts every import this way (`client/src/importing/stagedImport.ts`) |
-| Import progress as server-sent events, one per stage (`fetched`, `ground`, `roads`, `blocks`, `buildings` by ring, then `completed` or `failed`), resumable with `Last-Event-ID` | `GET /import-areas/{id}/events` | shipped | done | Draw each stage as it arrives. A `failed` event leaves the area as it was. 404 `import_job_not_found` once a job is gone (kept ten minutes). `fetched` names the completed `inner_area_ids` the import skips: they're already built, so show them at once (their roads come from the `roads` stage); no `buildings` event carries their buildings |
-| Elevation stage of an import: after `buildings` and before `completed`, `elevation` carries `projection`, the map-data `elevation` object (or null), and `error` (`elevation_unavailable` when the terrain source failed; the import still completes, flat) | `GET /import-areas/{id}/events` | shipped | — | Draw the terrain when it arrives; flat until then. `IMPORT_STAGES` gains `elevation` |
-| Re-analyse an area's elevation in the background (existing areas, or after a flat import): 202 `{import_area_id, events_url}`, then `elevation` and `completed` (`version`, `changed`) or `failed` on `/events`. 404 `import_area_not_found`, 409 `import_area_not_ready` / `import_in_progress`, 503 `elevation_unavailable` when disabled. Fetches no OSM data and changes no entity; a second run changes nothing | `POST /import-areas/{id}/elevation` | shipped | — | A "fetch terrain" action for an area that draws flat |
+| Import progress as server-sent events, one per stage (`fetched`, `ground`, `roads`, `blocks`, `buildings` by ring, `elevation`, then `completed` or `failed`), resumable with `Last-Event-ID` | `GET /import-areas/{id}/events` | shipped | done | Draw each stage as it arrives. A `failed` event leaves the area as it was. 404 `import_job_not_found` once a job is gone (kept ten minutes). `fetched` names the completed `inner_area_ids` the import skips: they're already built, so show them at once (their roads come from the `roads` stage); no `buildings` event carries their buildings. The `elevation` stage (`{projection, elevation, error}`) draws nothing: the finished world is loaded from map-data, on terrain (`scene/stagedBuild.ts`) |
+| Elevation stage of an import: after `buildings` and before `completed`, `elevation` carries `projection`, the map-data `elevation` object (or null), and `error` (`elevation_unavailable` when the terrain source failed, `elevation_failed` on any other error; the import still completes, flat) | `GET /import-areas/{id}/events` | shipped | done | Draw the terrain when it arrives; flat until then. `IMPORT_STAGES` gains `elevation` |
+| Re-analyse an area's terrain in the background (no OSM fetch, no id or geometry changes, idempotent): 202 with an `events_url` that streams one `elevation` event, then `completed` or `failed` (`elevation_unavailable`); 404 `import_area_not_found`, 409 `import_area_not_ready`, 409 `import_in_progress` | `POST /import-areas/{id}/elevation` | shipped | done | A quiet "Add terrain" button in the scene's corner, shown when a loaded area has `elevation: null`. It follows the events, shows progress, reloads map-data and rebuilds the world on `completed`, and shows a sentence per error code on `failed` (`scene/terrainControls.ts`, `terrainJob.ts`, `terrainMessages.ts`) |
 
 ### Map data (`GET /import-areas/{id}/map-data`)
 
@@ -45,9 +45,9 @@ beyond parity.
 | Buildings: footprint, `category`, `block_id`, `height_meters`, `levels` | shipped | done | 2D: solid when `height_meters` is known, paler when null; the popup shows height, levels, category and whether it's in a block. 3D: extruded to `height_meters`, else `levels` x 3.2 m, else a per-category default drawn paler (`scene/buildingHeight.ts`). |
 | POIs: point, `category`, `name` | shipped | partial | 2D circles described by name and category; not drawn in 3D. |
 | Area features: polygon, `kind` | shipped | done | 2D fill (water blue, the rest green) described by kind; 3D flat shapes, the same colors. |
-| Elevation: `elevation` is null until the area is analysed, else `{source, attribution, version, smoothing_meters, grid}`; `grid` is `origin` (SW corner), `lat_step`, `lon_step`, `rows`, `cols` and `heights` (rows x cols metres, row-major south to north, west to east, rounded to 0.1). Always the whole area's grid, even for a boundary scope | shipped | — | Show `attribution` with the terrain. `version` changes only when the ground does |
-| Building `base_elevation_meters`: the lowest ground under the footprint, or null without elevation | shipped | — | Place a building's base on it so nothing floats |
-| Road segment `elevation_exact` and `elevation_smoothed`: one height per vertex of the geometry, in order (null without elevation). In clip mode they are re-sampled at the clipped vertices (a MultiLineString's parts flattened) | shipped | — | Exact and smoothed are a client toggle; smoothed is the default |
+| Elevation: `elevation` is null (no grid yet) or `{source, attribution, version, smoothing_meters, grid}`; `grid` is the area's whole ground (origin at the SW corner, `lat_step` / `lon_step`, `rows` x `cols` heights in metres, row-major south to north, west to east) | shipped | done | 3D: `scene/terrain.ts` samples it bilinearly. The ground is a mesh on the grid, flat layers (area features, buildable areas, roads) are subdivided and draped on it, and every y is relative to the grid's lowest point so the world stays near y = 0. Null draws flat (`flatTerrain`). The 2D map doesn't use it. The glTF root extras carry `elevation.version` and the road mode |
+| Buildings: `base_elevation_meters` (the lowest ground under the footprint, or null) | shipped | done | 3D: the building stands on it (its height and extrusion unchanged); when null, on the lowest ground under the footprint from the grid |
+| Road segments: `elevation_exact` and `elevation_smoothed`, one height per vertex of the geometry (or null) | shipped | done | 3D: the road outline is draped on the mode's heights, each outline vertex taking the height at its nearest point on the centreline. A "Smooth roads" checkbox (on by default, shown only with terrain) switches the modes in place without a rebuild (`setRoadMode`) |
 | Composition of nested areas: the completed import areas inside the rectangle (`scope.composed_area_ids`) add their buildings, POIs, area features, and whole blocks; every feature of those layers names its owner in `properties.import_area_id`, no source id appears twice, and no block appears twice | shipped | done | Both views draw the composed response as one place; a staged import shows the inner areas built at once. A feature's owning area isn't displayed. |
 | `attribution` ("© OpenStreetMap contributors") | shipped | partial | 2D: always visible, uncollapsed. glTF: the asset copyright and root extras. **The 3D scene shows none on screen**, which is the gap. |
 
@@ -105,7 +105,7 @@ Every non-2xx response is `{"error": {"code", "message", "details"}}`. The clien
 `payload_outside_bounding_box`, `ingestion_failed`, `source_incomplete` (the source response was
 truncated and nothing was changed), `upstream_unavailable` (Overpass unreachable or busy), `import_area_not_found`, `import_area_not_ready`, `import_conflict`, `building_not_found`, `invalid_boundary` (with
 `details.rule`), `boundary_name_conflict`, `boundary_not_found`, `invalid_spatial_query`,
-`import_in_progress`, `import_job_not_found`, `no_navigable_node`, `no_route_found`, `unknown_routing_strategy`, `not_found`,
+`import_in_progress`, `import_job_not_found`, `elevation_unavailable` (the terrain source is unreachable; the import itself still completes, flat), `no_navigable_node`, `no_route_found`, `unknown_routing_strategy`, `not_found`,
 `method_not_allowed`, `database_unavailable`, `configuration_error`, `internal_error`.
 
 Every view reports failures through `useErrorReporter` (`client/src/errors/errorReporter.ts`): a sentence
@@ -176,14 +176,21 @@ Ideas, not commitments. Once one is chosen, it becomes an issue in the milestone
   in its corner, or the `V` key, drops the camera to eye height (1.7 m) on the road nearest the
   centre, facing north; click the canvas to look around, WASD or the arrows to move (Shift runs),
   Esc releases the mouse. Building footprints stop the walker (`scene/collision.ts`, `scene/cameraModes.ts`).
+  On terrain the camera's height is the ground there plus 1.7 m, so walking up a slope keeps you on it.
 - **Turntable rotation** (#119, shipped): in fly mode the scene turns slowly around the open area. It
   stops while the user drags or zooms, in walk mode and during a staged build, and resumes after five
   idle seconds. A "Rotate" button turns it on and off; it starts off under `prefers-reduced-motion`
   (`scene/autoRotate.ts`).
 - **glTF export** (#69, shipped): a "Download glTF" button in the scene's corner saves the world as a
   binary `.glb` (`gre-<scope type>-<id>.glb`). Nodes are named `<layer>:<id>`; the root's extras carry
-  the scope, projection origin, and axes, and the asset copyright is the OpenStreetMap attribution.
+  the scope, projection origin, and axes, and the asset copyright is the OpenStreetMap attribution (plus the terrain's, when the world has terrain; the extras then also carry `elevation.version` and the road mode).
   Hidden layers (buildable area, unless shown) are left out (`scene/exportGltf.ts`, `scene/exportButton.ts`).
+- **Terrain** (#139, shipped): an area with `elevation` is built on its ground: a ground mesh from the grid,
+  area features, buildable areas and roads draped on it, buildings standing on their stored base height, the
+  route ribbon and markers lifted onto it, and the terrain's credit at the scene's bottom-left. The
+  "Smooth roads" checkbox toggles the roads between the exact and smoothed heights. An area imported flat
+  offers "Add terrain" (see Import areas). A staged import builds flat and gets its terrain when the finished
+  world is loaded.
 - **Generation playground** (M11): change the seed or density and watch the block repopulate.
   Pin a seed you like.
 - **Export panel**: pick the scope, mode (filter / clip), and layers, and download GeoJSON with

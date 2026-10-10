@@ -3,7 +3,7 @@ import { validateBytes } from "gltf-validator";
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
 import type { Feature, MapData, Position } from "../api/types";
-import { buildWorld } from "./buildWorld";
+import { buildWorld, setRoadMode } from "./buildWorld";
 import { exportWorld, glbFileName } from "./exportGltf";
 
 const D = 0.0001;
@@ -108,6 +108,45 @@ describe("exportWorld", () => {
     await exportWorld(world);
     expect(world.userData.footprints).toHaveLength(1);
     expect(world.getObjectByName("building:bu1")!.userData.properties).toMatchObject({ height_meters: 12 });
+  });
+});
+
+describe("exportWorld with terrain", () => {
+  const terrainData: MapData = {
+    ...data,
+    elevation: {
+      source: "aws-terrain-tiles",
+      attribution: "Terrain: test source",
+      version: 4,
+      smoothing_meters: 30,
+      grid: { origin: { latitude: 10, longitude: -84 }, lat_step: 0.0005, lon_step: 0.0005, rows: 2, cols: 2, heights: [10, 10, 20, 20] },
+    },
+  };
+
+  it("puts the grid version and the road mode in the root extras, and the terrain's credit in the copyright", async () => {
+    const world = buildWorld(terrainData);
+    const json = jsonChunk(await exportWorld(world));
+    const root = json.nodes.find((n: { name?: string }) => n.name === "world");
+    expect(root.extras.elevation).toEqual({ source: "aws-terrain-tiles", version: 4, attribution: "Terrain: test source", road_mode: "smoothed" });
+    expect(root.extras.attribution).toBe("© OpenStreetMap contributors");
+    expect(json.asset.copyright).toBe("© OpenStreetMap contributors · Terrain: test source");
+
+    setRoadMode(world, "exact");
+    const exact = jsonChunk(await exportWorld(world));
+    expect(exact.nodes.find((n: { name?: string }) => n.name === "world").extras.elevation.road_mode).toBe("exact");
+  });
+
+  it("exports the terrain mesh as the ground, and a file the validator accepts", async () => {
+    const buffer = await exportWorld(buildWorld(terrainData));
+    const json = jsonChunk(buffer);
+    expect(json.nodes.map((n: { name?: string }) => n.name)).toContain("ground:plane");
+    const report = await validateBytes(new Uint8Array(buffer));
+    expect(report.issues.numErrors).toBe(0);
+  });
+
+  it("leaves the elevation out of a flat world's extras", async () => {
+    const json = jsonChunk(await exportWorld(buildWorld(data)));
+    expect(json.nodes.find((n: { name?: string }) => n.name === "world").extras).not.toHaveProperty("elevation");
   });
 });
 

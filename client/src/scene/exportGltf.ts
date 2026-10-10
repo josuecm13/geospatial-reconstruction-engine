@@ -5,9 +5,16 @@ export const GENERATOR = "geospatial-reconstruction-engine";
 export const ATTRIBUTION = "© OpenStreetMap contributors";
 export const AXES = "x east, y up, z south; meters";
 
-/** The root node's `extras`: where the world is, how to place it on the globe, and its credit. */
+/** The credit the file carries: OSM's, and the terrain source's when the world has terrain. */
+function credit(world: THREE.Object3D): string {
+  const { attribution, elevation } = world.userData;
+  return [attribution ?? ATTRIBUTION, elevation?.attribution].filter(Boolean).join(" · ");
+}
+
+/** The root node's `extras`: where the world is, how to place it on the globe, and its credit. With terrain, the
+ * grid's `version` and the road mode on show (the roads in the file are draped on that mode's heights) go along. */
 function metadata(world: THREE.Object3D) {
-  const { scope, projection, attribution } = world.userData;
+  const { scope, projection, attribution, elevation, roadMode } = world.userData;
   return {
     generator: GENERATOR,
     scope,
@@ -18,6 +25,7 @@ function metadata(world: THREE.Object3D) {
     },
     attribution: attribution ?? ATTRIBUTION,
     axes: AXES,
+    ...(elevation ? { elevation: { source: elevation.source, version: elevation.version, attribution: elevation.attribution, road_mode: roadMode } } : {}),
   };
 }
 
@@ -47,7 +55,7 @@ export async function exportWorld(world: THREE.Group): Promise<ArrayBuffer> {
   });
   try {
     // `copyright` sets asset.copyright (GLTFExporter's own option in this three.js version).
-    const result = await new GLTFExporter().parseAsync(world, { binary: true, onlyVisible: true, copyright: meta.attribution });
+    const result = await new GLTFExporter().parseAsync(world, { binary: true, onlyVisible: true, copyright: credit(world) });
     return result as ArrayBuffer;
   } finally {
     original.forEach((userData, object) => (object.userData = userData));
