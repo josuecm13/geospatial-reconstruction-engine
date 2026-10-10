@@ -124,9 +124,9 @@ def test_areas_covering_finds_completed_and_importing_areas_that_cover_the_bbox(
         repo.get_or_create("osm", BoundingBox(Coordinate(30.0005, -97.7995), Coordinate(30.0025, -97.7975))).id
     )
     _completed(repo, 30.0015, -97.7985, 30.003, -97.797)  # partly overlapping
-    failed = repo.get_or_create("osm", BoundingBox(Coordinate(30.0, -97.8), Coordinate(30.01, -97.79)))
+    failed = repo.get_or_create("osm", BoundingBox(Coordinate(30.0, -97.8), Coordinate(30.009, -97.791)))
     repo.mark_failed(failed.id)
-    repo.get_or_create("osm", BoundingBox(Coordinate(29.0, -97.9), Coordinate(31.0, -97.7)))  # pending, covers it
+    repo.get_or_create("osm", BoundingBox(Coordinate(29.999, -97.801), Coordinate(30.008, -97.792)))  # pending, covers it
 
     found = repo.areas_covering(inner_bbox, exclude_id=inner.id)
 
@@ -155,10 +155,11 @@ def test_delete_removes_the_area_and_everything_derived_and_keeps_other_areas(db
     from app.persistence.repositories.traced_boundary import TracedBoundaryRepository
 
     payload = json.loads((Path(__file__).parents[1] / "fixtures" / "osm_block_loop.json").read_text())
+    other_payload = json.loads((Path(__file__).parents[1] / "fixtures" / "osm_neighborhood.json").read_text())
     first_bbox = BoundingBox(Coordinate(9.9398, -84.0902), Coordinate(9.9407, -84.0893))
-    second_bbox = BoundingBox(Coordinate(9.9498, -84.0902), Coordinate(9.9507, -84.0893))
+    second_bbox = BoundingBox(Coordinate(9.9330, -84.0810), Coordinate(9.9350, -84.0790))  # contains osm_neighborhood
     service = OSMIngestionService(db_session)
-    survivor = service.import_fixture(second_bbox, payload).import_area
+    survivor = service.import_fixture(second_bbox, other_payload).import_area
     kept = _row_counts(db_session)
     doomed = service.import_fixture(first_bbox, payload).import_area
     TracedBoundaryRepository(db_session).create(doomed, "Whole", first_bbox.ring())
