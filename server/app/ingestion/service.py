@@ -75,6 +75,7 @@ class ImportResult:
     updated_count: int = 0
     removed_count: int = 0
     skipped_restriction_count: int = 0
+    skipped_feature_count: int = 0
 
 
 class OSMIngestionService:
@@ -235,6 +236,12 @@ class OSMIngestionService:
                 area_id, len(skipped_restrictions), ", ".join(skipped_restrictions),
             )
 
+        if records.skipped_features:
+            logger.warning(
+                "import area %s: skipped %d building or area way(s) that aren't a closed ring: %s",
+                area_id, len(records.skipped_features), ", ".join(records.skipped_features),
+            )
+
         # 6. Derive fresh blocks and link buildings over the reconciled network.
         with self._step(area_id, "block derivation"):
             blocks = block_service.derive_for_import_area(area_id)
@@ -276,6 +283,7 @@ class OSMIngestionService:
             updated_count=updated_count,
             removed_count=removed_count,
             skipped_restriction_count=len(skipped_restrictions),
+            skipped_feature_count=len(records.skipped_features),
             **counts,
         )
 

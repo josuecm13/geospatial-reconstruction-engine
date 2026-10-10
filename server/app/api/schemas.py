@@ -100,6 +100,8 @@ class ImportAreaOut(BaseModel):
     # Only on an import's own response: restriction relations skipped as malformed or
     # unresolvable inside the import.
     skipped_restriction_count: int | None = None
+    # Likewise: building and area ways skipped for not being a closed ring.
+    skipped_feature_count: int | None = None
     imported_at: datetime | None
     # Where the area is, from a reverse geocoder; null when unknown or the lookup failed.
     place_name: str | None = None

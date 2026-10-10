@@ -128,7 +128,8 @@ def create_import_area(
     # The import committed before the lookup; the name needs its own commit or the session's close drops it.
     session.commit()
     return import_area_out(
-        named, result.block_count, result.linked_building_count, result.skipped_restriction_count
+        named, result.block_count, result.linked_building_count, result.skipped_restriction_count,
+        result.skipped_feature_count,
     )
 
 

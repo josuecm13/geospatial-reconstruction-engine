@@ -69,6 +69,7 @@ def import_area_out(
     block_count: int,
     linked_building_count: int | None = None,
     skipped_restriction_count: int | None = None,
+    skipped_feature_count: int | None = None,
 ) -> ImportAreaOut:
     return ImportAreaOut(
         id=area.id,
@@ -83,6 +84,7 @@ def import_area_out(
         block_count=block_count,
         linked_building_count=linked_building_count,
         skipped_restriction_count=skipped_restriction_count,
+        skipped_feature_count=skipped_feature_count,
         imported_at=area.imported_at,
         place_name=area.place_name,
         place_context=area.place_context,

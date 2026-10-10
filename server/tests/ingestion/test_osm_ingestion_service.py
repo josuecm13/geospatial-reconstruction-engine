@@ -566,6 +566,34 @@ def test_poi_node_outside_the_box_is_still_rejected(db_session):
         OSMIngestionService(db_session).import_fixture(_bbox(), payload)
 
 
+def test_open_way_poi_crossing_the_edge_is_accepted_though_its_middle_vertex_is_outside(db_session):
+    payload = {
+        "elements": [
+            {"type": "node", "id": 1, "lat": 9.9340, "lon": -84.0800},
+            {"type": "node", "id": 2, "lat": 9.9360, "lon": -84.0800},
+            {"type": "node", "id": 3, "lat": 9.9361, "lon": -84.0800},
+            {"type": "way", "id": 10, "nodes": [1, 2, 3], "tags": {"amenity": "bench"}},
+        ]
+    }
+
+    result = OSMIngestionService(db_session).import_fixture(_bbox(), payload)
+
+    assert result.poi_count == 1
+
+
+def test_open_way_poi_entirely_outside_the_box_is_still_rejected(db_session):
+    payload = {
+        "elements": [
+            {"type": "node", "id": 1, "lat": 9.9360, "lon": -84.0800},
+            {"type": "node", "id": 2, "lat": 9.9361, "lon": -84.0800},
+            {"type": "way", "id": 10, "nodes": [1, 2], "tags": {"amenity": "bench"}},
+        ]
+    }
+
+    with pytest.raises(PayloadOutsideBoundingBox):
+        OSMIngestionService(db_session).import_fixture(_bbox(), payload)
+
+
 def _with_extra_restriction(members, tags):
     payload = json.loads(FIXTURE.read_text())
     payload["elements"].append({"type": "relation", "id": 401, "members": members, "tags": {"type": "restriction", **tags}})

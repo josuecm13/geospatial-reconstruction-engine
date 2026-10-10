@@ -90,6 +90,17 @@ The system SHALL reject a payload containing a supported road, building, area fe
 - **WHEN** a payload contains a POI mapped as an area whose footprint crosses the bounding-box edge and whose center lies outside the box
 - **THEN** the import accepts the POI
 
+### Requirement: A POI drawn as an open way SHALL import as a point, and unclosed buildings and areas SHALL be skipped
+A supported POI mapped as a way that is not a closed ring of at least three distinct vertices (a bench drawn as a line) SHALL be imported as a point POI at the way's middle vertex, `nodes[len(nodes) // 2]`, and SHALL be checked against the bounding box by the envelope of the way's nodes, like a road. A POI way with fewer than two distinct nodes cannot be placed and SHALL be skipped. A building or area-feature way that is not a valid closed ring SHALL be skipped rather than failing the import. Skipped ways SHALL be counted and reported as `skipped_feature_count` on the import's own response. Closed POI, building, and area ways SHALL behave as before.
+
+#### Scenario: A bench drawn as an open line
+- **WHEN** a payload contains `amenity=bench` as an open way of three nodes
+- **THEN** one POI is imported at the way's middle vertex, and the import is accepted even if that vertex lies just outside the bounding box while the line crosses it
+
+#### Scenario: An unclosed building or area
+- **WHEN** a payload contains an unclosed `building=yes` way, an unclosed `leisure=park` way, and one valid closed building
+- **THEN** the closed building is imported, the other two are skipped, and the import response reports `skipped_feature_count` of 2
+
 ### Requirement: The system SHALL record a building's source height and level count, keeping unknown as unknown
 When a supported building carries a height or a level count in the source, the system SHALL persist the height in meters and the level count as a whole number. A height SHALL be accepted as a number optionally suffixed by meters, or as feet converted to meters. A level count SHALL be accepted as a whole non-negative number. A missing, unparseable, non-positive height, or a non-whole or negative level count, SHALL be stored as unknown (null), never as zero or a substituted default, and SHALL NOT fail the import. A re-import SHALL update a building's height and level count in place, keeping its identifier.
 

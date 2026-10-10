@@ -111,7 +111,8 @@ def background_import_work(
                 # The import committed before the lookup; without this the name is dropped when the session closes.
                 session.commit()
                 completed = import_area_out(
-                    named, result.block_count, result.linked_building_count, result.skipped_restriction_count
+                    named, result.block_count, result.linked_building_count, result.skipped_restriction_count,
+                    result.skipped_feature_count,
                 )
                 job.emit("completed", _dump(completed))
             except Exception as exc:
