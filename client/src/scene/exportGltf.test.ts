@@ -106,6 +106,21 @@ describe("exportWorld", () => {
     expect(names).not.toContain("block:b1");
   });
 
+  it("leaves the dashed block outlines out of the file even while the blocks are shown, and keeps them visible afterwards", async () => {
+    const world = buildWorld(data);
+    world.getObjectByName("blocks")!.visible = true;
+    const outline = world.getObjectByName("block_outline:b1")!;
+    expect(outline).toBeDefined();
+
+    const json = jsonChunk(await exportWorld(world));
+
+    const names = json.nodes.map((n: { name?: string }) => n.name);
+    expect(names).toContain("block:b1"); // the fill is a mesh, shown with the blocks
+    expect(names).not.toContain("block_outline:b1");
+    for (const mesh of json.meshes) for (const primitive of mesh.primitives) expect([1, 2, 3]).not.toContain(primitive.mode); // no line primitives
+    expect(outline.visible).toBe(true);
+  });
+
   describe("generated buildings", () => {
     const withGenerated: MapData = {
       ...data,

@@ -12,11 +12,13 @@ import { createExportButton } from "../scene/exportButton";
 import { createPinLayer } from "../scene/pinLayer";
 import { createFlyIntent, createTargetEase, type Vec3 } from "../scene/pinPoint";
 import { createToolGroup } from "../scene/toolGroup";
+import { createBlockSelection } from "../scene/blockSelection";
 import { createGenerationControls, type GenerationDeps } from "../scene/generationControls";
 import { createTerrainControls, type TerrainDeps } from "../scene/terrainControls";
 import { createRoutePanel, type RoutingDeps } from "../scene/routePanel";
 import type { SceneTarget } from "../scene/sceneLoader";
 import { bboxMeters, createStagedScene, type StagedHandle } from "../scene/stagedScene";
+import { createZoneLegend } from "../scene/zoneLegend";
 
 export interface SceneView extends SceneTarget {
   scene: THREE.Scene;
@@ -53,7 +55,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
   const toggle = Object.assign(document.createElement("div"), { className: "scene-toggle", hidden: true });
   const buildable = Object.assign(document.createElement("input"), { type: "checkbox" });
   const buildableLabel = document.createElement("label");
-  buildableLabel.append(buildable, " Show buildable area");
+  buildableLabel.append(buildable, " Show blocks");
   // Only for an area with terrain: roads follow the smoothed heights (a low-pass of the ground) or the exact ones.
   const smooth = Object.assign(document.createElement("input"), { type: "checkbox", checked: DEFAULT_ROAD_MODE === "smoothed" });
   const smoothLabel = Object.assign(document.createElement("label"), { hidden: true });
@@ -63,10 +65,16 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
   const credit = Object.assign(document.createElement("div"), { className: "scene-attribution", hidden: true });
   container.append(overlay, toggle, credit);
   let world: THREE.Group | undefined;
-  buildable.addEventListener("change", () => {
+  // "Show blocks": the dashed block outlines, the faint buildable-area fill under them, and the generation zones (with their legend). Blocks can only be picked while it is on.
+  const zoneLegend = createZoneLegend(container);
+  let blockSelection: ReturnType<typeof createBlockSelection> | undefined;
+  const showBlocks = () => {
     const blocks = world?.getObjectByName("blocks");
     if (blocks) blocks.visible = buildable.checked;
-  });
+    zoneLegend.setVisible(buildable.checked);
+    blockSelection?.setEnabled(buildable.checked);
+  };
+  buildable.addEventListener("change", showBlocks);
   const roadMode = () => (smooth.checked ? "smoothed" : "exact");
   smooth.addEventListener("change", () => world && setRoadMode(world, roadMode()));
   /** What the toggles and the credit show for the world on screen (`undefined`: no finished world). */
@@ -141,6 +149,10 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
     armPin,
   );
 
+  // Click a block to see how many buildings it has and tell the engine how many it should: not while walking, and not while Set point or Route have the click (both show a crosshair).
+  blockSelection =
+    generation && createBlockSelection(camera, renderer.domElement, container, generation.api, () => modes.mode === "fly" && renderer.domElement.style.cursor !== "crosshair");
+
   const exporter = createExportButton(actions);
   const terrainControls = terrain && createTerrainControls(actions, container, terrain);
   // Generate / Regenerate, its progress line, and "Show generated" beside "Smooth roads": the generated buildings are the `generated` group.
@@ -197,7 +209,9 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
     setWorld(data: MapData) {
       removeWorld();
       world = buildWorld(data, roadMode());
-      world.getObjectByName("blocks")!.visible = buildable.checked;
+      blockSelection?.setWorld(world);
+      zoneLegend.setReasons(data.generation_zones?.features.map((zone) => zone.properties.reason) ?? []);
+      showBlocks();
       scene.add(world);
       showTerrain(data);
       terrainControls?.setWorld(!data.elevation);
@@ -239,7 +253,9 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
       generationControls?.clear();
       const build = staged.begin(bbox);
       world = build.world;
-      world.getObjectByName("blocks")!.visible = buildable.checked;
+      blockSelection?.setWorld(undefined);
+      zoneLegend.setReasons([]);
+      showBlocks();
       scene.remove(placeholder);
       overlay.hidden = true;
       toggle.hidden = false;
@@ -271,6 +287,8 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
     showMessage(message: string) {
       framing.reset();
       removeWorld();
+      blockSelection?.setWorld(undefined);
+      zoneLegend.setReasons([]);
       modes.setWorld(undefined);
       flyIntent.take(); // a pin from the old world is gone
       pins.setWorld(undefined);
@@ -292,6 +310,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
       resize();
       modes.setActive(true);
       pins.setActive(true);
+      blockSelection?.setActive(true);
       if (!running) {
         clock.getDelta();
         running = true;
@@ -302,11 +321,13 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
       running = false;
       modes.setActive(false);
       pins.setActive(false);
+      blockSelection?.setActive(false);
     },
     dispose() {
       running = false;
       modes.setActive(false);
       pins.dispose();
+      blockSelection?.dispose();
       observer.disconnect();
       modes.dispose();
       routes?.dispose();

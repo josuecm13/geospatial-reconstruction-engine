@@ -2,7 +2,8 @@ import * as THREE from "three";
 import type { Feature, Geometry, MapData, Position, Projection } from "../api/types";
 import { buildingHeight } from "./buildingHeight";
 import { drapedGeometry, extrudeFootprints, flatGeometry, footprintShape, polygonShape } from "./extrude";
-import { areaFeatureMaterial, MATERIALS, roadMaterial } from "./palette";
+import { densify, insetRing, outlineKind } from "./blockOutline";
+import { areaFeatureMaterial, MATERIALS, outlineMaterial, roadMaterial, zoneMaterial } from "./palette";
 import { toLocal, type Local } from "./projection";
 import { dedupeTwins, roadPolygon } from "./roadGeometry";
 import { shadeGeometry } from "./shading";
@@ -13,10 +14,15 @@ export const WORLD_GROUPS = ["ground", "area_features", "roads", "blocks", "buil
 
 /** Heights above the ground (y = 0) for flat layers. The scene view draws them by LAYER_ORDER instead; this
  * physical separation stays because glTF has no render order, so other viewers of the export need it. */
-export const LAYER_Y = { area_features: 0.02, blocks: 0.03, roads: 0.05 } as const;
+export const LAYER_Y = { area_features: 0.02, blocks: 0.03, zones: 0.035, roads: 0.05 } as const;
+
+/** A block's outline floats this far above the ground, so it clears the road and area surfaces under it. */
+export const OUTLINE_LIFT = 0.25;
+/** How far apart a draped outline's vertices are when the world has no terrain (a flat line needs none in between). */
+const FLAT_OUTLINE_STEP = 50;
 
 /** Draw order of the ground-level layers, lowest first. They write no depth (palette.ts), so this order alone decides what shows on top. */
-export const LAYER_ORDER = { ground: -50, green: -40, water: -39, roadNarrow: -30, roadNormal: -29, roadWide: -28, blocks: -20 } as const;
+export const LAYER_ORDER = { ground: -50, green: -40, water: -39, roadNarrow: -30, roadNormal: -29, roadWide: -28, blocks: -20, zones: -19 } as const;
 
 /** The ground plane over the given local extent. Shared by buildWorld and the staged build. */
 export function groundPlane(minX: number, maxX: number, minZ: number, maxZ: number): THREE.Mesh {
@@ -159,7 +165,29 @@ export function buildWorld(data: MapData, roadMode: RoadMode = DEFAULT_ROAD_MODE
     groups.roads.add(mesh);
   }
 
+  // Where each block is, for picking: a click on the ground finds its block by point-in-polygon (blockSelection.ts), so a
+  // block with no buildable area (a median, a sliver) can still be selected.
+  const blockIndex: { id: string; polygons: Rings[]; properties: MapData["blocks"]["features"][number]["properties"] }[] = [];
+  world.userData.blockIndex = blockIndex;
   for (const feature of data.blocks.features) {
+    // The block's outline: its boundary moved 1.5 m inward (blockOutline.ts), draped on the terrain, dashed by its eligibility.
+    const outer = polygonsOf(feature.geometry, projection);
+    if (outer.length) blockIndex.push({ id: feature.id, polygons: outer, properties: feature.properties });
+    for (const rings of outer) {
+      const inset = densify(insetRing(rings[0]), terrain.spacing || FLAT_OUTLINE_STEP);
+      if (inset.length < 4) continue;
+      const positions = new Float32Array(inset.length * 3);
+      inset.forEach((p, i) => positions.set([p.x, terrain.heightAtLocal(p.x, p.z) + OUTLINE_LIFT, p.z], i * 3));
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+      const kind = outlineKind(feature.properties);
+      const line = new THREE.Line(geometry, outlineMaterial(kind));
+      line.computeLineDistances(); // the dashes are measured along the line
+      line.name = `block_outline:${feature.id}`;
+      line.userData = { layer: "block_outline", id: feature.id, kind };
+      line.raycast = () => {}; // never picked: selection goes through the ground (blockSelection.ts)
+      groups.blocks.add(line);
+    }
     const polygons = polygonsOf(feature.properties.buildable_area, projection);
     if (!polygons.length) continue;
     const drawn = clipped(polygons);
@@ -169,7 +197,18 @@ export function buildWorld(data: MapData, roadMode: RoadMode = DEFAULT_ROAD_MODE
     mesh.renderOrder = LAYER_ORDER.blocks;
     groups.blocks.add(mesh);
   }
-  // Hidden by default; the scene view's "Show buildable area" checkbox toggles it.
+  // The zones where the last run kept buildings off (water, slope, land use, front setback), draped like the area features.
+  for (const feature of data.generation_zones?.features ?? []) {
+    const polygons = polygonsOf(feature.geometry, projection);
+    if (!polygons.length) continue;
+    const drawn = clipped(polygons);
+    if (!drawn.length) continue;
+    const mesh = entity("zone", feature, surface(drawn), zoneMaterial(feature.properties.reason));
+    mesh.position.y = LAYER_Y.zones;
+    mesh.renderOrder = LAYER_ORDER.zones;
+    groups.blocks.add(mesh);
+  }
+  // Hidden by default; the scene view's "Show blocks" checkbox toggles it (the outlines, the faint buildable-area fill, and the zones).
   groups.blocks.visible = false;
 
   for (const feature of data.buildings.features) {

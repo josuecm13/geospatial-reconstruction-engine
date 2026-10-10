@@ -1,10 +1,11 @@
 import type { GenerationRun } from "../api/types";
+import { type BlockFeedbackApi } from "./blockPanel";
 import { generateBuildings, newSeed, type GenerationApi } from "./generationJob";
 import { generateButtonState, generationFailureMessage, generationProgressText } from "./generationMessages";
 
-/** What Generate needs: the API, the open area, and a way to reload the scene once the run is stored. */
+/** What Generate needs: the API, the open area, and a way to reload the scene once the run is stored. The API also carries the block feedback calls the block panel makes. */
 export interface GenerationDeps {
-  api: GenerationApi;
+  api: GenerationApi & BlockFeedbackApi;
   areaId(): string | null;
   /** Loads the open area's map-data again and rebuilds the world from it. */
   reload(): void;

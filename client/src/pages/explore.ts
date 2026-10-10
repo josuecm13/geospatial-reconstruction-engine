@@ -99,6 +99,7 @@ export const mount: Mount<ExploreRoute> = (el, ctx) => {
   const mapView = createMapView(pick("map-view"));
   let importPanel: ImportPanel | undefined;
   let boundaryPanel: BoundaryPanel | undefined;
+  let mapLayers: MapDataLayers | undefined;
   mapView.map.on("moveend", () => {
     if (disposed || view !== "map") return;
     const center = mapView.map.getCenter();
@@ -106,7 +107,9 @@ export const mount: Mount<ExploreRoute> = (el, ctx) => {
   });
   mapView.map.on("load", () => {
     if (disposed) return;
-    const layers = new MapDataLayers(mapView.map);
+    // Clicking a block opens its panel (how many buildings, and the feedback controls) in the map's own container.
+    const layers = new MapDataLayers(mapView.map, { api, host: pick("map-view") });
+    mapLayers = layers;
     // The boundary panel needs the import panel's rectangle, and the import panel saves a traced shape
     // through the boundary panel once an import succeeds, so each is handed to the other as a callback.
     const panel = new ImportPanel(
@@ -250,6 +253,7 @@ export const mount: Mount<ExploreRoute> = (el, ctx) => {
     // Both panels touch the map (the import's stream, a trace's drag lock), so they go before it does.
     importPanel?.dispose();
     boundaryPanel?.dispose();
+    mapLayers?.dispose();
     void sceneView?.then((scene) => {
       sceneLoader?.hidden();
       scene.dispose();

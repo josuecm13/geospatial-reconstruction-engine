@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import type { OutlineKind } from "./blockOutline";
 import { shade } from "./shading";
 
 /** Every color and shared material of the scene, the only place a scene color is written. One material per kind, never one per mesh. */
@@ -118,6 +119,24 @@ export function areaFeatureMaterial(kind: string): THREE.Material {
       return MATERIALS.green;
   }
 }
+
+/** The line material of a block outline (blockOutline.ts decides which kind a block gets). */
+export function outlineMaterial(kind: OutlineKind): THREE.LineBasicMaterial {
+  switch (kind) {
+    case "selected":
+      return MATERIALS.blockOutlineSelected;
+    case "reference":
+      return MATERIALS.blockOutlineReference;
+    case "faint":
+      return MATERIALS.blockOutlineFaint;
+    default:
+      return MATERIALS.blockOutline;
+  }
+}
+
+/** The colour of a generation zone's reason, for the legend's swatch. */
+export const zoneColor = (reason: string): string =>
+  reason === "water" ? COLORS.zoneWater : reason === "steep" ? COLORS.zoneSteep : reason === "landuse" ? COLORS.zoneLanduse : COLORS.zoneSetback;
 
 /** The shading of a generation zone, by reason. */
 export const zoneMaterial = (reason: string): THREE.Material =>
