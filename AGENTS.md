@@ -45,7 +45,7 @@ elsewhere. See `HOW_TO_RUN.md` for the full setup and what to do in your shell a
 
 ## Status
 
-This project is intentionally incomplete. Through Milestone 9, it has domain persistence, OSM
+This project is intentionally incomplete. Through Milestone 10, it has domain persistence, OSM
 fixture ingestion (with automatic block derivation and reconciling re-import), spatial queries,
 road graph traversal, routing, a full HTTP API in front of all of it, logical streets with
 generated cross-sections (lanes, lane type, width), buildable blocks (buildable area, median
@@ -53,9 +53,11 @@ and edge-block flags, stable ids), and traced boundaries (named shapes over an i
 scoped queries, and GeoJSON export in filter and clip modes with local projection metadata).
 Milestone 9 added live Overpass import, background imports that stream their stages, and the
 showcase client (2D picker, boundary tracing, a 3D scene you can fly and walk, routes, glTF export).
-Next is Milestone 10 (terrain elevation, #105), then the generated-content milestones (11 and 12), all
-unbuilt. Don't pull those in prematurely; see `MILESTONES.md` for the order and the tracking issues for
-the plan.
+Milestone 10 added terrain elevation (an AWS Terrain Tiles grid per area, with building base heights
+and exact and smoothed road heights stored apart from the observed tables, re-analysis for existing
+areas, and the scene and glTF export on terrain), imports of up to 10 km², and gzip responses.
+Next are the generated-content milestones (11, #23, and 12, #24), both unbuilt. Don't pull those
+in prematurely; see `MILESTONES.md` for the order and the tracking issues for the plan.
 
 ## Conventions
 
