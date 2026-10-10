@@ -83,6 +83,54 @@ content: `blocks` are persisted without a source because "a block only exists be
 road segments do", and they are re-derived on every import. Anything involving randomness or manual
 edits belongs in the content layer.
 
+## Terrain elevation
+
+Terrain is a third kind of data: neither observed by OSM nor generated, but measured by an external
+elevation model. It lives in its own tables, apart from the OSM-observed ones, and every consumer reads
+the same stored values. The decisions below are recorded for Milestone 10 (#105, decided under #106).
+
+- **Source: AWS Terrain Tiles (Mapzen/Tilezen "terrarium" encoding).** Tiles come from
+  `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png` with no key, and decode as
+  `height_m = (R * 256 + G + B / 256) - 32768`. The maximum zoom is 15 (zoom 16 returns 404), about
+  3.6 m per pixel at 40.76°N, but the underlying source is often coarser than that. Vertical accuracy
+  follows the region's source: LiDAR-derived 3DEP in the US is decimetre to metre class, and SRTM and
+  GMTED elsewhere are metre class. The sources are public domain or open licences that require
+  attribution; the full list is at
+  [github.com/tilezen/joerd/blob/master/docs/attribution.md](https://github.com/tilezen/joerd/blob/master/docs/attribution.md),
+  and the short form ships in every elevation response as `TERRAIN_ATTRIBUTION`.
+  *Why this over Copernicus GLO-30:* GLO-30 is a surface model, with rooftops and tree canopy baked in,
+  so a building's base would sit on its own roof's height. Terrarium is bare earth wherever national
+  LiDAR exists, which is what a ground elevation has to be. *Why not USGS 3DEP directly:* it covers the
+  US only.
+- **Storage: a per-area grid plus stored derived heights.** The grid is the single record of an area's
+  ground. Building base heights and road vertex heights are computed from it once and stored in
+  `building_elevations` and `road_segment_elevations`. *Why stored, not computed on read:* the API, the
+  scene, the glTF export, and Milestone 11's generated buildings must all show the same elevation, and
+  generation needs to record which grid it used. The grid's `version` is that record: it bumps only when
+  the stored grid changes, so a later generation run can tell whether its buildings are stale. The
+  three tables are separate from `buildings` and `road_segments`, so no observed row gains a column
+  (the rule in "Raw layer and content layer").
+- **Building base: the lowest ground under the footprint.** The base is the minimum of the exact grid
+  sampled at the footprint's vertices and at every grid point inside it. *Why the minimum:* a building
+  on a slope must never float. The uphill side sinks into the ground instead. A centroid base would leave
+  the downhill side floating. The same pure function places Milestone 11's generated buildings.
+- **Roads: exact and smoothed are both stored, and the client toggles between them.** Exact is the raw
+  grid sampled at each segment vertex. Smoothed is a separable box blur of the grid itself, radius
+  30 m (`SMOOTHING_METERS`), sampled at each vertex. *Why:* about 30 m of effective sampling makes a
+  flat street look bumpy, so the smoothed profile is the default. The blur is applied to the field, not
+  to each segment, so heights stay continuous where segments meet at junctions. The glTF export uses
+  whichever mode the client has on.
+- **Re-analysis of existing areas.** `POST /import-areas/{id}/elevation` re-analyses one completed area
+  in the background, and a script runs the same analysis over every completed area. Re-analysis
+  fetches no OSM data and changes no entity id or geometry. It is idempotent: the grid version bumps only
+  when the grid changes, so a second run changes nothing. While it runs, the area stays readable and is
+  drawn flat, as it was before elevation existed.
+- **Elevation never fails an import.** If the tile source is unavailable, the import completes with a
+  flat area, and the area can be re-analysed later. A source failure during a background import is an
+  `elevation` stage with `elevation: null` and `error: "elevation_unavailable"`, followed by
+  `completed`. The source is configured by `ELEVATION_URL`; `off` or an empty value disables it, as
+  `GEOCODER_URL` does. Tests replace the source, so CI never reaches the network.
+
 ## OSM translation
 
 The adapter fetches only streets/roads, building footprints, POIs, relevant areas, and the OSM tags needed for lane and turn semantics. It maps OSM values into constrained application categories: e.g. `highway=*` becomes a `RoadClassification`, `lanes`/`lanes:forward`/`lanes:backward` become a lane profile, and turn-restriction relations become `TurnMovement` records. Building tags become a `BuildingCategory`, while amenity/shop/leisure tags become `PoiCategory` or `AreaFeatureKind`. Unknown tags are either omitted or captured as narrowly scoped source metadata, rather than leaked as application behavior.
