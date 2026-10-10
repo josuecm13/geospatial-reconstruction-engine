@@ -1,12 +1,14 @@
 import uuid
 from collections import defaultdict
 
-from sqlalchemy import exists, func, or_, select
+from geoalchemy2 import Geography
+from sqlalchemy import cast, exists, func, or_, select
 from sqlalchemy.orm import Session, aliased
 
 from app.domain.block import Block
-from app.domain.enums import RoadClassification
-from app.persistence.geometry import geom_to_multipolygon, geom_to_polygon, polygon_to_geom
+from app.domain.bounding_box import Coordinate
+from app.domain.enums import ImportStatus, RoadClassification
+from app.persistence.geometry import geom_to_multipolygon, geom_to_polygon, point_to_geom, polygon_to_geom
 from app.persistence.models import (
     BlockBoundarySegmentModel,
     BlockModel,
@@ -110,6 +112,30 @@ class BlockRepository:
             .order_by(BlockBoundarySegmentModel.sequence_order)
         ).scalars().all()
         return tuple(rows)
+
+    def blocks_within(
+        self, point: Coordinate, meters: float, exclude_area_id: uuid.UUID | None = None
+    ) -> list[tuple[Block, float]]:
+        """Blocks of any completed import area whose boundary centroid is within `meters` of
+        `point` (distance on the geography), nearest first with the distance in metres. Blocks of
+        `exclude_area_id` are left out. Matching a block to a reference uses it to find exemplars
+        in other areas."""
+        centroid = cast(func.ST_Centroid(BlockModel.boundary), Geography)
+        target = cast(point_to_geom(point), Geography)
+        distance = func.ST_Distance(centroid, target)
+        query = (
+            select(BlockModel, distance)
+            .join(ImportAreaModel, ImportAreaModel.id == BlockModel.import_area_id)
+            .where(ImportAreaModel.status == ImportStatus.COMPLETED, func.ST_DWithin(centroid, target, meters))
+            .order_by(distance, BlockModel.id)
+        )
+        if exclude_area_id is not None:
+            query = query.where(BlockModel.import_area_id != exclude_area_id)
+        rows = self.session.execute(query).all()
+        if not rows:
+            return []
+        blocks ={block.id: block for block in self._list(select(BlockModel).where(BlockModel.id.in_([row[0].id for row in rows])))}
+        return [(blocks[model.id], float(meters_away)) for model, meters_away in rows]
 
     def bounding_road_classes(self, block_id: uuid.UUID) -> tuple[RoadClassification, ...]:
         """The distinct classifications of the roads whose segments bound the block, for choosing

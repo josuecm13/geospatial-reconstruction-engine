@@ -2,7 +2,9 @@
 fingerprints, defaults and matching. No shapely, no database."""
 
 import enum
+import math
 import statistics
+import uuid
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
@@ -258,3 +260,46 @@ def default_fingerprint(group: RoadClassGroup, style: SettlementStyle) -> Finger
         coverage=None,
         style=style,
     )
+
+
+# Matching a block to its local reference (contract 5).
+REFERENCE_RADIUS_METERS = 500.0
+
+
+@dataclass(frozen=True)
+class MatchProfile:
+    """What matching compares between two blocks. `area_square_meters` is the block's own area."""
+
+    road_class_group: RoadClassGroup
+    area_square_meters: float
+    style: SettlementStyle
+
+
+@dataclass(frozen=True)
+class ReferenceCandidate:
+    """An exemplar block near the block being matched."""
+
+    block_id: uuid.UUID
+    distance_m: float
+    profile: MatchProfile
+
+
+def match_score(subject: MatchProfile, candidate: ReferenceCandidate) -> float:
+    """Lower is better: distance as a share of the 500 m radius, plus 1 for a different road class
+    group, plus the log ratio of the two areas, plus 1 for a different style."""
+    area_ratio = abs(math.log(subject.area_square_meters / candidate.profile.area_square_meters))
+    return (
+        candidate.distance_m / REFERENCE_RADIUS_METERS
+        + (0.0 if subject.road_class_group is candidate.profile.road_class_group else 1.0)
+        + area_ratio
+        + (0.0 if subject.style is candidate.profile.style else 1.0)
+    )
+
+
+def best_reference(subject: MatchProfile, candidates: Iterable[ReferenceCandidate]) -> ReferenceCandidate | None:
+    """The lowest-scoring candidate within 500 m, ties broken by block id; None when there is none,
+    and the block takes `default_fingerprint` instead."""
+    in_range = [candidate for candidate in candidates if candidate.distance_m <= REFERENCE_RADIUS_METERS]
+    if not in_range:
+        return None
+    return min(in_range, key=lambda candidate: (match_score(subject, candidate), str(candidate.block_id)))

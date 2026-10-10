@@ -1,3 +1,4 @@
+import math
 import uuid
 
 import pytest
@@ -179,3 +180,59 @@ def test_strongest_bounding_road_decides_the_group():
     assert strongest_road_group([RoadClassification.TRUNK, RoadClassification.PRIMARY]) is RoadClassGroup.ARTERIAL
     assert strongest_road_group([RoadClassification.UNCLASSIFIED]) is RoadClassGroup.LOCAL
     assert strongest_road_group([]) is RoadClassGroup.LOCAL
+
+
+# --- matching ---
+
+from app.domain.generation import (  # noqa: E402
+    MatchProfile,
+    ReferenceCandidate,
+    best_reference,
+    match_score,
+)
+
+_SUBJECT = MatchProfile(RoadClassGroup.LOCAL, 4000.0, SettlementStyle.REGULAR)
+
+
+def _candidate(block_id, distance_m=100.0, group=RoadClassGroup.LOCAL, area=4000.0, style=SettlementStyle.REGULAR):
+    return ReferenceCandidate(block_id, distance_m, MatchProfile(group, area, style))
+
+
+def test_a_perfect_neighbour_at_the_same_spot_scores_zero():
+    assert match_score(_SUBJECT, _candidate(uuid.uuid4(), distance_m=0.0)) == 0.0
+
+
+def test_score_adds_distance_class_area_and_style_terms():
+    candidate = _candidate(uuid.uuid4(), distance_m=250.0, group=RoadClassGroup.ARTERIAL, area=8000.0, style=SettlementStyle.SPARSE)
+
+    score = match_score(_SUBJECT, candidate)
+
+    assert score == pytest.approx(0.5 + 1.0 + math.log(2) + 1.0)
+
+
+def test_scoring_prefers_near_same_class_similar_area_same_style():
+    ids = [uuid.UUID(int=n) for n in range(1, 6)]
+    best = _candidate(ids[0], distance_m=50.0)
+    farther = _candidate(ids[1], distance_m=300.0)
+    other_class = _candidate(ids[2], distance_m=50.0, group=RoadClassGroup.COLLECTOR)
+    other_area = _candidate(ids[3], distance_m=50.0, area=40000.0)
+    other_style = _candidate(ids[4], distance_m=50.0, style=SettlementStyle.INFORMAL)
+
+    chosen = best_reference(_SUBJECT, [other_style, other_area, other_class, farther, best])
+
+    assert chosen is best
+    for worse in (farther, other_class, other_area, other_style):
+        assert match_score(_SUBJECT, worse) > match_score(_SUBJECT, best)
+
+
+def test_equal_scores_break_on_the_lowest_block_id():
+    low, high = uuid.UUID(int=1), uuid.UUID(int=2)
+
+    assert best_reference(_SUBJECT, [_candidate(high), _candidate(low)]).block_id == low
+    assert best_reference(_SUBJECT, [_candidate(low), _candidate(high)]).block_id == low
+
+
+def test_no_candidate_within_500_metres_means_defaults():
+    assert best_reference(_SUBJECT, []) is None
+    assert best_reference(_SUBJECT, [_candidate(uuid.uuid4(), distance_m=500.1)]) is None
+    assert best_reference(_SUBJECT, [_candidate(uuid.uuid4(), distance_m=500.0)]) is not None
