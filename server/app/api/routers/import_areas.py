@@ -8,7 +8,7 @@ import json
 import uuid
 from collections.abc import AsyncIterator
 
-from fastapi import APIRouter, Depends, Header, Query
+from fastapi import APIRouter, Depends, Header, Query, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -211,6 +211,31 @@ def get_import_area(
 ) -> ImportAreaOut:
     block_count = ImportAreaRepository(session).block_count(area.id)
     return import_area_out(area, block_count)
+
+
+@router.delete("/import-areas/{import_area_id}", status_code=204)
+def delete_import_area(
+    area: ImportArea = Depends(import_area_dependency),
+    session: Session = Depends(get_session),
+    jobs: ImportJobRegistry = Depends(get_import_jobs),
+) -> Response:
+    """Hard-deletes the area and everything derived from it. Refused while its import runs, and
+    while a completed or importing area covers it: that area borrows this one's features."""
+    if jobs.is_running(area.id):
+        raise _import_in_progress(area.id)
+    areas = ImportAreaRepository(session)
+    covering = areas.areas_covering(area.bbox, exclude_id=area.id)
+    if covering:
+        names = ", ".join(other.place_name or str(other.id) for other in covering)
+        raise ApiError(
+            409,
+            "import_area_in_use",
+            f"import area {area.id} is borrowed from by {len(covering)} larger area(s): {names}",
+            {"covering_areas": [{"id": str(other.id), "name": other.place_name} for other in covering]},
+        )
+    areas.delete(area.id)
+    session.commit()
+    return Response(status_code=204)
 
 
 @router.get("/import-areas/{import_area_id}/map-data", response_model=MapDataOut)

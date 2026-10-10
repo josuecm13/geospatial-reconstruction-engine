@@ -227,3 +227,26 @@ An import, synchronous or background, SHALL treat every completed import area wh
 - **WHEN** a client imports a rectangle that only partly overlaps a completed import area
 - **THEN** the rectangle is imported in full, as if that area did not exist
 
+
+### Requirement: The API SHALL delete an import area and everything derived from it
+`DELETE /import-areas/{import_area_id}` SHALL hard-delete the area and every row derived from it (streets, roads, road segments, navigable nodes, turn movements, blocks and their boundary segments, buildings, POIs, area features, traced boundaries) in one transaction, and respond 204 with no body. Failed and pending areas that are not running SHALL be deletable. An unknown id SHALL respond 404 with code `import_area_not_found`. While the area's import is running, the response SHALL be 409 with code `import_in_progress`. While another import area with status `completed` or `importing` has a bounding box that covers this area's (edges may touch), the response SHALL be 409 with code `import_area_in_use`, with `details.covering_areas` listing each such area's `id` and `name` (the place name, or null); nothing SHALL be deleted. Other import areas SHALL be unaffected.
+
+#### Scenario: Deleting an area
+- **WHEN** a client deletes a completed import area that no larger area covers
+- **THEN** the response is 204 with no body, fetching the area or its map data is a 404 `import_area_not_found`, and it no longer appears in the list
+
+#### Scenario: Unknown area
+- **WHEN** a client deletes an id that names no import area
+- **THEN** the response is a 404 error with code `import_area_not_found`
+
+#### Scenario: An import is running
+- **WHEN** a client deletes an area whose background import is still running
+- **THEN** the response is a 409 error with code `import_in_progress`, and the area is unchanged
+
+#### Scenario: A larger area borrows from it
+- **WHEN** a client deletes an area whose bounding box is covered by a completed or importing area
+- **THEN** the response is a 409 error with code `import_area_in_use` whose `details.covering_areas` names the covering areas, and nothing is deleted
+
+#### Scenario: Deleting the outer area of a nested pair
+- **WHEN** a client deletes the larger area that covers a completed inner area
+- **THEN** the response is 204, and the inner area and its map data are intact
