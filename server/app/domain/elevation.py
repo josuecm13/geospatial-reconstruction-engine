@@ -8,6 +8,7 @@ a road vertex's height) is computed from it by the pure functions here."""
 import math
 from collections.abc import Iterator
 from dataclasses import dataclass
+from datetime import datetime
 
 from app.domain.bounding_box import BoundingBox, Coordinate
 from app.domain.geometry import LineString, Polygon
@@ -80,6 +81,19 @@ class ElevationGrid:
         south = self.height_at(row0, col0) * (1 - col_fraction) + self.height_at(row0, col0 + 1) * col_fraction
         north = self.height_at(row0 + 1, col0) * (1 - col_fraction) + self.height_at(row0 + 1, col0 + 1) * col_fraction
         return south * (1 - row_fraction) + north * row_fraction
+
+
+@dataclass(frozen=True)
+class StoredGrid:
+    """An area's grid as stored, with where it came from. `version` changes only when the heights,
+    size or origin do."""
+
+    grid: ElevationGrid
+    version: int
+    source: str
+    algorithm: str
+    smoothing_meters: float
+    analysed_at: datetime
 
 
 def grid_size_for(

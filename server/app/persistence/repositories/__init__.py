@@ -1,6 +1,7 @@
 from app.persistence.repositories.area_feature import AreaFeatureRepository
 from app.persistence.repositories.block import BlockRepository
 from app.persistence.repositories.building import BuildingRepository
+from app.persistence.repositories.elevation import ElevationRepository
 from app.persistence.repositories.import_area import ImportAreaRepository
 from app.persistence.repositories.poi import PointOfInterestRepository
 from app.persistence.repositories.road_graph import (
@@ -16,6 +17,7 @@ __all__ = [
     "AreaFeatureRepository",
     "BlockRepository",
     "BuildingRepository",
+    "ElevationRepository",
     "ImportAreaRepository",
     "NavigableNodeRepository",
     "PointOfInterestRepository",

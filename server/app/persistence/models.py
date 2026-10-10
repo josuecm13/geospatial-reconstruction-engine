@@ -7,13 +7,14 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
+    LargeBinary,
     SmallInteger,
     String,
     UniqueConstraint,
     func,
 )
 from sqlalchemy.dialects.postgresql import ENUM as PgEnum
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import DeclarativeBase
 
 from app.domain.enums import (
@@ -322,3 +323,49 @@ class TracedBoundaryModel(Base):
     __table_args__ = (
         UniqueConstraint("import_area_id", "name", name="uq_traced_boundaries_import_area_name"),
     )
+
+
+class AreaElevationGridModel(Base):
+    """An area's ground, one row per area. Elevation lives apart from the observed tables."""
+
+    __tablename__ = "area_elevation_grids"
+
+    import_area_id = Column(
+        UUID(as_uuid=True), ForeignKey("import_areas.id", ondelete="CASCADE"), primary_key=True
+    )
+    origin_latitude = Column(Float, nullable=False)
+    origin_longitude = Column(Float, nullable=False)
+    lat_step = Column(Float, nullable=False)
+    lon_step = Column(Float, nullable=False)
+    rows = Column(Integer, nullable=False)
+    cols = Column(Integer, nullable=False)
+    # rows * cols little-endian float32, row-major from the south-west corner.
+    heights = Column(LargeBinary, nullable=False)
+    source = Column(String, nullable=False)
+    algorithm = Column(String, nullable=False)
+    version = Column(Integer, nullable=False)
+    smoothing_meters = Column(Float, nullable=False)
+    analysed_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint("rows >= 2 AND cols >= 2", name="ck_area_elevation_grids_size"),
+        CheckConstraint("octet_length(heights) = rows * cols * 4", name="ck_area_elevation_grids_heights_length"),
+    )
+
+
+class BuildingElevationModel(Base):
+    __tablename__ = "building_elevations"
+
+    building_id = Column(UUID(as_uuid=True), ForeignKey("buildings.id", ondelete="CASCADE"), primary_key=True)
+    base_elevation_meters = Column(Float, nullable=False)
+
+
+class RoadSegmentElevationModel(Base):
+    __tablename__ = "road_segment_elevations"
+
+    road_segment_id = Column(
+        UUID(as_uuid=True), ForeignKey("road_segments.id", ondelete="CASCADE"), primary_key=True
+    )
+    # One value per vertex of the segment's geometry, in order.
+    exact_meters = Column(ARRAY(Float), nullable=False)
+    smoothed_meters = Column(ARRAY(Float), nullable=False)
