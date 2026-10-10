@@ -85,3 +85,14 @@ export const EDGES: readonly Edge[] = STAGES.slice(1).map((stage, i) => ({ from:
 export function stageById(id: string): Stage | undefined {
   return STAGES.find((stage) => stage.id === id);
 }
+
+/** `01` to `06`: where a stage sits in the pipeline, for the diagram and the terminal panel. */
+export function stageNumber(id: string): string {
+  const index = STAGES.findIndex((stage) => stage.id === id);
+  return String(index + 1).padStart(2, "0");
+}
+
+/** The doc a stage links to, as the path inside the repository (`docs/architecture.md#osm-translation`). */
+export function docPath(stage: Stage): string {
+  return stage.docHref.split("/blob/main/")[1] ?? stage.docHref;
+}

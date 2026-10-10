@@ -3,23 +3,25 @@ import { shade } from "./shading";
 
 /** Every color and shared material of the scene, the only place a scene color is written. One material per kind, never one per mesh. */
 export const COLORS = {
-  ground: "#e6e1d8",
-  green: "#bccaa8",
-  water: "#a7c0cc",
-  roadNormal: "#cdc7bc",
-  roadWide: "#bfb8ab",
-  roadNarrow: "#d8d3ca",
-  buildingMeasured: "#f6f3ee",
-  // Cool grey against the warm white: the height was assumed, not stated by the source.
-  buildingDefaulted: "#d5d6d8",
-  buildable: "#5f9e98",
-  gridCenter: "#cfc9be",
-  gridLine: "#d9d4ca",
-  route: "#e4572e",
-  origin: "#2e3a40",
-  destination: "#e4572e",
+  ground: "#1b2024",
+  green: "#34503d",
+  water: "#22405a",
+  roadNormal: "#3e454c",
+  roadWide: "#4b535b",
+  roadNarrow: "#343a40",
+  buildingMeasured: "#ddd6c9",
+  // Dimmer and cool: the height was assumed, not stated by the source.
+  buildingDefaulted: "#8e959c",
+  buildable: "#4fb3a9",
+  gridCenter: "#3a4147",
+  gridLine: "#2a3035",
+  route: "#ff6b3d",
+  origin: "#e8e4dc",
+  destination: "#ff6b3d",
   // The waiting wireframe of a staged build.
-  waiting: "#2e3a40",
+  waiting: "#8e959c",
+  // The pale outline of each building's edges.
+  edge: "#f2eee6",
 } as const;
 
 /**
@@ -45,12 +47,14 @@ export const MATERIALS = {
   roadNarrow: decal(COLORS.roadNarrow),
   buildingMeasured: flat(COLORS.buildingMeasured),
   buildingDefaulted: flat(COLORS.buildingDefaulted),
-  buildable: decal(COLORS.buildable, { transparent: true, opacity: 0.35, side: THREE.DoubleSide }),
+  buildable: decal(COLORS.buildable, { transparent: true, opacity: 0.25, side: THREE.DoubleSide }),
   route: flat(COLORS.route, { side: THREE.DoubleSide }),
   origin: flat(COLORS.origin),
   destination: flat(COLORS.destination),
   // A wireframe, not faces: no shade.
   waiting: new THREE.MeshBasicMaterial({ color: COLORS.waiting, wireframe: true }),
+  // Building edge lines, shared by every building: lines, so no shade.
+  edge: new THREE.LineBasicMaterial({ color: COLORS.edge, transparent: true, opacity: 0.35 }),
 };
 
 export const roadMaterial = (laneType: string) =>

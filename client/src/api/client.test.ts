@@ -70,6 +70,26 @@ describe("ApiClient", () => {
   });
 });
 
+describe("deleteImportArea", () => {
+  it("deletes by id and returns nothing for a 204", async () => {
+    const { client, calls } = recording(new Response(null, { status: 204 }));
+
+    await expect(client.deleteImportArea("a 1")).resolves.toBeUndefined();
+    expect(calls[0].url).toBe("/api/import-areas/a%201");
+    expect(calls[0].init?.method).toBe("DELETE");
+  });
+
+  it("surfaces a refusal by its code with the covering areas", async () => {
+    const covering = [{ id: "b2", name: "Mitte" }, { id: "c3", name: null }];
+    const { client } = recording(json(409, { error: { code: "import_area_in_use", message: "in use", details: { covering_areas: covering } } }));
+
+    const error = await client.deleteImportArea("a1").catch((e) => e);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect([error.status, error.code, error.details]).toEqual([409, "import_area_in_use", { covering_areas: covering }]);
+  });
+});
+
 describe("listImportAreas", () => {
   it("asks for completed areas and unwraps the list", async () => {
     const calls: string[] = [];

@@ -112,3 +112,65 @@ def test_completed_areas_covered_by_finds_only_completed_areas_wholly_inside(db_
     assert {area.id for area in covered} == {inside.id, on_the_edge.id}
     assert pending.id not in {area.id for area in covered}
     assert outer.id in {area.id for area in repo.completed_areas_covered_by(outer_bbox)}
+
+
+def test_areas_covering_finds_completed_and_importing_areas_that_cover_the_bbox(db_session):
+    repo = ImportAreaRepository(db_session)
+    inner_bbox = BoundingBox(Coordinate(30.001, -97.799), Coordinate(30.002, -97.798))
+    inner = _completed(repo, 30.001, -97.799, 30.002, -97.798)
+    covering = _completed(repo, 30.0, -97.8, 30.004, -97.796)
+    on_the_edge = _completed(repo, 30.001, -97.799, 30.003, -97.797)
+    importing = repo.mark_importing(
+        repo.get_or_create("osm", BoundingBox(Coordinate(30.0005, -97.7995), Coordinate(30.0025, -97.7975))).id
+    )
+    _completed(repo, 30.0015, -97.7985, 30.003, -97.797)  # partly overlapping
+    failed = repo.get_or_create("osm", BoundingBox(Coordinate(30.0, -97.8), Coordinate(30.009, -97.791)))
+    repo.mark_failed(failed.id)
+    repo.get_or_create("osm", BoundingBox(Coordinate(29.999, -97.801), Coordinate(30.008, -97.792)))  # pending, covers it
+
+    found = repo.areas_covering(inner_bbox, exclude_id=inner.id)
+
+    assert {area.id for area in found} == {covering.id, on_the_edge.id, importing.id}
+    assert inner.id in {area.id for area in repo.areas_covering(inner_bbox)}
+
+
+def _row_counts(db_session) -> dict[str, int]:
+    from sqlalchemy import func, select
+
+    from app.persistence import models
+
+    tables = [
+        models.StreetModel, models.RoadModel, models.NavigableNodeModel, models.RoadSegmentModel,
+        models.TurnMovementModel, models.BlockModel, models.BlockBoundarySegmentModel, models.BuildingModel,
+        models.PointOfInterestModel, models.AreaFeatureModel, models.TracedBoundaryModel,
+    ]
+    return {table.__tablename__: db_session.scalar(select(func.count()).select_from(table)) for table in tables}
+
+
+def test_delete_removes_the_area_and_everything_derived_and_keeps_other_areas(db_session):
+    import json
+    from pathlib import Path
+
+    from app.ingestion.service import OSMIngestionService
+    from app.persistence.repositories.traced_boundary import TracedBoundaryRepository
+
+    payload = json.loads((Path(__file__).parents[1] / "fixtures" / "osm_block_loop.json").read_text())
+    other_payload = json.loads((Path(__file__).parents[1] / "fixtures" / "osm_neighborhood.json").read_text())
+    first_bbox = BoundingBox(Coordinate(9.9398, -84.0902), Coordinate(9.9407, -84.0893))
+    second_bbox = BoundingBox(Coordinate(9.9330, -84.0810), Coordinate(9.9350, -84.0790))  # contains osm_neighborhood
+    service = OSMIngestionService(db_session)
+    survivor = service.import_fixture(second_bbox, other_payload).import_area
+    kept = _row_counts(db_session)
+    doomed = service.import_fixture(first_bbox, payload).import_area
+    TracedBoundaryRepository(db_session).create(doomed, "Whole", first_bbox.ring())
+    with_both = _row_counts(db_session)
+    assert with_both["road_segments"] > kept["road_segments"] and with_both["blocks"] > kept["blocks"]
+    assert with_both["traced_boundaries"] == 1
+
+    repo = ImportAreaRepository(db_session)
+    assert repo.delete(doomed.id) is True
+
+    assert _row_counts(db_session) == kept
+    assert repo.get(doomed.id) is None
+    assert repo.get(survivor.id) is not None
+    assert repo.delete(doomed.id) is False

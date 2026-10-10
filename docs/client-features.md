@@ -20,6 +20,7 @@ beyond parity.
 |---|---|---|---|---|
 | Import a bounded area (≤ 1 km × 1 km) from an OSM payload. Re-import reconciles and deletes what the payload omits | `POST /import-areas` | shipped | done | Draw the rectangle, then drag inside to move it, an edge or corner to resize it (pointer events, so touch works; `client/src/importing/rectangleTool.ts`, drag math in `rectangleDrag.ts`). The cursor names each part, a label shows size and area while dragging, the rectangle turns red past 1 km², and Escape restores it. The area readout shows the 1 km² limit; re-importing warns that it is destructive |
 | List import areas, most recently imported first, with an optional `status` filter and `limit` | `GET /import-areas` | shipped | done | `/locations` (`client/src/pages/locations.ts`, `client/src/locations/`): a card per area (any status) with a footprint preview, filter by text, sort by recent or size, up to 200 areas. The panel links to it and shows only the open area |
+| Delete an import area and its imported data: 204, 404 `import_area_not_found`, 409 `import_in_progress`, or 409 `import_area_in_use` (`details.covering_areas`: `{ id, name }`, name may be null; nothing deleted) | `DELETE /import-areas/{id}` | shipped | done | A quiet "Delete" button on each `/locations` card (`client/src/locations/card.ts`, `pages/locations.ts`; the landing page's cards stay read-only). It confirms first, then removes the card without a reload. A refusal names the larger places to delete first (`locations/deleteMessage.ts`); a 404 drops the card |
 | Import status and entity counts (roads, nodes, buildings, POIs, area features, blocks, linked buildings) | `GET /import-areas/{id}` | shipped | partial | Counts after an import (roads, buildings, blocks, POIs, area features) and on location cards (buildings, roads, blocks); cards show `pending` / `importing` / `failed`. Node and linked-building counts aren't shown. `map-data` returns 409 `import_area_not_ready` until the import completes |
 | Created / updated / removed counts on import | `POST /import-areas` | planned (#6) | — | Show a diff summary after a re-import |
 | Skipped turn restrictions on import (`skipped_restriction_count`: malformed or unresolvable in OSM) | `POST /import-areas` | shipped | — | Mention it in the import summary when it isn't zero |
@@ -157,6 +158,14 @@ Ideas, not commitments. Once one is chosen, it becomes an issue in the milestone
   normal and a fixed light direction (`AMBIENT + (1 - AMBIENT) * max(0, n . LIGHT_DIRECTION)`), bakes
   it into vertex colours, and the materials in `scene/palette.ts` (the only source of scene colours)
   are unlit, so the glTF export (`KHR_materials_unlit`, `COLOR_0`) looks the same as the viewer.
+- **Dark theme** (#133): the interface, the 3D scene (night clay, pale edge lines on buildings that the glTF export leaves out) and the 2D map (OpenFreeMap's dark basemap) are dark; `style.css` takes every colour from its `:root` tokens (a test enforces it and 4.5:1 text contrast), and `views/mapColors.ts` holds the 2D overlay colours.
+- **Look and motion** (#133): Inter for type, frosted-glass overlays and a header that frosts as the page scrolls.
+  Landing and locations reveal their sections and cards as they scroll into view (CSS scroll-driven
+  animations, no script), the primary button has a spinning accent ring, and cards follow the cursor with a
+  soft spotlight (`ui/spotlight.ts`). Page changes run inside a View Transition (`pages/host.ts`): the page
+  slides slightly forward or back by how the router got there, and a card's preview or the hero stage morphs
+  into the explore view. Every animation and transition sits under `prefers-reduced-motion: no-preference`, so
+  a user who asks for less motion gets none: pages swap directly and the effects do not run.
 - **Fly and walk** (#66, shipped): the scene opens in fly mode (orbit, pan, zoom). A "Walk" button
   in its corner, or the `V` key, drops the camera to eye height (1.7 m) on the road nearest the
   centre, facing north; click the canvas to look around, WASD or the arrows to move (Shift runs),

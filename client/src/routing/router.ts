@@ -4,9 +4,14 @@ import { createStore, type Store } from "./store";
 /** How long the camera must hold still before it is written to the URL. */
 export const CAMERA_DEBOUNCE_MS = 300;
 
+/** How the last navigation happened: `back` for the browser's back and forward (`popstate`), `forward` for everything else. */
+export type NavigationDirection = "forward" | "back";
+
 export interface Router {
   /** The route the address bar shows now. */
   get(): Route;
+  /** How the route got here. Already set when subscribers are called, so the page host can pick a transition by it. */
+  readonly lastDirection: NavigationDirection;
   /** Calls `listener` whenever the route changes (not immediately); returns the unsubscribe function. */
   subscribe: Store<Route>["subscribe"];
   /** Goes to a route: a new history entry, or with `replace` a rewrite of the current one. Going where we already are does nothing. */
@@ -25,6 +30,7 @@ export interface Router {
 export function createRouter(win: Window = window): Router {
   const store = createStore<Route>(parseUrl(new URL(win.location.href)), sameRoute);
   let cameraTimer: number | undefined;
+  let lastDirection: NavigationDirection = "forward";
   const cancelCamera = () => {
     window.clearTimeout(cameraTimer);
     cameraTimer = undefined;
@@ -32,6 +38,7 @@ export function createRouter(win: Window = window): Router {
 
   const onPopState = () => {
     cancelCamera();
+    lastDirection = "back";
     store.set(parseUrl(new URL(win.location.href)));
   };
   const onClick = (event: MouseEvent) => {
@@ -48,9 +55,13 @@ export function createRouter(win: Window = window): Router {
 
   const router: Router = {
     get: store.get,
+    get lastDirection() {
+      return lastDirection;
+    },
     subscribe: store.subscribe,
     navigate(route, options = {}) {
       cancelCamera();
+      lastDirection = "forward";
       const url = formatRoute(route);
       if (url !== win.location.pathname + win.location.search) {
         if (options.replace) win.history.replaceState(null, "", url);

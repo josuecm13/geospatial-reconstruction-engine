@@ -2,11 +2,18 @@ import * as THREE from "three";
 import { describe, expect, it } from "vitest";
 import { COLORS, SCENE_BACKGROUND } from "../scene/palette";
 import { AMBIENT, LIGHT_DIRECTION, shade } from "../scene/shading";
+import { contrast } from "../testing/cssTokens";
 import { PREVIEW_COLORS, shadowOffset } from "./previewColors";
 
 const UP = shade(new THREE.Vector3(0, 1, 0));
 const SOUTH = shade(new THREE.Vector3(0, 0, 1));
 const hexTimes = (color: string, factor: number) => `#${new THREE.Color(color).multiplyScalar(factor).getHexString()}`;
+/** An `rgba(r, g, b, a)` colour drawn over an opaque `#rrggbb`, as the canvas composites it, back to `#rrggbb`. */
+const over = (rgba: string, ground: string) => {
+  const [r, g, b, a] = rgba.match(/[\d.]+/g)!.map(Number);
+  const under = [1, 3, 5].map((i) => parseInt(ground.slice(i, i + 2), 16));
+  return `#${[r, g, b].map((v, i) => Math.round(v * a + under[i] * (1 - a)).toString(16).padStart(2, "0")).join("")}`;
+};
 const lightness = (hex: string) => new THREE.Color(hex).getHSL({ h: 0, s: 0, l: 0 }).l;
 
 describe("PREVIEW_COLORS", () => {
@@ -24,17 +31,26 @@ describe("PREVIEW_COLORS", () => {
     expect(PREVIEW_COLORS.green).toBe(hexTimes(COLORS.green, UP));
   });
 
-  it("draws a wall darker than its roof, and edges darker than the wall", () => {
+  it("draws a wall darker than its roof", () => {
     expect(lightness(PREVIEW_COLORS.buildingWall)).toBeLessThan(lightness(PREVIEW_COLORS.building));
-    expect(lightness(PREVIEW_COLORS.buildingEdge)).toBeLessThan(lightness(PREVIEW_COLORS.buildingWall));
+  });
+
+  it("draws the area outline, the hatch and the building outline lighter than the ground, the outline at 2:1 or more", () => {
+    const { ground } = PREVIEW_COLORS;
+    for (const stroke of [PREVIEW_COLORS.edge, PREVIEW_COLORS.hatch, PREVIEW_COLORS.buildingEdge]) {
+      expect(lightness(over(stroke, ground))).toBeGreaterThan(lightness(ground));
+    }
+    expect(contrast(over(PREVIEW_COLORS.edge, ground), ground)).toBeGreaterThanOrEqual(2);
+    expect(contrast(over(PREVIEW_COLORS.hatch, ground), ground)).toBeLessThan(contrast(over(PREVIEW_COLORS.edge, ground), ground));
   });
 
   it("does not draw the buildable blocks, which the 3D scene hides by default", () => {
     expect(PREVIEW_COLORS).not.toHaveProperty("block");
   });
 
-  it("shades the ground in a shadow by ambient light only", () => {
-    expect(PREVIEW_COLORS.shadow).toBe(hexTimes(COLORS.ground, AMBIENT));
+  it("shades the ground in a shadow by ambient light only, mixed half way to black so it shows on the dark ground", () => {
+    expect(PREVIEW_COLORS.shadow).toBe(hexTimes(COLORS.ground, AMBIENT * 0.5));
+    expect(lightness(PREVIEW_COLORS.shadow)).toBeLessThan(lightness(hexTimes(COLORS.ground, AMBIENT)));
     expect(lightness(PREVIEW_COLORS.shadow)).toBeLessThan(lightness(PREVIEW_COLORS.ground));
   });
 });

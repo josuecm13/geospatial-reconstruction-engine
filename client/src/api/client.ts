@@ -98,6 +98,10 @@ export class ApiClient {
     return this.request("DELETE", `/import-areas/${encodeURIComponent(areaId)}/boundaries/${encodeURIComponent(boundaryId)}`);
   }
 
+  deleteImportArea(areaId: string): Promise<void> {
+    return this.request("DELETE", `/import-areas/${encodeURIComponent(areaId)}`);
+  }
+
   route(areaId: string, origin: Coordinate, destination: Coordinate, strategy?: string): Promise<Route> {
     return this.request("POST", `/import-areas/${encodeURIComponent(areaId)}/routes`, {
       origin,

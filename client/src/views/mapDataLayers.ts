@@ -1,6 +1,7 @@
 import * as maplibregl from "maplibre-gl";
 import type { MapData } from "../api/types";
 import { roadWidthExpression } from "../geo/roadWidth";
+import { MAP_COLORS } from "./mapColors";
 
 /** The engine's own representation of an imported area, drawn over the basemap: this is what was
  * served from the API, not the basemap's rendering of OSM. */
@@ -19,13 +20,13 @@ export class MapDataLayers {
       id: "engine-area-features",
       type: "fill",
       source: sourceId("area_features"),
-      paint: { "fill-color": ["match", ["get", "kind"], "water", "#7fb8e6", "#9fd08a"], "fill-opacity": 0.7 },
+      paint: { "fill-color": ["match", ["get", "kind"], "water", MAP_COLORS.water, MAP_COLORS.green], "fill-opacity": 0.9 },
     });
     map.addLayer({
       id: "engine-blocks",
       type: "fill",
       source: sourceId("blocks"),
-      paint: { "fill-color": ["case", ["get", "is_median"], "#c9b37a", "#e8dcc0"], "fill-opacity": 0.45, "fill-outline-color": "#a8946a" },
+      paint: { "fill-color": ["case", ["get", "is_median"], MAP_COLORS.blockMedian, MAP_COLORS.buildable], "fill-opacity": 0.45, "fill-outline-color": MAP_COLORS.buildableOutline },
     });
     map.addLayer({
       id: "engine-roads",
@@ -33,7 +34,7 @@ export class MapDataLayers {
       source: sourceId("road_segments"),
       layout: { "line-cap": "round", "line-join": "round" },
       paint: {
-        "line-color": ["match", ["get", "lane_type"], "wide", "#e0a33a", "narrow", "#b9b9b9", "#f4f1ea"],
+        "line-color": ["match", ["get", "lane_type"], "wide", MAP_COLORS.roadWide, "narrow", MAP_COLORS.roadNarrow, MAP_COLORS.roadNormal],
         "line-width": 2,
       },
     });
@@ -42,17 +43,17 @@ export class MapDataLayers {
       type: "fill",
       source: sourceId("buildings"),
       paint: {
-        // Measured heights are solid; unknown ones are paler, so the difference is visible at a glance.
-        "fill-color": ["case", ["==", ["get", "height_meters"], null], "#b7a8c9", "#6f5a8c"],
+        // Measured heights are pale; unknown ones are dimmer, so the difference is visible at a glance.
+        "fill-color": ["case", ["==", ["get", "height_meters"], null], MAP_COLORS.buildingDefaulted, MAP_COLORS.buildingMeasured],
         "fill-opacity": 0.85,
-        "fill-outline-color": "#3d2f52",
+        "fill-outline-color": MAP_COLORS.buildingOutline,
       },
     });
     map.addLayer({
       id: "engine-pois",
       type: "circle",
       source: sourceId("pois"),
-      paint: { "circle-radius": 4, "circle-color": "#d1495b", "circle-stroke-color": "#ffffff", "circle-stroke-width": 1 },
+      paint: { "circle-radius": 4, "circle-color": MAP_COLORS.poi, "circle-stroke-color": MAP_COLORS.poiStroke, "circle-stroke-width": 1 },
     });
     for (const id of CLICKABLE) {
       map.on("click", id, (event) => this.describe(event));

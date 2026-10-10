@@ -1,3 +1,5 @@
+import "@fontsource-variable/inter";
+import "@fontsource-variable/jetbrains-mono";
 import "./style.css";
 import { ApiClient } from "./api/client";
 import { CurrentArea } from "./importing/recentImports";
@@ -23,14 +25,16 @@ router.subscribe(markCurrent);
 markCurrent();
 
 const status = document.getElementById("api-status")!;
+const statusTip = document.getElementById("api-tip")!;
 api.health().then(
   () => {
     status.textContent = "API ok";
     status.dataset.state = "ok";
+    statusTip.textContent = "The API answered its health check.";
   },
   (error) => {
     status.textContent = "API unreachable";
     status.dataset.state = "down";
-    status.title = String(error.message ?? error);
+    statusTip.textContent = `The API did not answer its health check: ${String(error.message ?? error)}`;
   },
 );

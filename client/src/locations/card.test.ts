@@ -44,6 +44,31 @@ describe("renderLocationCard links", () => {
   });
 });
 
+describe("renderLocationCard delete", () => {
+  const renderWith = (onDelete?: () => void, onOpen?: () => void) =>
+    renderLocationCard(toCard(area({ place_name: "Mitte" }), new Date("2026-10-02T12:00:00Z")), { previews, onOpen, onDelete });
+
+  it("shows a Delete button only when given onDelete", () => {
+    expect(renderWith().querySelector("button.location-delete")).toBeNull();
+    const button = renderWith(() => {}).querySelector<HTMLButtonElement>("button.location-delete")!;
+    expect(button.getAttribute("aria-label")).toBe("Delete Mitte");
+    expect(button.closest(".location-title")).toBeNull();
+  });
+
+  it("calls onDelete on click without opening the card", () => {
+    const onDelete = vi.fn();
+    const onOpen = vi.fn();
+    const card = renderWith(onDelete, onOpen);
+    const reached = vi.fn();
+    card.addEventListener("click", reached);
+    card.querySelector<HTMLButtonElement>("button.location-delete")!.click();
+
+    expect(onDelete).toHaveBeenCalledOnce();
+    expect(onOpen).not.toHaveBeenCalled();
+    expect(reached).not.toHaveBeenCalled();
+  });
+});
+
 describe("renderLocationCard place name", () => {
   it("titles by place name with a context line and the coordinates in the meta", () => {
     const card = render({ place_name: "Mitte", place_context: "Berlin, Germany" });

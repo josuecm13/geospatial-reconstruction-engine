@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EDGES, STAGES, stageById } from "./architectureModel";
+import { docPath, EDGES, STAGES, stageById, stageNumber } from "./architectureModel";
 
 describe("the architecture model", () => {
   it("has six stages with unique ids", () => {
@@ -37,5 +37,10 @@ describe("the architecture model", () => {
   it("looks a stage up by id", () => {
     expect(stageById("api")?.title).toBe("HTTP API");
     expect(stageById("nope")).toBeUndefined();
+  });
+
+  it("numbers the stages from 01 and shows a doc as its repository path", () => {
+    expect(STAGES.map((stage) => stageNumber(stage.id))).toEqual(["01", "02", "03", "04", "05", "06"]);
+    expect(docPath(stageById("domain")!)).toBe("docs/architecture.md#core-domain-entities");
   });
 });

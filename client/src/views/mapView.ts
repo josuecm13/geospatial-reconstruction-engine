@@ -7,7 +7,7 @@ import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 maplibregl.setWorkerUrl(workerUrl);
 
 /** OpenFreeMap's keyless vector style, built from OpenStreetMap data; it carries its own attribution. */
-export const BASEMAP_STYLE = "https://tiles.openfreemap.org/styles/liberty";
+export const BASEMAP_STYLE = "https://tiles.openfreemap.org/styles/dark";
 export const OSM_ATTRIBUTION = '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors';
 
 export interface MapView {

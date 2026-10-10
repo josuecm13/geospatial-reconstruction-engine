@@ -2,6 +2,7 @@ import * as maplibregl from "maplibre-gl";
 import type { BoundingBox } from "../api/types";
 import { bboxFromCorners, bboxProblem, bboxRing } from "../geo/bbox";
 import { metersPerDegree } from "../geo/localMeters";
+import { MAP_COLORS } from "../views/mapColors";
 import { applyDrag, cursorFor, hitTest, metersPerPixel, sizeLabel, type DragPart } from "./rectangleDrag";
 
 const SOURCE = "selection";
@@ -37,7 +38,7 @@ export class RectangleTool {
     private readonly map: maplibregl.Map,
     private readonly onChange: (bbox: BoundingBox | null) => void,
   ) {
-    const color = ["case", ["get", "tooLarge"], "#d9534f", "#2f7dd1"] as maplibregl.ExpressionSpecification;
+    const color = ["case", ["get", "tooLarge"], MAP_COLORS.selectionTooLarge, MAP_COLORS.selection] as maplibregl.ExpressionSpecification;
     map.addSource(SOURCE, { type: "geojson", data: emptyCollection() });
     map.addSource(HANDLES_SOURCE, { type: "geojson", data: emptyCollection() });
     map.addLayer({ id: "selection-fill", type: "fill", source: SOURCE, paint: { "fill-color": color, "fill-opacity": 0.12 } });
@@ -54,7 +55,7 @@ export class RectangleTool {
       source: HANDLES_SOURCE,
       paint: {
         "circle-radius": ["case", ["get", "corner"], 7, 5],
-        "circle-color": "#fff",
+        "circle-color": MAP_COLORS.handleFill,
         "circle-stroke-color": color,
         "circle-stroke-width": 3,
       },

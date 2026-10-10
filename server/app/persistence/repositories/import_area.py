@@ -1,14 +1,27 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.domain.bounding_box import BoundingBox, Coordinate
 from app.domain.enums import ImportStatus
 from app.domain.import_area import ImportArea
 from app.persistence.geometry import bbox_to_geom
-from app.persistence.models import BlockModel, ImportAreaModel
+from app.persistence.models import (
+    AreaFeatureModel,
+    BlockBoundarySegmentModel,
+    BlockModel,
+    BuildingModel,
+    ImportAreaModel,
+    NavigableNodeModel,
+    PointOfInterestModel,
+    RoadModel,
+    RoadSegmentModel,
+    StreetModel,
+    TracedBoundaryModel,
+    TurnMovementModel,
+)
 
 
 class ImportAreaRepository:
@@ -73,6 +86,54 @@ class ImportAreaRepository:
         if exclude_id is not None:
             query = query.where(ImportAreaModel.id != exclude_id)
         return [self._to_domain(model) for model in self.session.execute(query).scalars().all()]
+
+    def areas_covering(self, bbox: BoundingBox, exclude_id: uuid.UUID | None = None) -> list[ImportArea]:
+        """Completed or importing areas whose bounding box covers `bbox` (edges may touch): the
+        areas that borrow this one's features, the inverse of `completed_areas_covered_by`."""
+        query = (
+            select(ImportAreaModel)
+            .where(
+                ImportAreaModel.status.in_([ImportStatus.COMPLETED, ImportStatus.IMPORTING]),
+                func.ST_CoveredBy(bbox_to_geom(bbox), ImportAreaModel.bbox),
+            )
+            .order_by(ImportAreaModel.min_latitude, ImportAreaModel.min_longitude, ImportAreaModel.id)
+        )
+        if exclude_id is not None:
+            query = query.where(ImportAreaModel.id != exclude_id)
+        return [self._to_domain(model) for model in self.session.execute(query).scalars().all()]
+
+    def delete(self, import_area_id: uuid.UUID) -> bool:
+        """Hard-deletes the area and everything derived from it, children first. The caller commits."""
+        area_blocks = select(BlockModel.id).where(BlockModel.import_area_id == import_area_id)
+        area_nodes = select(NavigableNodeModel.id).where(NavigableNodeModel.import_area_id == import_area_id)
+        area_roads = select(RoadModel.id).where(RoadModel.import_area_id == import_area_id)
+        area_segments = select(RoadSegmentModel.id).where(
+            or_(RoadSegmentModel.road_id.in_(area_roads), RoadSegmentModel.from_node_id.in_(area_nodes),
+                RoadSegmentModel.to_node_id.in_(area_nodes))
+        )
+        statements = [
+            delete(TurnMovementModel).where(
+                or_(TurnMovementModel.intersection_node_id.in_(area_nodes), TurnMovementModel.incoming_segment_id.in_(area_segments),
+                    TurnMovementModel.outgoing_segment_id.in_(area_segments))
+            ),
+            delete(BlockBoundarySegmentModel).where(
+                or_(BlockBoundarySegmentModel.block_id.in_(area_blocks),
+                    BlockBoundarySegmentModel.road_segment_id.in_(area_segments))
+            ),
+            delete(BuildingModel).where(BuildingModel.import_area_id == import_area_id),
+            delete(PointOfInterestModel).where(PointOfInterestModel.import_area_id == import_area_id),
+            delete(AreaFeatureModel).where(AreaFeatureModel.import_area_id == import_area_id),
+            delete(TracedBoundaryModel).where(TracedBoundaryModel.import_area_id == import_area_id),
+            delete(BlockModel).where(BlockModel.import_area_id == import_area_id),
+            delete(RoadSegmentModel).where(RoadSegmentModel.id.in_(area_segments)),
+            delete(RoadModel).where(RoadModel.import_area_id == import_area_id),
+            delete(StreetModel).where(StreetModel.import_area_id == import_area_id),
+            delete(NavigableNodeModel).where(NavigableNodeModel.import_area_id == import_area_id),
+        ]
+        for statement in statements:
+            self.session.execute(statement)
+        result = self.session.execute(delete(ImportAreaModel).where(ImportAreaModel.id == import_area_id))
+        return result.rowcount > 0
 
     def get_or_create(self, provider: str, bbox: BoundingBox) -> ImportArea:
         existing = self._find_model(provider, bbox)

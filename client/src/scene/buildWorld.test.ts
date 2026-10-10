@@ -98,7 +98,7 @@ describe("buildWorld", () => {
     expect(MATERIALS.buildingMeasured.depthWrite).toBe(true);
     expect(MATERIALS.buildingDefaulted.depthWrite).toBe(true);
     expect(MATERIALS.buildable.transparent).toBe(true);
-    expect(MATERIALS.buildable.opacity).toBe(0.35);
+    expect(MATERIALS.buildable.opacity).toBe(0.25);
   });
 
   it("draws every face unlit, with its shade baked into the vertex colors and no mesh rotation", () => {
@@ -112,6 +112,27 @@ describe("buildWorld", () => {
       expect(mesh.geometry.getAttribute("color").count, mesh.name).toBe(mesh.geometry.getAttribute("position").count);
       expect(mesh.rotation.toArray().slice(0, 3), mesh.name).toEqual([0, 0, 0]);
     }
+  });
+
+  it("gives each building exactly one edges child, with the shared edge material, which isn't a mesh", () => {
+    for (const id of ["bu1", "bu2"]) {
+      const building = world.getObjectByName(`building:${id}`)!;
+      const edges = building.children.filter((child) => child.name === "edges") as THREE.LineSegments[];
+      expect(edges, id).toHaveLength(1);
+      expect(building.children, id).toHaveLength(1);
+      expect(edges[0].isLineSegments).toBe(true);
+      expect((edges[0] as unknown as THREE.Mesh).isMesh).toBeFalsy();
+      expect(edges[0].material).toBe(MATERIALS.edge);
+      expect(edges[0].geometry.getAttribute("position").count).toBeGreaterThan(0);
+    }
+    expect(world.getObjectByName("roads")!.getObjectByName("edges")).toBeUndefined();
+  });
+
+  it("leaves the edge lines out of picking", () => {
+    const edges = world.getObjectByName("building:bu1")!.getObjectByName("edges")!;
+    const hits: THREE.Intersection[] = [];
+    edges.raycast({} as THREE.Raycaster, hits);
+    expect(hits).toEqual([]);
   });
 
   it("builds the ground plane in the first render slot", () => {

@@ -3,13 +3,19 @@ import { useErrorReporter } from "../errors/errorReporter";
 import { IMPORT_MESSAGES } from "../importing/errorMessages";
 import { CurrentArea } from "../importing/recentImports";
 import { renderArchitecture } from "../landing/architecture";
+import { renderBento } from "../landing/bento";
+import { selectionDemo } from "../landing/selectionDemo";
 import type { FeaturedStage } from "../landing/featuredStage";
 import { pickFeatured } from "../landing/featured";
+import { renderFooter } from "../landing/footer";
 import { importTarget } from "../landing/importTarget";
+import { shareMapData } from "../landing/sharedMapData";
 import { STORY_STEPS } from "../landing/storySteps";
 import { renderLocationCard } from "../locations/card";
 import { formatCentre, toCard } from "../locations/cardModel";
 import { PreviewLoader, type PreviewTarget } from "../locations/preview";
+import { attachSpotlight } from "../ui/spotlight";
+import { claimPlace } from "../ui/viewTransition";
 import type { Mount } from "./types";
 
 const RECENT_LIMIT = 6;
@@ -29,20 +35,36 @@ const link = (href: string, text: string, className?: string): HTMLAnchorElement
   return a;
 };
 
-const TILES: readonly [string, string][] = [
-  ["Walk through it", "Drop to street level and move through the place, stopped by its buildings: press Walk."],
-  ["Route across it", "Pick two points and the engine finds the way along the real street graph: click two points."],
-  ["Export it as glTF", "Take the whole model into a game engine or a modelling tool: Download glTF."],
-];
-
 const FACTS: readonly [string, string][] = [
-  ["What goes in", "A rectangle of up to 1 km² on the OpenStreetMap map, fetched live from Overpass."],
+  ["In", "A rectangle of up to 1 km² on the OpenStreetMap map, fetched live from Overpass."],
   [
-    "What comes out",
+    "Out",
     "A city model the engine owns: streets with lanes and widths, buildable blocks, buildings at the height OpenStreetMap gives them, and a road graph that can be routed over.",
   ],
-  ["What it is for", "Games, simulation, and art: places you can query, fly over, walk through, and export as glTF."],
+  ["For", "Games, simulation, and art: places you can query, fly over, walk through, and export as glTF."],
 ];
+
+/**
+ * The head every section opens with: a mono eyebrow (its number is filled in by `renumber`, in page order), a display
+ * heading, and at most one sentence of lede.
+ */
+const sectionHead = (name: string, title: string, lede?: string): HTMLElement => {
+  const head = element("header", "landing-section-head");
+  const eyebrow = element("p", "landing-section-eyebrow", name);
+  eyebrow.dataset.name = name;
+  head.append(eyebrow, element("h3", "landing-heading", title));
+  if (lede) head.append(element("p", "landing-section-lede", lede));
+  return head;
+};
+
+/** Numbers the visible sections' eyebrows `01 — NAME`, `02 — NAME`, ... in page order, skipping hidden ones. */
+const renumber = (page: HTMLElement): void => {
+  let n = 0;
+  for (const eyebrow of page.querySelectorAll<HTMLElement>(".landing-section-eyebrow")) {
+    if (eyebrow.closest("[hidden]")) continue;
+    eyebrow.textContent = `${String(++n).padStart(2, "0")} — ${eyebrow.dataset.name}`;
+  }
+};
 
 /** Runs `callback` once the browser is idle after first paint; returns a canceller. */
 const afterPaint = (callback: () => void): (() => void) => {
@@ -71,7 +93,9 @@ const previewTarget = (area: ImportArea): PreviewTarget => ({ id: area.id, impor
  * the places built so far, the way in to a new import, and the pipeline for engineers.
  */
 export const mount: Mount<{ page: "landing" }> = (el, ctx) => {
-  const { api, router } = ctx;
+  const { router } = ctx;
+  const shared = shareMapData(ctx.api);
+  const api = shared.api; // the featured place's map-data is fetched once for the preview, the stage and the capability visuals
   let disposed = false;
   let areas: ImportArea[] = [];
   let stage: FeaturedStage | null = null;
@@ -80,6 +104,7 @@ export const mount: Mount<{ page: "landing" }> = (el, ctx) => {
   const previews = new PreviewLoader(api);
 
   const page = element("div", "page landing");
+  cleanups.push(attachSpotlight(page, ".location-card, .bento-tile"));
   const importButton = (text: string, primary: boolean) => {
     const button = element("button", primary ? "landing-button primary" : "landing-button", text);
     button.type = "button";
@@ -97,38 +122,30 @@ export const mount: Mount<{ page: "landing" }> = (el, ctx) => {
   // The place-dependent middle: the story, what you can do, and the places built so far.
   const journey = element("div", "landing-journey");
 
-  // --- your turn ---
-  const turn = element("section", "landing-inner landing-turn");
-  const turnText = element("div");
-  turnText.append(
-    element("h3", "landing-heading", "Rebuild your own place"),
-    element(
-      "p",
-      "landing-lede",
-      "Draw a rectangle of up to 1 km² on the map. The engine fetches it live from OpenStreetMap and builds it while you watch, usually in under a minute.",
-    ),
-  );
-  turn.append(turnText, importButton("Rebuild your own place", true));
+  // --- your turn: a full-bleed band, a street grid with a selection rectangle drawing itself ---
+  const turn = element("section", "landing-section landing-cta");
+  turn.append(element("div", "landing-cta-grid"));
+  const turnInner = element("div", "landing-inner landing-cta-inner");
+  const turnCopy = element("div", "landing-cta-copy");
+  const turnHead = sectionHead("Your turn", "Your street, rebuilt in under a minute.", "Draw a rectangle of up to 1 km² and watch it build, live from OpenStreetMap.");
+  turnCopy.append(turnHead, importButton("Rebuild your own place", true));
+  turnInner.append(turnCopy, selectionDemo());
+  turn.append(turnInner);
 
-  // --- under the hood ---
-  const hood = element("section", "landing-hood");
+  // --- under the hood: a spec sheet (in / out / for) over the live pipeline ---
+  const hood = element("section", "landing-section landing-hood");
   const hoodInner = element("div", "landing-inner");
-  const facts = element("div", "landing-facts");
-  for (const [title, body] of FACTS) {
+  const facts = element("dl", "landing-spec");
+  for (const [label, body] of FACTS) {
     const item = element("div", "landing-fact");
-    item.append(element("h3", undefined, title), element("p", undefined, body));
+    item.append(element("dt", undefined, label), element("dd", undefined, body));
     facts.append(item);
   }
   const diagram = element("div", "landing-arch");
-  hoodInner.append(
-    element("h3", "landing-heading", "Under the hood"),
-    element("p", "landing-note", "For engineers: data moves through six stages. Point at one to see what it produces."),
-    facts,
-    diagram,
-  );
+  hoodInner.append(sectionHead("Engineering", "Under the hood", "Data moves through six stages. Point at one to see what it produces."), facts, diagram);
   hood.append(hoodInner);
 
-  page.append(hero, journey, turn, hood);
+  page.append(hero, journey, turn, hood, renderFooter());
   el.replaceChildren(page);
   const disposeDiagram = renderArchitecture(diagram);
 
@@ -162,7 +179,12 @@ export const mount: Mount<{ page: "landing" }> = (el, ctx) => {
     heroStage.append(previewHost(`A map of ${label}`));
     const text = element("div", "landing-hero-text");
     const actions = element("div", "landing-actions");
-    actions.append(link(sceneHref, "Explore this place", "landing-button primary"), importButton("Rebuild your own", false));
+    const explore = link(sceneHref, "Explore this place", "landing-button primary");
+    // The hero stage morphs into the explore view; the name goes on before the router's delegated click handler navigates.
+    explore.addEventListener("click", (event) => {
+      if (event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) claimPlace(heroStage);
+    });
+    actions.append(explore, importButton("Rebuild your own", false));
     text.append(element("p", "landing-eyebrow", "Rebuilt from OpenStreetMap"), element("h2", undefined, label));
     if (area.place_context) text.append(element("p", "landing-context", area.place_context));
     text.append(element("p", "landing-lede", "A city block by block: streets with lanes, buildable blocks, buildings at their height."), actions);
@@ -171,7 +193,7 @@ export const mount: Mount<{ page: "landing" }> = (el, ctx) => {
     hero.replaceChildren(heroInner);
 
     // --- the story: a sticky stage beside four steps that scroll ---
-    const story = element("section", "landing-story");
+    const story = element("section", "landing-section landing-story");
     const storyInner = element("div", "landing-inner landing-story-grid");
     const storyStage = element("div", "landing-stage landing-stage-story");
     storyStage.append(previewHost(`A map of ${label}`));
@@ -187,7 +209,7 @@ export const mount: Mount<{ page: "landing" }> = (el, ctx) => {
     });
     storyInner.append(stageColumn, steps);
     const storyHeading = element("div", "landing-inner");
-    storyHeading.append(element("h3", "landing-heading", "How a place is rebuilt"));
+    storyHeading.append(sectionHead("How it is built", "How a place is rebuilt", "Four steps from an OpenStreetMap rectangle to a model you can walk through."));
     story.append(storyHeading, storyInner);
 
     const setActive = (index: number) => {
@@ -208,26 +230,26 @@ export const mount: Mount<{ page: "landing" }> = (el, ctx) => {
       cleanups.push(() => observer.disconnect());
     }
 
-    // --- what you can do with it ---
-    const doing = element("section", "landing-inner landing-doing");
-    doing.append(element("h3", "landing-heading", "What you can do with it"));
-    const tiles = element("div", "landing-tiles");
-    for (const [title, body] of TILES) {
-      const tile = element("div", "landing-tile");
-      tile.append(element("h4", undefined, title), element("p", undefined, body), link(sceneHref, "Open the scene"));
-      tiles.append(tile);
-    }
-    doing.append(tiles);
+    // --- what you can do with it: a bento of visuals drawn from the featured place ---
+    const doing = element("section", "landing-section landing-doing");
+    const doingInner = element("div", "landing-inner");
+    const bento = element("div", "bento");
+    doingInner.append(sectionHead("Capabilities", "What you can do with it", "Route across it, walk through it, take it away as glTF."), bento);
+    doing.append(doingInner);
+    cleanups.push(renderBento(bento, { api, areaId: area.id, bbox: area.bbox, sceneHref }));
 
     // --- places built so far: the gallery's cards ---
-    const recent = element("section", "landing-inner");
+    const recent = element("section", "landing-section landing-recent");
+    const recentInner = element("div", "landing-inner");
     const grid = element("div", "landing-cards");
-    const row = element("div", "landing-heading-row");
-    row.append(element("h3", "landing-heading", "Places built so far"), link("/locations", "See all locations"));
-    recent.append(row, grid);
+    const head = sectionHead("Locations", "Places built so far");
+    head.append(link("/locations", "See all locations", "landing-more"));
+    recentInner.append(head, grid);
+    recent.append(recentInner);
     grid.replaceChildren(...areas.map((a) => renderLocationCard(toCard(a), { previews })));
 
     journey.replaceChildren(story, doing, recent);
+    renumber(page);
 
     // The 2D previews stand in for the stage until the 3D one is ready, and stay if it can't be built.
     for (const slot of [heroStage, storyStage]) previews.attach(slot.querySelector<HTMLElement>(".landing-stage-fallback")!, previewTarget(area));
@@ -257,8 +279,13 @@ export const mount: Mount<{ page: "landing" }> = (el, ctx) => {
       if (disposed) return;
       areas = list;
       const featured = pickFeatured(list, configured);
-      if (featured) renderFeatured(featured);
-      else renderInvitation();
+      if (featured) {
+        shared.share(featured.id);
+        renderFeatured(featured);
+      } else {
+        renderInvitation();
+      }
+      renumber(page);
     },
     (error) => {
       if (disposed) return;
