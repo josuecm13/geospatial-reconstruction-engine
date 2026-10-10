@@ -90,6 +90,17 @@ The system SHALL reject a payload containing a supported road, building, area fe
 - **WHEN** a payload contains a POI mapped as an area whose footprint crosses the bounding-box edge and whose center lies outside the box
 - **THEN** the import accepts the POI
 
+### Requirement: Multipolygon rings outside the bounding box SHALL be dropped when another ring of the relation touches it
+Overpass returns a relation whole, so a multipolygon building or area can arrive with rings far outside the import area's bounding box. Before the bounding-box check, the system SHALL drop each ring of a multipolygon relation whose coordinate envelope lies entirely outside the box, but only when at least one other ring of the same relation touches the box. The kept rings SHALL keep their `relation/<id>[/<ring>]` source ids, indexed from the relation's full ring list. A relation none of whose rings touches the box SHALL be kept whole, so the bounding-box rejection still applies. Roads, ways, and node POIs are unaffected.
+
+#### Scenario: A water relation with one ring in the box and one outside
+- **WHEN** a payload contains a `natural=water` multipolygon with two outer rings, one crossing the bounding box and one wholly outside it
+- **THEN** the import succeeds and only the crossing ring is stored, under its original `relation/<id>/<index>` source id
+
+#### Scenario: A multipolygon with every ring outside the box
+- **WHEN** a payload contains a multipolygon all of whose rings lie outside the bounding box
+- **THEN** the import fails with an error naming the rings' source ids
+
 ### Requirement: A POI drawn as an open way SHALL import as a point, and unclosed buildings and areas SHALL be skipped
 A supported POI mapped as a way that is not a closed ring of at least three distinct vertices (a bench drawn as a line) SHALL be imported as a point POI at the way's middle vertex, `nodes[len(nodes) // 2]`, and SHALL be checked against the bounding box by the envelope of the way's nodes, like a road. A POI way with fewer than two distinct nodes cannot be placed and SHALL be skipped. A building or area-feature way that is not a valid closed ring SHALL be skipped rather than failing the import. Skipped ways SHALL be counted and reported as `skipped_feature_count` on the import's own response. Closed POI, building, and area ways SHALL behave as before.
 

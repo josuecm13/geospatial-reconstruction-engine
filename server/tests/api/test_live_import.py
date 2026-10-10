@@ -47,6 +47,25 @@ def test_import_without_payload_fetches_the_box_and_imports_it(client):
     assert len(map_data["buildings"]["features"]) == body["building_count"]
 
 
+def test_live_import_drops_a_relation_ring_outside_the_box_and_keeps_the_one_inside(client):
+    def ring(lat, lon):
+        size = 0.0002
+        return [{"lat": lat, "lon": lon}, {"lat": lat, "lon": lon + size}, {"lat": lat + size, "lon": lon + size},
+                {"lat": lat + size, "lon": lon}, {"lat": lat, "lon": lon}]
+
+    members = [
+        {"type": "way", "ref": 1, "role": "outer", "geometry": ring(52.5295, 13.4010)},
+        {"type": "way", "ref": 2, "role": "outer", "geometry": ring(52.6000, 13.4010)},
+    ]
+    water = {"elements": [{"type": "relation", "id": 950, "members": members, "tags": {"type": "multipolygon", "natural": "water"}}]}
+    _use(client, RecordedOverpass(water))
+
+    response = client.post("/import-areas", json={"bbox": LIVE_BBOX})
+
+    assert response.status_code == 200
+    assert response.json()["area_feature_count"] == 1
+
+
 def test_posted_payload_is_imported_without_fetching(client):
     overpass = _use(client, RecordedOverpass(AssertionError("must not fetch")))
 
