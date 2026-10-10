@@ -13,8 +13,10 @@ bypasses the check; acceptable at this project's scale, not a full defense.
 from __future__ import annotations
 
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.gzip import GZipMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.api.errors import build_error_body
 
@@ -38,3 +40,36 @@ class BodySizeLimitMiddleware(BaseHTTPMiddleware):
                     ),
                 )
         return await call_next(request)
+
+
+class CompressionMiddleware:
+    """Gzips responses over 1 KB, except the server-sent event streams.
+
+    Starlette 0.41's `GZipMiddleware` has no `text/event-stream` exclusion, and its compressor
+    buffers chunks, so wrapping the stage-event stream (`GET /import-areas/{id}/events`) would
+    delay or batch the events and break the client's live progress. This sends such a request
+    straight to the app, uncompressed: any HTTP request whose path ends with `/events`, or whose
+    `Accept` header includes `text/event-stream`. Everything else goes through `GZipMiddleware`
+    (level 6; 9 is slow on multi-megabyte `map-data` bodies for little gain).
+
+    Pure ASGI on purpose: `BaseHTTPMiddleware` buffers streaming responses.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+        self._gzip = GZipMiddleware(app, minimum_size=1000, compresslevel=6)
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http" and self._is_event_stream(scope):
+            await self.app(scope, receive, send)
+            return
+        await self._gzip(scope, receive, send)
+
+    @staticmethod
+    def _is_event_stream(scope: Scope) -> bool:
+        if scope["path"].endswith("/events"):
+            return True
+        for name, value in scope["headers"]:
+            if name == b"accept" and b"text/event-stream" in value:
+                return True
+        return False

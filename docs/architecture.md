@@ -180,6 +180,8 @@ Implemented HTTP endpoints (Milestone 7):
 - `POST`/`GET /import-areas/{id}/boundaries`, `GET`/`DELETE /import-areas/{id}/boundaries/{boundary_id}`
   (Milestone 8) — create, list, fetch, and delete named traced boundaries, as GeoJSON features.
 
+Responses over 1 KB are gzip-compressed when the client accepts it, except the server-sent event streams.
+
 Every error response uses one JSON shape with a machine-readable `code` (`app/api/errors.py`).
 `../HOW_TO_RUN.md` has worked curl examples.
 

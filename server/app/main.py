@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_session
 from app.api.errors import register_error_handlers
-from app.api.middleware import BodySizeLimitMiddleware
+from app.api.middleware import BodySizeLimitMiddleware, CompressionMiddleware
 from app.config.logging import configure_logging
 from app.api.routers import (
     import_areas_router,
@@ -18,6 +18,8 @@ def create_app() -> FastAPI:
     configure_logging()
     app = FastAPI(title="Geospatial Reconstruction Engine")
     app.add_middleware(BodySizeLimitMiddleware)
+    # Added last, so outermost: it compresses the final response bytes and skips the event streams.
+    app.add_middleware(CompressionMiddleware)
     register_error_handlers(app)
     app.include_router(import_areas_router)
     app.include_router(spatial_queries_router)
