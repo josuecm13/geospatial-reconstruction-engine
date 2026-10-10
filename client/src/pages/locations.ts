@@ -1,6 +1,7 @@
 import type { ImportArea } from "../api/types";
 import { renderReportedError, useErrorReporter } from "../errors/errorReporter";
 import { renderLocationCard } from "../locations/card";
+import { deleteOutcome } from "../locations/deleteMessage";
 import { filterCards, sortCards, toCard, type LocationCard, type SortKey } from "../locations/cardModel";
 import { readGalleryState, withGalleryState, type GalleryState } from "../locations/galleryState";
 import { PreviewLoader } from "../locations/preview";
@@ -51,6 +52,7 @@ export const mount: Mount<{ page: "locations" }> = (el, ctx) => {
         <a class="locations-import" href="/explore" data-link>Import a new place</a>
       </div>
     </header>
+    <p class="locations-notice" data-role="notice" role="alert" hidden></p>
     <p class="locations-count" data-role="count" role="status" aria-live="polite"></p>
     <ul class="locations-grid" data-role="grid" aria-busy="true"></ul>
     <div class="locations-message" data-role="message" hidden></div>`;
@@ -61,6 +63,7 @@ export const mount: Mount<{ page: "locations" }> = (el, ctx) => {
   const grid = pick("grid");
   const count = pick("count");
   const message = pick("message");
+  const notice = pick("notice");
   filter.value = state.text;
   sort.value = state.sort;
 
@@ -70,6 +73,7 @@ export const mount: Mount<{ page: "locations" }> = (el, ctx) => {
   const disposeSpotlight = attachSpotlight(root, ".location-card");
   let cards: LocationCard[] = [];
   const items = new Map<string, HTMLLIElement>();
+  const deleting = new Set<string>();
 
   // --- history state ---
   const save = () => {
@@ -133,6 +137,33 @@ export const mount: Mount<{ page: "locations" }> = (el, ctx) => {
     message.append(sentence, retry);
   };
 
+  /** Drops a card from the gallery's list and the page, then re-arranges so the count, filter and empty state stay right. */
+  const removeCard = (id: string) => {
+    cards = cards.filter((card) => card.id !== id);
+    items.get(id)?.remove();
+    items.delete(id);
+    arrange();
+  };
+
+  const onDelete = async (card: LocationCard) => {
+    if (deleting.has(card.id)) return;
+    if (!window.confirm(`Delete ${card.title}? This removes its imported data and can't be undone.`)) return;
+    deleting.add(card.id);
+    notice.hidden = true;
+    try {
+      await ctx.api.deleteImportArea(card.id);
+      if (!disposed) removeCard(card.id);
+    } catch (error) {
+      if (disposed) return;
+      const outcome = deleteOutcome(error, card.title);
+      if (outcome.gone) removeCard(card.id);
+      notice.textContent = outcome.message;
+      notice.hidden = false;
+    } finally {
+      deleting.delete(card.id);
+    }
+  };
+
   const show = (areas: ImportArea[]) => {
     const now = new Date();
     cards = areas.map((area) => toCard(area, now));
@@ -140,7 +171,7 @@ export const mount: Mount<{ page: "locations" }> = (el, ctx) => {
     grid.replaceChildren();
     for (const card of cards) {
       const item = document.createElement("li");
-      item.append(renderLocationCard(card, { previews, onOpen: save }));
+      item.append(renderLocationCard(card, { previews, onOpen: save, onDelete }));
       items.set(card.id, item);
     }
     grid.setAttribute("aria-busy", "false");
@@ -150,6 +181,7 @@ export const mount: Mount<{ page: "locations" }> = (el, ctx) => {
 
   async function load(): Promise<void> {
     showMessage(null);
+    notice.hidden = true;
     showSkeletons();
     try {
       const areas = await ctx.api.listImportAreas({ limit: LIST_LIMIT });

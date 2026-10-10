@@ -530,6 +530,13 @@ main > .page.landing { padding: var(--header-height) 0 0; background: var(--bg);
 }
 .location-open-3d:hover { background: color-mix(in oklch, var(--link) 20%, var(--surface-1)); border-color: color-mix(in oklch, var(--link) 55%, var(--surface-1)); }
 .location-open-3d:focus-visible { outline: 3px solid var(--link); outline-offset: 2px; }
+.location-delete {
+  position: absolute; top: 10px; right: 10px; z-index: 2; padding: 7px 10px; text-box: trim-both cap alphabetic;
+  font: inherit; font-size: 12px; font-weight: 600; color: var(--text-muted); cursor: pointer;
+  background: color-mix(in oklch, var(--surface-3) 95%, transparent); border: 1px solid var(--border); border-radius: 999px;
+}
+.location-delete:hover { color: var(--danger); border-color: var(--danger); }
+.location-delete:focus-visible { outline: 3px solid var(--link); outline-offset: 2px; }
 .location-counts { display: flex; gap: 20px; list-style: none; margin: 6px 0 0; padding: 10px 0 0; border-top: 1px solid var(--border); }
 .location-counts li { display: flex; flex-direction: column; }
 .location-counts strong { font-size: 17px; font-variant-numeric: tabular-nums; }
@@ -559,6 +566,8 @@ main > .page.landing { padding: var(--header-height) 0 0; background: var(--bg);
 .locations-grid > li[hidden] { display: none; }
 .locations-message { padding: 32px 16px; text-align: center; color: var(--text-muted); }
 .locations-message[hidden] { display: none; }
+.locations-notice { margin: 0 0 16px; padding: 10px 14px; font-size: 13px; color: var(--text); background: var(--surface-2); border: 1px solid var(--danger); border-radius: 12px; }
+.locations-notice[hidden] { display: none; }
 .locations-retry { padding: 12px 16px; text-box: trim-both cap alphabetic; border: 1px solid var(--accent); border-radius: 8px; background: var(--accent); color: var(--bg); font: inherit; cursor: pointer; }
 .location-skeleton { background: var(--surface-1); border: 1px solid var(--border); border-radius: 18px; corner-shape: squircle; overflow: hidden; }
 .location-skeleton .location-preview { animation: scene-building-pulse 1.4s ease-in-out infinite; }

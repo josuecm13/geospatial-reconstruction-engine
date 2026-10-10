@@ -9,6 +9,8 @@ export interface CardContext {
   previews: PreviewLoader;
   /** Runs when the card is opened by a plain click or Enter, just before the router navigates (the gallery saves its scroll here). */
   onOpen?: (card: LocationCard) => void;
+  /** When given, the card shows a quiet "Delete" button that calls this. Without it the card is read-only. */
+  onDelete?: (card: LocationCard) => void;
 }
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, text?: string): HTMLElementTagNameMap[K] => {
@@ -84,6 +86,18 @@ export function renderLocationCard(card: LocationCard, ctx: CardContext): HTMLEl
   }
 
   article.append(preview, body);
+  if (ctx.onDelete) {
+    // A sibling of the title link, above its stretched click area, so it never opens the card.
+    const remove = el("button", "location-delete", "Delete");
+    remove.type = "button";
+    remove.setAttribute("aria-label", `Delete ${card.title}`);
+    remove.addEventListener("click", (event) => {
+      event.stopPropagation();
+      event.preventDefault();
+      ctx.onDelete!(card);
+    });
+    article.append(remove);
+  }
   ctx.previews.attach(preview, card);
   return article;
 }

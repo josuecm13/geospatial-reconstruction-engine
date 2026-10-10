@@ -234,6 +234,21 @@ The client SHALL show every import area on `/locations` as a card: a preview of 
 - **WHEN** a user scrolls the gallery, opens a card, and presses Back
 - **THEN** the gallery shows the same scroll position, filter, and sort
 
+### Requirement: The client SHALL let the owner delete an import area from the gallery
+Each card on `/locations` SHALL have a "Delete" button, outside the card's open link, that asks for confirmation naming the place and saying the delete removes its imported data and cannot be undone. On success the card SHALL leave the gallery without a page reload, and the count, filter, sort, and empty state SHALL stay correct. When the API refuses with `import_area_in_use`, the client SHALL name the larger places to delete first ("an unnamed area" for one without a name) and keep the card; on `import_in_progress` it SHALL say the import is still running and keep the card; on `import_area_not_found` it SHALL drop the card. Cards on the landing page SHALL NOT offer deletion.
+
+#### Scenario: Deleting a place
+- **WHEN** a user presses Delete on a card and confirms
+- **THEN** the card is removed from the gallery, the place count drops by one, and the map is not opened
+
+#### Scenario: Cancelling the confirmation
+- **WHEN** a user presses Delete and cancels
+- **THEN** nothing is requested and the card stays
+
+#### Scenario: A larger place uses this one
+- **WHEN** the API answers 409 `import_area_in_use` with `covering_areas`
+- **THEN** the card stays and a message names those places as the ones to delete first
+
 ### Requirement: The client SHALL take every interface colour from design tokens and keep text legible
 `style.css` SHALL declare the interface's colours once, as hex custom properties in `:root` (`--scene-background`, `--bg`, `--surface-1` to `--surface-3`, `--border`, `--text`, `--text-muted`, `--accent`, `--link`, `--danger`, `--ok`, `--warning`) with `color-scheme: dark`, and every other colour in the file SHALL be a token or a `color-mix()` of tokens, never a literal. Each text token SHALL have a contrast ratio of at least 4.5:1 on every surface it is drawn on, and the dark button text on every filled button colour. The 2D map's overlay colours SHALL come from `views/mapColors.ts`, derived from the scene palette where the roles match, and the basemap SHALL be a dark style.
 
