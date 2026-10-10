@@ -106,6 +106,41 @@ describe("exportWorld", () => {
     expect(names).not.toContain("block:b1");
   });
 
+  describe("generated buildings", () => {
+    const withGenerated: MapData = {
+      ...data,
+      generated_buildings: fc([
+        {
+          type: "Feature",
+          id: "g1",
+          geometry: { type: "Polygon", coordinates: square(-84, 10.0004) },
+          properties: { block_id: "b1", style: "regular", levels: 2, height_meters: 6.4, base_elevation_meters: null, reference_block_id: null, count_source: "default", generated: true },
+        },
+      ]),
+    };
+    const names = async (world: THREE.Group) => jsonChunk(await exportWorld(world)).nodes.map((n: { name?: string }) => n.name);
+
+    it("includes them while the generated layer is shown, as nodes of their own layer", async () => {
+      const json = jsonChunk(await exportWorld(buildWorld(withGenerated)));
+
+      expect(json.nodes.map((n: { name?: string }) => n.name)).toContain("generated:g1");
+      expect(json.nodes.find((n: { name?: string }) => n.name === "generated:g1").extras).toEqual({ layer: "generated", id: "g1" });
+    });
+
+    it("leaves them out while the layer is hidden, and puts nothing back out of place", async () => {
+      const world = buildWorld(withGenerated);
+      world.getObjectByName("generated")!.visible = false;
+
+      const hidden = await names(world);
+
+      expect(hidden).not.toContain("generated:g1");
+      expect(hidden).toContain("building:bu1"); // the real buildings are untouched
+      expect(world.getObjectByName("generated")!.visible).toBe(false);
+      world.getObjectByName("generated")!.visible = true;
+      expect(await names(world)).toContain("generated:g1");
+    });
+  });
+
   it("puts the scope, projection origin, and attribution on the root node and the asset", async () => {
     const json = jsonChunk(await exportWorld(buildWorld(data)));
     const root = json.nodes.find((n: { name?: string }) => n.name === "world");

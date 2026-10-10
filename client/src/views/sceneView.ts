@@ -12,6 +12,7 @@ import { createExportButton } from "../scene/exportButton";
 import { createPinLayer } from "../scene/pinLayer";
 import { createFlyIntent, createTargetEase, type Vec3 } from "../scene/pinPoint";
 import { createToolGroup } from "../scene/toolGroup";
+import { createGenerationControls, type GenerationDeps } from "../scene/generationControls";
 import { createTerrainControls, type TerrainDeps } from "../scene/terrainControls";
 import { createRoutePanel, type RoutingDeps } from "../scene/routePanel";
 import type { SceneTarget } from "../scene/sceneLoader";
@@ -33,7 +34,7 @@ const EMPTY_HINT = "Open an import on the Map tab";
 
 /** The low-poly world of the open area: background and (once `setWorld` is called) the imported
  * city. Before that, a placeholder ground and grid, and a hint. */
-export function createSceneView(container: HTMLElement, routing?: RoutingDeps, terrain?: TerrainDeps): SceneView {
+export function createSceneView(container: HTMLElement, routing?: RoutingDeps, terrain?: TerrainDeps, generation?: GenerationDeps): SceneView {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(window.devicePixelRatio);
   container.appendChild(renderer.domElement);
@@ -142,6 +143,13 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
 
   const exporter = createExportButton(actions);
   const terrainControls = terrain && createTerrainControls(actions, container, terrain);
+  // Generate / Regenerate, its progress line, and "Show generated" beside "Smooth roads": the generated buildings are the `generated` group.
+  const generationControls =
+    generation &&
+    createGenerationControls(actions, container, toggle, generation, (shown) => {
+      const generated = world?.getObjectByName("generated");
+      if (generated) generated.visible = shown;
+    });
   const rotateButton = Object.assign(document.createElement("button"), { className: "scene-rotate", type: "button", textContent: "Rotate", hidden: true });
   const showRotate = () => rotateButton.setAttribute("aria-pressed", String(rotate.enabled));
   showRotate();
@@ -193,6 +201,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
       scene.add(world);
       showTerrain(data);
       terrainControls?.setWorld(!data.elevation);
+      generationControls?.setWorld(data.generation ?? null);
       modes.setWorld(world);
       flyIntent.take(); // a pin from the old world is gone
       pins.setWorld(world);
@@ -227,6 +236,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
       framing.stagedStarted();
       showTerrain(undefined);
       terrainControls?.setWorld(false);
+      generationControls?.clear();
       const build = staged.begin(bbox);
       world = build.world;
       world.getObjectByName("blocks")!.visible = buildable.checked;
@@ -269,6 +279,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
       scene.add(placeholder);
       showTerrain(undefined);
       terrainControls?.setWorld(false);
+      generationControls?.clear();
       overlay.textContent = message;
       overlay.hidden = false;
       toggle.hidden = true;

@@ -1,14 +1,15 @@
 import * as maplibregl from "maplibre-gl";
 import type { MapData } from "../api/types";
 import { roadWidthExpression } from "../geo/roadWidth";
+import { generatedOrigin } from "../scene/generationMessages";
 import { MAP_COLORS } from "./mapColors";
 
 /** The engine's own representation of an imported area, drawn over the basemap: this is what was
  * served from the API, not the basemap's rendering of OSM. */
-const LAYERS = ["area_features", "blocks", "road_segments", "buildings", "pois"] as const;
+const LAYERS = ["area_features", "blocks", "road_segments", "buildings", "generated_buildings", "pois"] as const;
 type LayerName = (typeof LAYERS)[number];
 
-const CLICKABLE = ["engine-area-features", "engine-roads", "engine-buildings", "engine-pois", "engine-blocks"];
+const CLICKABLE = ["engine-area-features", "engine-roads", "engine-buildings", "engine-generated", "engine-pois", "engine-blocks"];
 
 export class MapDataLayers {
   private readonly popup = new maplibregl.Popup({ closeButton: true, maxWidth: "320px" });
@@ -63,6 +64,13 @@ export class MapDataLayers {
       },
     });
     map.addLayer({
+      id: "engine-generated",
+      type: "fill",
+      source: sourceId("generated_buildings"),
+      // Cool blue: generated, not observed, so the two never read as one.
+      paint: { "fill-color": MAP_COLORS.buildingGenerated, "fill-opacity": 0.85, "fill-outline-color": MAP_COLORS.buildingOutline },
+    });
+    map.addLayer({
       id: "engine-pois",
       type: "circle",
       source: sourceId("pois"),
@@ -87,7 +95,7 @@ export class MapDataLayers {
     // Roads drawn at their generated carriageway width, in meters on the ground.
     this.map.setPaintProperty("engine-roads", "line-width", roadWidthExpression(data.projection.origin.latitude) as never);
     for (const name of LAYERS) {
-      (this.map.getSource(sourceId(name)) as maplibregl.GeoJSONSource).setData(data[name] as never);
+      (this.map.getSource(sourceId(name)) as maplibregl.GeoJSONSource).setData((data[name] ?? { type: "FeatureCollection", features: [] }) as never);
     }
   }
 
@@ -111,6 +119,7 @@ const TITLES: Record<string, string> = {
   "engine-blocks": "Block",
   "engine-roads": "Road segment",
   "engine-buildings": "Building",
+  "engine-generated": "Generated building",
   "engine-pois": "Point of interest",
 };
 
@@ -135,6 +144,13 @@ export function featureRows(layerId: string, properties: Record<string, unknown>
         ["Height", properties.height_meters == null || properties.height_meters === "null" ? "unknown" : `${Number(properties.height_meters).toFixed(1)} m`],
         ["Levels", value(properties.levels)],
         ["In a block", properties.block_id == null || properties.block_id === "null" ? "no" : "yes"],
+      ];
+    case "engine-generated":
+      return [
+        ["Origin", generatedOrigin({ count_source: String(properties.count_source), reference_block_id: properties.reference_block_id == null || properties.reference_block_id === "null" ? null : String(properties.reference_block_id) })],
+        ["Height", `${Number(properties.height_meters).toFixed(1)} m`],
+        ["Levels", value(properties.levels)],
+        ["Style", value(properties.style)],
       ];
     case "engine-blocks":
       return [

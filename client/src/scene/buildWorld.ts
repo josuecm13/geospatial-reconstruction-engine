@@ -8,7 +8,7 @@ import { dedupeTwins, roadPolygon } from "./roadGeometry";
 import { shadeGeometry } from "./shading";
 import { clipPolygonToRect, clipRingToRect, createTerrain, drape, flatTerrain, groundMesh, roadSurface, splitByLines, ringInside, type RoadMode, type Terrain } from "./terrain";
 
-/** The layer groups of a world, in order. `generated` is reserved for Milestone 11. */
+/** The layer groups of a world, in order. `generated` holds the generated buildings (Milestone 11). */
 export const WORLD_GROUPS = ["ground", "area_features", "roads", "blocks", "buildings", "generated"] as const;
 
 /** Heights above the ground (y = 0) for flat layers. The scene view draws them by LAYER_ORDER instead; this
@@ -95,6 +95,18 @@ export function buildWorld(data: MapData, roadMode: RoadMode = DEFAULT_ROAD_MODE
   const groups = Object.fromEntries(WORLD_GROUPS.map((name) => [name, group(name)])) as Record<(typeof WORLD_GROUPS)[number], THREE.Group>;
   for (const name of WORLD_GROUPS) world.add(groups[name]);
 
+  /** A building stands on the lowest ground under its footprint (or at its stored base height), so nothing floats. */
+  const standOnGround = (mesh: THREE.Mesh, polygons: Rings[], base: number | null | undefined) => {
+    mesh.position.y = !terrain.hasGround ? 0 : base != null ? base - terrain.baseline : Math.min(...polygons.map((rings) => terrain.lowestUnder(rings[0])));
+  };
+  /** The pale outline of a building's edges: a child, so it follows the build animation's scale.y. Not pickable (routeLayer raycasts recursively) and left out of the glTF export (exportGltf.ts). */
+  const withEdges = (mesh: THREE.Mesh) => {
+    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry, 1), MATERIALS.edge);
+    edges.name = "edges";
+    edges.raycast = () => {};
+    mesh.add(edges);
+  };
+
   // Kept for walking (see collision.ts), so it doesn't re-parse meshes.
   const footprints: { id: string; ring: Local[] }[] = [];
   const roadOutlines: Local[][] = [];
@@ -175,14 +187,23 @@ export function buildWorld(data: MapData, roadMode: RoadMode = DEFAULT_ROAD_MODE
     mesh.userData.defaulted = defaulted;
     mesh.userData.height = height;
     // Stands on the lowest ground under the footprint, so nothing floats. Its height and extrusion are unchanged.
-    const base = feature.properties.base_elevation_meters;
-    mesh.position.y = !terrain.hasGround ? 0 : base != null ? base - terrain.baseline : Math.min(...polygons.map((rings) => terrain.lowestUnder(rings[0])));
-    // A child, so it follows the build animation's scale.y. Not pickable (routeLayer raycasts recursively) and left out of the glTF export (exportGltf.ts).
-    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry, 1), MATERIALS.edge);
-    edges.name = "edges";
-    edges.raycast = () => {};
-    mesh.add(edges);
+    standOnGround(mesh, polygons, feature.properties.base_elevation_meters);
+    withEdges(mesh);
     groups.buildings.add(mesh);
+  }
+
+  // Generated buildings (Milestone 11): a layer of their own, so they can be hidden, and are left out of the export while they are.
+  for (const feature of data.generated_buildings?.features ?? []) {
+    const polygons = polygonsOf(feature.geometry, projection);
+    if (!polygons.length) continue;
+    polygons.forEach((rings) => grow(rings[0]));
+    const shapes = polygons.map((rings) => footprintShape(rings[0]));
+    const mesh = entity("generated", feature, extrudeFootprints(shapes, feature.properties.height_meters), MATERIALS.buildingGenerated);
+    mesh.userData.generated = true;
+    mesh.userData.height = feature.properties.height_meters;
+    standOnGround(mesh, polygons, feature.properties.base_elevation_meters);
+    withEdges(mesh);
+    groups.generated.add(mesh);
   }
 
   // On terrain the ground is the grid (with the margin), not the union of every feature's envelope.

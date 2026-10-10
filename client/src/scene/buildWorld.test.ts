@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
-import type { Elevation, Feature, MapData, Position } from "../api/types";
+import type { Elevation, Feature, GeneratedBuildingProperties, MapData, Position } from "../api/types";
 import { buildWorld, groundPlane, LAYER_ORDER, LAYER_Y, setRoadMode } from "./buildWorld";
 import { MATERIALS } from "./palette";
 
@@ -317,5 +317,47 @@ describe("buildWorld on terrain with features far larger than the grid", () => {
   it("draws nothing for a feature wholly outside the grid", () => {
     const outside = buildWorld({ ...terrainData, area_features: fc([{ type: "Feature", id: "far", geometry: { type: "Polygon", coordinates: square(-83, 11) }, properties: { kind: "water", import_area_id: "area-1" } }]) });
     expect(outside.getObjectByName("area_feature:far")).toBeUndefined();
+  });
+});
+
+describe("buildWorld generated buildings", () => {
+  const generated = (id: string, lon: number, lat: number, base: number | null, height = 6.4) =>
+    ({
+      type: "Feature",
+      id,
+      geometry: { type: "Polygon", coordinates: square(lon, lat) },
+      properties: { block_id: "b1", style: "regular", levels: 2, height_meters: height, base_elevation_meters: base, reference_block_id: null, count_source: "default", generated: true },
+    }) as Feature<GeneratedBuildingProperties>;
+
+  it("fills the generated group, extruded to height_meters in the generated material, tagged as generated", () => {
+    const world = buildWorld({ ...data, generated_buildings: fc([generated("g1", -84, 10.0004, null), generated("g2", -84, 10.0006, null, 9.6)]) });
+    const group = world.getObjectByName("generated")!;
+
+    expect(group.children.map((child) => child.name)).toEqual(["generated:g1", "generated:g2"]);
+    const mesh = group.children[1] as THREE.Mesh;
+    expect(mesh.material).toBe(MATERIALS.buildingGenerated);
+    expect(mesh.userData).toMatchObject({ layer: "generated", id: "g2", generated: true, height: 9.6 });
+    mesh.geometry.computeBoundingBox();
+    expect(mesh.geometry.boundingBox!.max.y).toBeCloseTo(9.6, 3);
+    expect(world.getObjectByName("buildings")!.children.map((child) => child.name)).toEqual(["building:bu1", "building:bu2"]);
+  });
+
+  it("gives each generated building pale edge lines, like the others", () => {
+    const world = buildWorld({ ...data, generated_buildings: fc([generated("g1", -84, 10.0004, null)]) });
+    const edges = world.getObjectByName("generated:g1")!.getObjectByName("edges") as THREE.LineSegments;
+
+    expect(edges.material).toBe(MATERIALS.edge);
+  });
+
+  it("leaves the group empty without a run", () => {
+    expect(buildWorld(data).getObjectByName("generated")!.children).toEqual([]);
+  });
+
+  it("stands on its stored base height minus the baseline, or the lowest ground under it, on terrain", () => {
+    const world = buildWorld({ ...terrainData, generated_buildings: fc([generated("g1", -84, 10.0004, 57), generated("g2", -83.9995, 10.0004, null)]) });
+
+    expect(world.getObjectByName("generated:g1")!.position.y).toBeCloseTo(7); // 57 m, 7 above the 50 m baseline: as a real building
+    expect(world.getObjectByName("generated:g2")!.position.y).toBeCloseTo(10, 3);
+    expect(world.getObjectByName("generated:g1")!.userData.height).toBe(6.4); // the extrusion is unchanged
   });
 });

@@ -65,6 +65,16 @@ describe("featureRows", () => {
     ]);
   });
 
+  it("says where a generated building came from: a block, defaults, or your count", () => {
+    const rows = (properties: Record<string, unknown>) => Object.fromEntries(featureRows("engine-generated", { height_meters: 6.4, levels: 2, style: "regular", ...properties }));
+
+    expect(rows({ count_source: "reference", reference_block_id: "0123456789abcdef" })).toEqual({ Origin: "Generated · from block 01234567", Height: "6.4 m", Levels: "2", Style: "regular" });
+    // MapLibre hands a null property back as the string "null".
+    expect(rows({ count_source: "default", reference_block_id: "null" }).Origin).toBe("Generated · defaults");
+    expect(rows({ count_source: "default", reference_block_id: null }).Origin).toBe("Generated · defaults");
+    expect(rows({ count_source: "feedback", reference_block_id: "0123456789abcdef" }).Origin).toBe("Generated · from your count");
+  });
+
   it("shows an unknown building height as unknown, never as zero", () => {
     const rows = Object.fromEntries(featureRows("engine-buildings", { category: "residential", height_meters: null, levels: 5, block_id: null }));
     expect(rows).toEqual({ Category: "residential", Height: "unknown", Levels: "5", "In a block": "no" });

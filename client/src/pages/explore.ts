@@ -186,7 +186,8 @@ export const mount: Mount<ExploreRoute> = (el, ctx) => {
     } else {
       sceneView ??= import("../views/sceneView").then(({ createSceneView }) => {
         const areaId = () => selection.get().areaId;
-        const created = createSceneView(pick("scene-view"), { api, areaId }, { api, areaId, reload: () => sceneLoader?.reload() });
+        const reload = () => sceneLoader?.reload();
+        const created = createSceneView(pick("scene-view"), { api, areaId }, { api, areaId, reload }, { api, areaId, reload });
         sceneLoader = new SceneLoader(api, selection, created, (error) => sceneErrors(error).sentence);
         return created;
       });

@@ -162,6 +162,8 @@ body:has(#map-view[hidden]) .panel { display: none; }
 .route-warning { color: var(--warning); }
 .scene-rotate[aria-pressed="true"], .scene-pin[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); }
 .scene-rotate:disabled, .scene-terrain:disabled { opacity: 0.5; cursor: default; }
+/* A stale run: the Regenerate button asks to be pressed. */
+.scene-generate.stale { border-color: var(--warning); color: var(--warning); }
 /* The terrain credit and the "Add terrain" progress line sit along the bottom of the scene, clear of the build label (centre) and Skip (right). */
 .scene-attribution, .scene-terrain-note {
   position: absolute; left: 12px; max-width: min(520px, calc(100% - 24px));
@@ -169,6 +171,7 @@ body:has(#map-view[hidden]) .panel { display: none; }
 }
 .scene-attribution { bottom: 12px; }
 .scene-terrain-note { bottom: 52px; font-size: 13px; color: var(--text); }
+.scene-generation-note { bottom: 92px; } /* above the terrain note, in case both jobs report at once */
 .scene-terrain-note.error { color: var(--danger); }
 .scene-attribution[hidden], .scene-terrain-note[hidden] { display: none; }
 .scene-export {
