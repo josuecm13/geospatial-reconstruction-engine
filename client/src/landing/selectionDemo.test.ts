@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import { IMPORT_STAGES } from "../api/types";
 import { selectionDemo, TICKER_STAGES } from "./selectionDemo";

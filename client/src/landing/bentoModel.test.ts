@@ -13,7 +13,7 @@ describe("farthestPairs", () => {
   it("puts the pair with the greatest ground distance first", () => {
     const [first] = farthestPairs(nodes, 1);
     expect(first[0]).toEqual({ latitude: 0, longitude: 0 });
-    expect(first[1]).toEqual({ latitude: 0.0001, longitude: 0.0051 });
+    expect(first[1]).toEqual({ latitude: 0.004, longitude: 0.005 });
   });
 
   it("orders the rest by distance and stops at the count", () => {

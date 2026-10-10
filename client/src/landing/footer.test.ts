@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import { OSM_COPYRIGHT_URL, REPO_URL, renderFooter } from "./footer";
 
