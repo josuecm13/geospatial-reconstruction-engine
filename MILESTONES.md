@@ -20,8 +20,8 @@ milestone's decisions live in its archived OpenSpec change's `design.md`.
 | 8 | Custom traced import-area boundaries | complete | #21 · #53, #56–#59 · [`add-traced-import-boundaries`](openspec/changes/archive/2026-09-27-add-traced-import-boundaries/) |
 | 8.1 | Building attributes from source | complete | #22 · #73 · [`add-building-attributes-from-source`](openspec/changes/archive/2026-09-30-add-building-attributes-from-source/) |
 | 9 | Live import and the showcase client | complete | #27 · #99, #120 · [`add-live-import-and-showcase-client`](openspec/changes/archive/2026-10-03-add-live-import-and-showcase-client/) |
-| 10 | Terrain elevation | next | #105 |
-| 11 | Generated block content | planned | #23 |
+| 10 | Terrain elevation | complete | #105 · #138 · [`add-terrain-elevation`](openspec/changes/archive/2026-10-10-add-terrain-elevation/) |
+| 11 | Generated block content | next | #23 |
 | 12 | Renderable asset semantics | planned | #24 |
 
 When a milestone completes, set its status here and add its PRs and archived change to its row. Its

@@ -1,6 +1,6 @@
 import pytest
 
-from app.domain.bounding_box import BoundingBox, Coordinate, InvalidBoundingBox
+from app.domain.bounding_box import MAX_AREA_SQUARE_METERS, BoundingBox, Coordinate, InvalidBoundingBox
 
 
 def test_valid_bounding_box_is_accepted():
@@ -8,7 +8,7 @@ def test_valid_bounding_box_is_accepted():
         min_corner=Coordinate(30.0, -97.8),
         max_corner=Coordinate(30.005, -97.795),
     )
-    assert box.area_square_meters() <= 1_000_000.0
+    assert box.area_square_meters() <= MAX_AREA_SQUARE_METERS
 
 
 def test_latitude_out_of_range_is_rejected():
@@ -42,7 +42,15 @@ def test_bounding_box_within_limit_is_accepted():
         min_corner=Coordinate(30.0, -97.8),
         max_corner=Coordinate(30.009, -97.791),
     )
-    assert box.area_square_meters() <= 1_000_000.0
+    assert box.area_square_meters() <= MAX_AREA_SQUARE_METERS
+
+
+def test_bounding_box_between_one_and_ten_square_kilometres_is_accepted():
+    box = BoundingBox(
+        min_corner=Coordinate(30.0, -97.8),
+        max_corner=Coordinate(30.02, -97.78),
+    )
+    assert 1_000_000.0 < box.area_square_meters() <= MAX_AREA_SQUARE_METERS  # about 4.3 km²
 
 
 def test_oversized_bounding_box_is_rejected():

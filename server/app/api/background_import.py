@@ -18,6 +18,7 @@ from app.api.mappers import (
     area_feature_feature,
     block_feature,
     building_feature,
+    elevation_out,
     feature_collection,
     import_area_out,
     poi_feature,
@@ -29,11 +30,14 @@ from app.domain.bounding_box import BoundingBox
 from app.domain.cross_section import cross_sections_by_segment
 from app.domain.import_area import ImportArea
 from app.domain.local_projection import local_projection_for
+from app.ingestion.elevation_analysis import ElevationAnalysis, ElevationResult
+from app.ingestion.elevation_source import ElevationUnavailable, TerrainTilesSource
 from app.ingestion.jobs import ImportJob
 from app.ingestion.overpass import OverpassClient
 from app.ingestion.service import OSMIngestionService
 from app.persistence.repositories.area_feature import AreaFeatureRepository
 from app.persistence.repositories.block import BlockRepository
+from app.persistence.repositories.elevation import ElevationRepository
 from app.persistence.repositories.import_area import ImportAreaRepository
 from app.persistence.repositories.poi import PointOfInterestRepository
 from app.persistence.repositories.road_graph import RoadSegmentRepository
@@ -88,12 +92,74 @@ def _dump(model) -> dict[str, Any]:
     return model.model_dump(mode="json")
 
 
+def analyse_elevation(session, area: ImportArea, source: TerrainTilesSource | None) -> ElevationResult | None:
+    """Analyses and commits the area's elevation. The caller's import is already committed, so
+    this is isolated from it: the terrain is fetched before anything is written, and on
+    `ElevationUnavailable` the session is rolled back (undoing nothing but this step) and the
+    exception propagates for the caller to report. None when elevation is disabled."""
+    if source is None:
+        return None
+    try:
+        result = ElevationAnalysis(session, source).analyse(area)
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    return result
+
+
+def elevation_stage_data(session, area: ImportArea, source: TerrainTilesSource | None, projection: dict) -> dict[str, Any]:
+    """The `elevation` stage of an import. A source failure doesn't fail the import: the stage
+    reports `elevation: null` and the error code, and the area can be re-analysed later."""
+    error = None
+    try:
+        analyse_elevation(session, area, source)
+    except ElevationUnavailable as exc:
+        logger.warning("elevation for area %s unavailable, the import completes flat: %s", area.id, exc)
+        error = "elevation_unavailable"
+    except Exception:
+        # Elevation never fails an import: whatever went wrong, the committed import stands.
+        logger.exception("elevation for area %s failed unexpectedly, the import completes flat", area.id)
+        error = "elevation_failed"
+    elevation = elevation_out(ElevationRepository(session).get_grid(area.id)) if error is None else None
+    return {"projection": projection, "elevation": elevation, "error": error}
+
+
+def elevation_work(
+    area: ImportArea, source: TerrainTilesSource, session_scope: SessionScope
+) -> Callable[[ImportJob], None]:
+    """The job body of a re-analysis: it fetches no OSM data and changes no entity. Emits
+    `elevation`, then `completed` with the version and whether the stored grid changed, or
+    `failed` (rolled back) with the error's code."""
+
+    def work(job: ImportJob) -> None:
+        with session_scope() as session:
+            try:
+                result = analyse_elevation(session, area, source)
+                projection = projection_out(local_projection_for(area.bbox.ring())).model_dump(mode="json")
+                elevation = elevation_out(ElevationRepository(session).get_grid(area.id))
+                job.emit("elevation", {"projection": projection, "elevation": elevation, "error": None})
+                job.emit(
+                    "completed",
+                    {"import_area_id": str(area.id), "version": result.version, "changed": result.changed},
+                )
+            except Exception as exc:
+                session.rollback()
+                _, code, message, details = describe_error(exc)
+                if code == "internal_error":
+                    logger.exception("elevation analysis of area %s failed unexpectedly", area.id)
+                job.emit("failed", {"code": code, "message": message, "details": details})
+
+    return work
+
+
 def background_import_work(
     bbox: BoundingBox,
     payload: dict | None,
     overpass: OverpassClient,
     session_scope: SessionScope,
     geocoder: Geocoder | None = None,
+    elevation_source: TerrainTilesSource | None = None,
 ) -> Callable[[ImportJob], None]:
     """The job body: fetch (when no payload was posted), then import in stages in one transaction.
 
@@ -110,8 +176,11 @@ def background_import_work(
                 named = name_area(ImportAreaRepository(session), result.import_area, geocoder)
                 # The import committed before the lookup; without this the name is dropped when the session closes.
                 session.commit()
+                projection = projection_out(local_projection_for(named.bbox.ring())).model_dump(mode="json")
+                job.emit("elevation", elevation_stage_data(session, named, elevation_source, projection))
                 completed = import_area_out(
-                    named, result.block_count, result.linked_building_count, result.skipped_restriction_count
+                    named, result.block_count, result.linked_building_count, result.skipped_restriction_count,
+                    result.skipped_feature_count,
                 )
                 job.emit("completed", _dump(completed))
             except Exception as exc:

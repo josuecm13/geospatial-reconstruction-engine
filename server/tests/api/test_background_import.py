@@ -5,10 +5,11 @@ from pathlib import Path
 
 import pytest
 
-from app.api.dependencies import get_import_jobs, get_job_session_scope, get_overpass_client
+from app.api.dependencies import get_elevation_source, get_import_jobs, get_job_session_scope, get_overpass_client
 from app.ingestion.jobs import ImportJobRegistry
 from app.ingestion.overpass import UpstreamUnavailable
 from app.persistence.block_derivation import BlockDerivationService
+from tests.api.elevation_stubs import BrokenSource, DownSource, SlopedSource
 
 FIXTURE = Path(__file__).parents[1] / "fixtures" / "osm_neighborhood.json"
 BBOX = {"min_latitude": 9.933, "min_longitude": -84.081, "max_latitude": 9.935, "max_longitude": -84.079}
@@ -81,8 +82,8 @@ def test_background_import_answers_202_and_streams_the_stages_in_order(client, i
     events = _events(client, area_id)
     stages = [event["stage"] for event in events]
     assert stages[:4] == STAGES_BEFORE_BUILDINGS
-    assert stages[4:-1] and set(stages[4:-1]) == {"buildings"}
-    assert stages[-1] == "completed"
+    assert stages[4:-2] and set(stages[4:-2]) == {"buildings"}
+    assert stages[-2:] == ["elevation", "completed"]
     assert [event["id"] for event in events] == list(range(1, len(events) + 1))
     assert all("projection" in event["data"] for event in events[:-1])
     assert events[0]["data"]["element_count"] == len(_payload()["elements"])
@@ -217,3 +218,81 @@ def test_events_for_an_unknown_area_are_not_found(client, inline):
 
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "import_area_not_found"
+
+
+def _elevation_event(client, area_id):
+    events = _events(client, area_id)
+    assert [event["stage"] for event in events][-2:] == ["elevation", "completed"]
+    return events[-2]["data"], events[-1]["data"]
+
+
+def test_the_elevation_stage_carries_the_grid_before_completed(client, inline):
+    client.app.dependency_overrides[get_elevation_source] = lambda: SlopedSource()
+
+    area_id = _start(client, _payload()).json()["import_area_id"]
+    stage, completed = _elevation_event(client, area_id)
+
+    assert "projection" in stage and stage["error"] is None
+    elevation = stage["elevation"]
+    grid = elevation["grid"]
+    assert elevation["source"] == "aws-terrain-tiles" and elevation["version"] == 1
+    assert elevation["attribution"].startswith("Terrain: AWS Terrain Tiles")
+    assert len(grid["heights"]) == grid["rows"] * grid["cols"]
+    assert grid["origin"] == {"latitude": BBOX["min_latitude"], "longitude": BBOX["min_longitude"]}
+    assert completed["status"] == "completed"
+
+
+def test_an_unavailable_terrain_source_completes_the_import_flat(client, inline):
+    client.app.dependency_overrides[get_elevation_source] = lambda: DownSource()
+
+    area_id = _start(client, _payload()).json()["import_area_id"]
+    stage, completed = _elevation_event(client, area_id)
+
+    assert stage["elevation"] is None and stage["error"] == "elevation_unavailable"
+    assert completed["status"] == "completed"
+    assert client.get(f"/import-areas/{area_id}").json()["status"] == "completed"
+    assert len(client.get(f"/import-areas/{area_id}/map-data").json()["road_segments"]["features"]) == 5
+
+
+def test_a_disabled_terrain_source_emits_a_null_elevation_without_an_error(client, inline):
+    area_id = _start(client, _payload()).json()["import_area_id"]
+
+    stage, _ = _elevation_event(client, area_id)
+
+    assert stage["elevation"] is None and stage["error"] is None
+
+
+def test_a_synchronous_import_runs_elevation_and_survives_its_failure(client, inline):
+    source = SlopedSource()
+    client.app.dependency_overrides[get_elevation_source] = lambda: source
+
+    response = client.post("/import-areas", json={"bbox": BBOX, "payload": _payload()})
+
+    assert response.status_code == 200
+    assert source.calls == 1
+
+    client.app.dependency_overrides[get_elevation_source] = lambda: DownSource()
+    again = client.post("/import-areas", json={"bbox": BBOX, "payload": _payload()})
+    assert again.status_code == 200
+    assert again.json()["id"] == response.json()["id"]
+
+
+def test_an_unexpected_elevation_failure_still_completes_the_import_with_its_data(client, inline):
+    client.app.dependency_overrides[get_elevation_source] = lambda: BrokenSource()
+
+    area_id = _start(client, _payload()).json()["import_area_id"]
+    stage, completed = _elevation_event(client, area_id)
+
+    assert stage["elevation"] is None and stage["error"] == "elevation_failed"
+    assert completed["status"] == "completed"
+    assert client.get(f"/import-areas/{area_id}").json()["status"] == "completed"
+    assert len(client.get(f"/import-areas/{area_id}/map-data").json()["road_segments"]["features"]) == 5
+
+
+def test_a_synchronous_import_survives_an_unexpected_elevation_failure(client, inline):
+    client.app.dependency_overrides[get_elevation_source] = lambda: BrokenSource()
+
+    response = client.post("/import-areas", json={"bbox": BBOX, "payload": _payload()})
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "completed"

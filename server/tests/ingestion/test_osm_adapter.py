@@ -45,7 +45,7 @@ def test_adapter_preserves_reverse_one_way_and_unknown_lanes():
     assert road.backward_lanes is None
 
 
-def test_adapter_rejects_malformed_supported_polygon():
+def test_adapter_skips_malformed_supported_polygon():
     payload = {
         "elements": [
             {"type": "node", "id": 1, "lat": 9.934, "lon": -84.080},
@@ -54,8 +54,44 @@ def test_adapter_rejects_malformed_supported_polygon():
         ]
     }
 
-    with pytest.raises(OSMIngestionError, match="three distinct"):
-        OSMFixtureAdapter().parse(payload)
+    records = OSMFixtureAdapter().parse(payload)
+
+    assert records.buildings == ()
+    assert records.skipped_features == ("10",)
+
+
+def _open_way_payload():
+    return {
+        "elements": [
+            {"type": "node", "id": 1, "lat": 9.9340, "lon": -84.0800},
+            {"type": "node", "id": 2, "lat": 9.9341, "lon": -84.0800},
+            {"type": "node", "id": 3, "lat": 9.9342, "lon": -84.0800},
+            {"type": "node", "id": 4, "lat": 9.9342, "lon": -84.0799},
+            {"type": "way", "id": 20, "nodes": [1, 2, 3], "tags": {"amenity": "bench"}},
+            {"type": "way", "id": 21, "nodes": [1, 2, 3], "tags": {"building": "yes"}},
+            {"type": "way", "id": 22, "nodes": [1, 2, 3], "tags": {"leisure": "park"}},
+            {"type": "way", "id": 23, "nodes": [1, 3, 4, 1], "tags": {"building": "yes"}},
+            {"type": "way", "id": 24, "nodes": [1], "tags": {"amenity": "bench"}},
+        ]
+    }
+
+
+def test_poi_drawn_as_an_open_way_is_a_point_at_its_middle_vertex():
+    records = OSMFixtureAdapter().parse(_open_way_payload())
+
+    assert len(records.pois) == 1
+    bench = records.pois[0]
+    assert (bench.source_id, bench.category) == ("20", PoiCategory.OTHER)
+    assert (bench.point.latitude, bench.point.longitude) == (9.9341, -84.0800)
+    assert bench.footprint_node_ids == ("1", "2", "3")
+
+
+def test_unclosed_building_and_area_ways_and_an_unplaceable_poi_are_skipped():
+    records = OSMFixtureAdapter().parse(_open_way_payload())
+
+    assert [building.source_id for building in records.buildings] == ["23"]
+    assert records.areas == ()
+    assert set(records.skipped_features) == {"21", "22", "24"}
 
 
 def test_adapter_translates_supported_poi_area_to_representative_point():

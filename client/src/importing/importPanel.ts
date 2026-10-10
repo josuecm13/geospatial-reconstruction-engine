@@ -22,7 +22,7 @@ export const REIMPORT_WARNING =
   "today: anything OpenStreetMap no longer has is deleted from this area, including its streets, " +
   "buildings, and blocks. Continue?";
 
-/** The 2D picker: draw a rectangle up to 1 km², import it live, and see what the engine built. */
+/** The 2D picker: draw a rectangle up to 10 km², import it live, and see what the engine built. */
 export class ImportPanel {
   private readonly tool: RectangleTool;
   /** Completed import areas from the API, most recent first. */
@@ -57,7 +57,7 @@ export class ImportPanel {
   ) {
     container.innerHTML = `
       <h2>Import a place</h2>
-      <p class="hint">Draw a rectangle of up to 1 km², then import it live from OpenStreetMap.</p>
+      <p class="hint">Draw a rectangle of up to 10 km², then import it live from OpenStreetMap.</p>
       <button type="button" data-role="draw">Draw rectangle</button>
       <p class="area-readout" data-role="area">No rectangle yet</p>
       <button type="button" class="primary" data-role="import" disabled>Import from OpenStreetMap</button>

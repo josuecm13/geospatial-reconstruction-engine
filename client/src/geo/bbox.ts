@@ -2,7 +2,7 @@ import type { BoundingBox } from "../api/types";
 
 /** Mirrors server/app/domain/bounding_box.py, so the client disables Import exactly when the server would refuse. */
 export const EARTH_RADIUS_METERS = 6_371_000;
-export const MAX_AREA_SQUARE_METERS = 1_000_000;
+export const MAX_AREA_SQUARE_METERS = 10_000_000;
 
 const radians = (degrees: number) => (degrees * Math.PI) / 180;
 

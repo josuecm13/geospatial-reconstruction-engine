@@ -2,12 +2,18 @@ import * as THREE from "three";
 import type { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { PointerLockControls } from "three/examples/jsm/controls/PointerLockControls.js";
 import { buildFootprintIndex, nearestRoadStart, resolveMove, type FootprintIndex, type Point } from "./collision";
+import type { Terrain } from "./terrain";
 
 export type CameraMode = "fly" | "walk";
 
 export const EYE_HEIGHT = 1.7;
 export const WALK_SPEED = 1.4;
 export const RUN_SPEED = 4;
+
+/** The camera's y when walking at (x, z): the ground there (none when the world has no terrain) plus the eye height. */
+export function eyeY(terrain: Terrain | undefined, x: number, z: number): number {
+  return (terrain?.heightAtLocal(x, z) ?? 0) + EYE_HEIGHT;
+}
 
 const HELP = "WASD to move · Shift to run · Esc to release the mouse";
 const FORWARD = new Set(["KeyW", "ArrowUp"]);
@@ -48,6 +54,7 @@ export function createCameraModes(
   let mode: CameraMode = "fly";
   let world: THREE.Object3D | undefined;
   let index: FootprintIndex | undefined;
+  let terrain: Terrain | undefined;
   let active = false;
   const saved = { position: new THREE.Vector3(), target: new THREE.Vector3() };
   const held = new Set<string>();
@@ -60,8 +67,9 @@ export function createCameraModes(
     const start = nearestRoadStart(world.userData.roadOutlines ?? [], { x: center.x, z: center.z });
     mode = "walk";
     orbit.enabled = false;
-    camera.position.set(start.x, EYE_HEIGHT, start.z);
-    camera.lookAt(start.x, EYE_HEIGHT, start.z - 1); // north is -z
+    const eye = eyeY(terrain, start.x, start.z);
+    camera.position.set(start.x, eye, start.z);
+    camera.lookAt(start.x, eye, start.z - 1); // north is -z
     button.textContent = "Fly";
     help.hidden = false;
   };
@@ -124,11 +132,12 @@ export function createCameraModes(
         camera.position.x = resolved.x;
         camera.position.z = resolved.z;
       }
-      camera.position.y = EYE_HEIGHT;
+      camera.position.y = eyeY(terrain, camera.position.x, camera.position.z); // up and down the slope with the ground
     },
     setWorld(next) {
       if (mode === "walk") enterFly();
       world = next;
+      terrain = next?.userData.terrain;
       index = next ? buildFootprintIndex(next.userData.footprints ?? []) : undefined;
       button.hidden = !next;
     },

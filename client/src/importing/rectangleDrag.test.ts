@@ -130,10 +130,10 @@ describe("describeSize", () => {
     expect(size.overLimit).toBe(false);
   });
 
-  it("flags a rectangle over 1 km²", () => {
-    // 0.01 degrees square is 1111.95 m a side: 1.236 km².
-    const size = describeSize({ min_longitude: 0, max_longitude: 0.01, min_latitude: 0, max_latitude: 0.01 });
-    expect(size.areaKm2).toBeCloseTo(1.236, 2);
+  it("flags a rectangle over 10 km²", () => {
+    // 0.03 degrees square is 3335.85 m a side: 11.128 km².
+    const size = describeSize({ min_longitude: 0, max_longitude: 0.03, min_latitude: 0, max_latitude: 0.03 });
+    expect(size.areaKm2).toBeCloseTo(11.128, 2);
     expect(size.overLimit).toBe(true);
   });
 });
@@ -141,8 +141,8 @@ describe("describeSize", () => {
 describe("sizeLabel", () => {
   it("shows size and area, and the limit only when it is exceeded", () => {
     expect(sizeLabel(RECT)).toBe("222 × 111 m · 0.025 km²");
-    const big = sizeLabel({ min_longitude: 0, max_longitude: 0.01, min_latitude: 0, max_latitude: 0.01 });
-    expect(big).toBe("1112 × 1112 m · 1.24 km² · over the 1 km² limit");
+    const big = sizeLabel({ min_longitude: 0, max_longitude: 0.03, min_latitude: 0, max_latitude: 0.03 });
+    expect(big).toBe("3336 × 3336 m · 11.13 km² · over the 10 km² limit");
   });
 });
 

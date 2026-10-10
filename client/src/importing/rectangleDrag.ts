@@ -125,7 +125,7 @@ export interface SizeDescription {
   overLimit: boolean;
 }
 
-/** Size and area as the server measures them, and whether the area is over the 1 km² limit. */
+/** Size and area as the server measures them, and whether the area is over the 10 km² limit. */
 export function describeSize(bbox: BoundingBox): SizeDescription {
   const { width, height } = bboxSizeMeters(bbox);
   const area = areaSquareMeters(bbox);
@@ -136,7 +136,7 @@ export function describeSize(bbox: BoundingBox): SizeDescription {
 export function sizeLabel(bbox: BoundingBox): string {
   const size = describeSize(bbox);
   const base = `${Math.round(size.widthMeters)} × ${Math.round(size.heightMeters)} m · ${formatSquareKilometers(size.areaKm2 * 1_000_000)}`;
-  return size.overLimit ? `${base} · over the 1 km² limit` : base;
+  return size.overLimit ? `${base} · over the 10 km² limit` : base;
 }
 
 /** The CSS cursor that tells the user what dragging `part` does. */

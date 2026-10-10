@@ -14,7 +14,8 @@ class LocalProjection:
     """Places lon/lat in meters around `origin` for a Cartesian renderer:
     x = (lon - origin.lon) * meters_per_degree_longitude,
     y = (lat - origin.lat) * meters_per_degree_latitude.
-    Accurate at the ≤ 1 km scale of an import area."""
+    Accurate to well under a metre across an import area of up to 10 km² (about 0.2 m centre to
+    corner of a 10 km² square at 60°N)."""
 
     origin: Coordinate
     meters_per_degree_latitude: float

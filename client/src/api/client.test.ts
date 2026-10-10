@@ -139,3 +139,19 @@ describe("routingStrategies", () => {
     expect(calls).toHaveLength(2);
   });
 });
+
+describe("analyseElevation", () => {
+  it("posts to the area's elevation endpoint and returns the events url", async () => {
+    const { client, calls } = recording(json(202, { import_area_id: "a 1", events_url: "/import-areas/a%201/events" }));
+
+    await expect(client.analyseElevation("a 1")).resolves.toEqual({ import_area_id: "a 1", events_url: "/import-areas/a%201/events" });
+    expect(calls[0].url).toBe("/api/import-areas/a%201/elevation");
+    expect(calls[0].init?.method).toBe("POST");
+  });
+
+  it("surfaces a refusal by its code", async () => {
+    const { client } = recording(json(409, { error: { code: "import_in_progress", message: "running", details: null } }));
+
+    await expect(client.analyseElevation("a1")).rejects.toMatchObject({ status: 409, code: "import_in_progress" });
+  });
+});

@@ -1,7 +1,7 @@
 """Pydantic request/response models (design.md Decision 6).
 
 Pydantic validates shape and types only; range/area rules stay in the domain
-`BoundingBox`/`Coordinate`, so the 1 km² rule and coordinate ranges have
+`BoundingBox`/`Coordinate`, so the 10 km² rule and coordinate ranges have
 exactly one implementation each, surfacing as `invalid_bounding_box` /
 `invalid_coordinate` rather than the generic `invalid_request`.
 
@@ -100,6 +100,8 @@ class ImportAreaOut(BaseModel):
     # Only on an import's own response: restriction relations skipped as malformed or
     # unresolvable inside the import.
     skipped_restriction_count: int | None = None
+    # Likewise: building and area ways skipped for not being a closed ring.
+    skipped_feature_count: int | None = None
     imported_at: datetime | None
     # Where the area is, from a reverse geocoder; null when unknown or the lookup failed.
     place_name: str | None = None
@@ -138,6 +140,26 @@ class ProjectionOut(BaseModel):
 OSM_ATTRIBUTION = "© OpenStreetMap contributors"
 
 
+class ElevationGridOut(BaseModel):
+    """The area's ground: `heights` is rows x cols metres above sea level, row-major from the
+    south edge, west to east, starting at the south-west `origin`."""
+
+    origin: CoordinateIn
+    lat_step: float
+    lon_step: float
+    rows: int
+    cols: int
+    heights: list[float]
+
+
+class ElevationOut(BaseModel):
+    source: str
+    attribution: str
+    version: int
+    smoothing_meters: float
+    grid: ElevationGridOut
+
+
 class MapDataOut(BaseModel):
     attribution: str = OSM_ATTRIBUTION
     scope: ScopeOut
@@ -149,6 +171,8 @@ class MapDataOut(BaseModel):
     buildings: FeatureCollection
     pois: FeatureCollection
     area_features: FeatureCollection
+    # Null until the area has been analysed (or when the terrain source was unavailable).
+    elevation: ElevationOut | None = None
 
 
 class TracedBoundaryCreate(BaseModel):

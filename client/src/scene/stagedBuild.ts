@@ -23,7 +23,7 @@ export type BuildEnd =
   | { kind: "failed"; code: string; message: string; details: Record<string, unknown> | null };
 
 /** Where each stage sits in the order. A stage is accepted only if it is later than everything seen so far. */
-const RANK = { fetched: 0, ground: 1, roads: 2, blocks: 3, buildings: 4, generated: 5, completed: 6 } as const;
+const RANK = { fetched: 0, ground: 1, roads: 2, blocks: 3, buildings: 4, elevation: 5, generated: 6, completed: 7 } as const;
 
 /**
  * The staged build as a state machine: feed it the server's events as they arrive and it returns the
@@ -76,6 +76,8 @@ export class StagedBuild {
       case "buildings":
         this.lastRing = event.data.ring;
         return [{ layer: "buildings", projection: event.data.projection, ring: event.data.ring, buildings: event.data.buildings }];
+      case "elevation": // nothing to draw: the finished world is loaded from map-data, on terrain
+        return [];
       case "generated": // a reserved slot: nothing to draw yet
         return this.release();
       case "completed":

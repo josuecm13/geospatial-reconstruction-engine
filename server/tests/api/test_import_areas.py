@@ -246,6 +246,27 @@ def test_import_response_reports_skipped_restrictions(client):
     assert client.get(f"/import-areas/{body['id']}").json()["skipped_restriction_count"] is None
 
 
+def test_import_response_reports_skipped_features_and_imports_open_way_pois(client):
+    payload = {
+        "elements": [
+            {"type": "node", "id": 1, "lat": 9.9340, "lon": -84.0800},
+            {"type": "node", "id": 2, "lat": 9.9341, "lon": -84.0800},
+            {"type": "node", "id": 3, "lat": 9.9342, "lon": -84.0800},
+            {"type": "node", "id": 4, "lat": 9.9342, "lon": -84.0799},
+            {"type": "way", "id": 20, "nodes": [1, 2, 3], "tags": {"amenity": "bench"}},
+            {"type": "way", "id": 21, "nodes": [1, 2, 3], "tags": {"building": "yes"}},
+            {"type": "way", "id": 22, "nodes": [1, 2, 3], "tags": {"leisure": "park"}},
+            {"type": "way", "id": 23, "nodes": [1, 3, 4, 1], "tags": {"building": "yes"}},
+        ]
+    }
+
+    body = client.post("/import-areas", json={"bbox": NEIGHBORHOOD_BBOX, "payload": payload}).json()
+
+    assert (body["status"], body["skipped_feature_count"]) == ("completed", 2)
+    assert (body["poi_count"], body["building_count"], body["area_feature_count"]) == (1, 1, 0)
+    assert client.get(f"/import-areas/{body['id']}").json()["skipped_feature_count"] is None
+
+
 def test_list_import_areas_newest_first_with_counts(client):
     neighborhood = _import(client).json()
     loop = _import(client, LOOP_BBOX, LOOP_FIXTURE).json()

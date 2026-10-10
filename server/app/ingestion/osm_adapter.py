@@ -62,8 +62,8 @@ class ImportPoi:
     point: Coordinate
     category: PoiCategory
     name: str | None
-    # The footprint a POI mapped as an area was reduced from, for the bounding-box check; empty
-    # for a POI mapped as a node.
+    # The way a POI mapped as a way was reduced from (a closed ring, or an open line), for the
+    # bounding-box check: the way's nodes, closed or not. Empty for a POI mapped as a node.
     footprint_node_ids: tuple[str, ...] = ()
 
 
@@ -87,6 +87,9 @@ class ImportRecords:
     # Source ids of restriction relations that are malformed or reference what the payload
     # doesn't hold; they're skipped rather than failing the import.
     skipped_restrictions: tuple[str, ...] = ()
+    # Source ids of building and area-feature ways that aren't a valid closed ring; they're
+    # skipped rather than failing the import.
+    skipped_features: tuple[str, ...] = ()
 
 
 # Kept as aliases for callers which adopted the initial adapter module before
@@ -279,6 +282,7 @@ class OSMFixtureAdapter:
         buildings: list[ImportBuilding] = []
         areas: list[ImportPolygonFeature] = []
         pois: list[ImportPoi] = []
+        skipped_features: list[str] = []
 
         for element in ways:
             tags = element.get("tags", {})
@@ -309,10 +313,15 @@ class OSMFixtureAdapter:
                 )
                 continue
             if "building" in tags:
+                try:
+                    ring = _polygon_nodes(element)
+                except IngestionError:
+                    skipped_features.append(source_id)
+                    continue
                 buildings.append(
                     ImportBuilding(
                         source_id,
-                        _polygon_nodes(element),
+                        ring,
                         _building_category(tags["building"]),
                         _height_meters(tags.get("height")),
                         _levels(tags.get("building:levels")),
@@ -321,14 +330,31 @@ class OSMFixtureAdapter:
                 continue
             poi_category = _poi_category(tags)
             if poi_category is not None:
-                polygon_nodes = _polygon_nodes(element)
+                try:
+                    polygon_nodes = _polygon_nodes(element)
+                except IngestionError:
+                    # Not a closed ring: a POI drawn as a line (a bench) sits at its middle vertex.
+                    line_nodes = tuple(str(node_id) for node_id in element.get("nodes", []))
+                    if len(set(line_nodes)) < 2:
+                        skipped_features.append(source_id)
+                        continue
+                    middle = line_nodes[len(line_nodes) // 2]
+                    if middle not in nodes:
+                        raise IngestionError(f"feature {source_id} references missing node {middle}")
+                    pois.append(ImportPoi(source_id, nodes[middle], poi_category, tags.get("name"), line_nodes))
+                    continue
                 pois.append(
                     ImportPoi(source_id, _polygon_center(polygon_nodes, nodes), poi_category, tags.get("name"), polygon_nodes)
                 )
                 continue
             kind = _area_kind(tags)
             if kind is not None:
-                areas.append(ImportPolygonFeature(source_id, _polygon_nodes(element), kind))
+                try:
+                    ring = _polygon_nodes(element)
+                except IngestionError:
+                    skipped_features.append(source_id)
+                    continue
+                areas.append(ImportPolygonFeature(source_id, ring, kind))
 
         for element in elements:
             if not isinstance(element, dict) or element.get("type") != "node":
@@ -360,7 +386,7 @@ class OSMFixtureAdapter:
                 parsed.append(restriction)
         self._validate_references(nodes, roads, buildings, areas)
         restrictions = self._resolvable_restrictions(parsed, nodes, roads, skipped)
-        return ImportRecords(nodes, tuple(roads), tuple(buildings), tuple(pois), tuple(areas), restrictions, tuple(skipped))
+        return ImportRecords(nodes, tuple(roads), tuple(buildings), tuple(pois), tuple(areas), restrictions, tuple(skipped), tuple(skipped_features))
 
     @staticmethod
     def _multipolygon_features(relation, ways_by_id, nodes, buildings, areas) -> None:

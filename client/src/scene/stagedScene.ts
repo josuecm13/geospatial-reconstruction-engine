@@ -57,6 +57,7 @@ function partialData(projection: Projection, layers: Partial<MapData>): MapData 
     buildings: emptyCollection(),
     pois: emptyCollection(),
     area_features: emptyCollection(),
+    elevation: null,
     ...layers,
   };
 }
@@ -186,7 +187,7 @@ export function createStagedScene(scene: THREE.Scene, container: HTMLElement): S
         addBuilt(data) {
           if (over || !projection) return;
           const offset = toLocal(projection, [data.projection.origin.longitude, data.projection.origin.latitude]);
-          const inner = buildWorld(data); // its own ground, roads and the unreleased `generated` group stay behind
+          const inner = buildWorld({ ...data, elevation: null }); // flat, like the staged world it joins; its own ground, roads and the unreleased `generated` group stay behind
           inner.getObjectByName("roads")!.traverse((object) => (object as THREE.Mesh).geometry?.dispose());
           for (const name of INNER_AREA_LAYERS) {
             for (const mesh of take(inner, name)) {

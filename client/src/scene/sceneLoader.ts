@@ -61,6 +61,12 @@ export class SceneLoader {
 
   private suspended = false;
 
+  /** Loads the selection's map-data again and rebuilds the world from it, even though it is already showing (its terrain was just added). */
+  reload(): void {
+    this.loadedKey = null;
+    if (this.visible) void this.load();
+  }
+
   shown(): void {
     this.visible = true;
     void this.load();

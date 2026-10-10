@@ -1,11 +1,12 @@
 import * as THREE from "three";
 import type { Feature, Geometry, MapData, Position, Projection } from "../api/types";
 import { buildingHeight } from "./buildingHeight";
-import { extrudeFootprints, flatGeometry, footprintShape, polygonShape } from "./extrude";
+import { drapedGeometry, extrudeFootprints, flatGeometry, footprintShape, polygonShape } from "./extrude";
 import { MATERIALS, roadMaterial } from "./palette";
 import { toLocal, type Local } from "./projection";
 import { dedupeTwins, roadPolygon } from "./roadGeometry";
 import { shadeGeometry } from "./shading";
+import { clipPolygonToRect, clipRingToRect, createTerrain, drape, flatTerrain, groundMesh, roadSurface, splitByLines, ringInside, type RoadMode, type Terrain } from "./terrain";
 
 /** The layer groups of a world, in order. `generated` is reserved for Milestone 11. */
 export const WORLD_GROUPS = ["ground", "area_features", "roads", "blocks", "buildings", "generated"] as const;
@@ -26,6 +27,21 @@ export function groundPlane(minX: number, maxX: number, minZ: number, maxZ: numb
   ground.renderOrder = LAYER_ORDER.ground;
   return ground;
 }
+
+/** The ground over the given local extent, following the terrain: a mesh with a vertex on every grid line. */
+export function terrainGround(terrain: Terrain, minX: number, maxX: number, minZ: number, maxZ: number): THREE.Mesh {
+  const { positions, indices } = groundMesh(terrain, minX, maxX, minZ, maxZ);
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setIndex(indices);
+  const ground = new THREE.Mesh(shadeGeometry(geometry), MATERIALS.ground);
+  ground.name = "ground:plane";
+  ground.renderOrder = LAYER_ORDER.ground;
+  return ground;
+}
+
+/** Roads follow the smoothed heights unless the viewer asks for the exact ones. */
+export const DEFAULT_ROAD_MODE: RoadMode = "smoothed";
 
 const GROUND_MARGIN = 20;
 const DEFAULT_HALF_EXTENT = 100;
@@ -58,10 +74,24 @@ const group = (name: string) => Object.assign(new THREE.Group(), { name });
 
 /** Builds the low-poly world for a map-data response. See the World contract
  * (openspec/specs/showcase-client, and design.md of the archived change): meters from the projection origin, x east, z south, y up. */
-export function buildWorld(data: MapData): THREE.Group {
+export function buildWorld(data: MapData, roadMode: RoadMode = DEFAULT_ROAD_MODE): THREE.Group {
   const projection = data.projection;
+  const terrain = data.elevation ? createTerrain(data.elevation, projection) : flatTerrain();
+  const grid = terrain.extent();
+  const gridLines = terrain.gridLines();
+  /** On terrain, a polygon is cut to the grid first: past its edge heights only clamp, so nothing is gained by cutting it further out. */
+  const clipped = (polygons: Rings[]): Rings[] => (grid ? polygons.map((rings) => clipPolygonToRect(rings, grid)).filter((rings): rings is Rings => rings !== null) : polygons);
+  /** Flat polygons, over the terrain when the area has one. The layer's offset is the mesh's position.y. */
+  const surface = (polygons: Rings[]): THREE.BufferGeometry => (gridLines ? drapedGeometry(polygons, terrain.heightAtLocal, gridLines) : flatGeometry(polygons.map(polygonShape)));
   const world = group("world");
-  world.userData = { scope: data.scope, projection, attribution: data.attribution };
+  world.userData = {
+    scope: data.scope,
+    projection,
+    attribution: data.attribution,
+    terrain,
+    roadMode,
+    elevation: data.elevation && { source: data.elevation.source, version: data.elevation.version, attribution: data.elevation.attribution },
+  };
   const groups = Object.fromEntries(WORLD_GROUPS.map((name) => [name, group(name)])) as Record<(typeof WORLD_GROUPS)[number], THREE.Group>;
   for (const name of WORLD_GROUPS) world.add(groups[name]);
 
@@ -78,8 +108,10 @@ export function buildWorld(data: MapData): THREE.Group {
     const polygons = polygonsOf(feature.geometry, projection);
     if (!polygons.length) continue;
     polygons.forEach((rings) => grow(rings[0]));
+    const drawn = clipped(polygons);
+    if (!drawn.length) continue;
     const material = feature.properties.kind === "water" ? MATERIALS.water : MATERIALS.green;
-    const mesh = entity("area_feature", feature, flatGeometry(polygons.map(polygonShape)), material);
+    const mesh = entity("area_feature", feature, surface(drawn), material);
     mesh.position.y = LAYER_Y.area_features;
     mesh.renderOrder = feature.properties.kind === "water" ? LAYER_ORDER.water : LAYER_ORDER.green;
     groups.area_features.add(mesh);
@@ -93,7 +125,22 @@ export function buildWorld(data: MapData): THREE.Group {
     const outlines = lines.map((line) => roadPolygon(line, feature.properties.width_meters)).filter((outline) => outline.length);
     if (!outlines.length) continue;
     roadOutlines.push(...outlines);
-    const mesh = entity("road", feature, flatGeometry(outlines.map(footprintShape)), roadMaterial(feature.properties.lane_type));
+    // A road that runs past the grid is cut to it, like the area features, so its triangles stop there.
+    const drawnOutlines = grid ? outlines.map((outline) => (ringInside(outline, grid) ? outline : clipRingToRect(outline, grid))).filter((outline) => outline.length) : outlines;
+    if (!drawnOutlines.length) continue;
+    // Both stored height arrays stay on the mesh, so the road mode can switch without a rebuild.
+    const heights = {
+      exact: splitByLines(terrain.roadHeights(feature, "exact"), lines),
+      smoothed: splitByLines(terrain.roadHeights(feature, "smoothed"), lines),
+    };
+    const shapes = gridLines ? [] : drawnOutlines.map(footprintShape);
+    const mesh = entity(
+      "road",
+      feature,
+      gridLines ? drapedGeometry(drawnOutlines.map((outline) => [outline]), roadSurface(lines, heights[roadMode], terrain.heightAtLocal).at, gridLines) : flatGeometry(shapes),
+      roadMaterial(feature.properties.lane_type),
+    );
+    if (terrain.hasGround) mesh.userData.drape = { lines, heights };
     mesh.position.y = LAYER_Y.roads;
     const laneType = feature.properties.lane_type;
     mesh.renderOrder = laneType === "wide" ? LAYER_ORDER.roadWide : laneType === "narrow" ? LAYER_ORDER.roadNarrow : LAYER_ORDER.roadNormal;
@@ -103,7 +150,9 @@ export function buildWorld(data: MapData): THREE.Group {
   for (const feature of data.blocks.features) {
     const polygons = polygonsOf(feature.properties.buildable_area, projection);
     if (!polygons.length) continue;
-    const mesh = entity("block", feature, flatGeometry(polygons.map(polygonShape)), MATERIALS.buildable);
+    const drawn = clipped(polygons);
+    if (!drawn.length) continue;
+    const mesh = entity("block", feature, surface(drawn), MATERIALS.buildable);
     mesh.position.y = LAYER_Y.blocks;
     mesh.renderOrder = LAYER_ORDER.blocks;
     groups.blocks.add(mesh);
@@ -125,6 +174,9 @@ export function buildWorld(data: MapData): THREE.Group {
     const mesh = entity("building", feature, extrudeFootprints(shapes, height), material);
     mesh.userData.defaulted = defaulted;
     mesh.userData.height = height;
+    // Stands on the lowest ground under the footprint, so nothing floats. Its height and extrusion are unchanged.
+    const base = feature.properties.base_elevation_meters;
+    mesh.position.y = !terrain.hasGround ? 0 : base != null ? base - terrain.baseline : Math.min(...polygons.map((rings) => terrain.lowestUnder(rings[0])));
     // A child, so it follows the build animation's scale.y. Not pickable (routeLayer raycasts recursively) and left out of the glTF export (exportGltf.ts).
     const edges = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry, 1), MATERIALS.edge);
     edges.name = "edges";
@@ -133,9 +185,33 @@ export function buildWorld(data: MapData): THREE.Group {
     groups.buildings.add(mesh);
   }
 
-  const [minX, maxX, minZ, maxZ] = extent.isEmpty()
+  // On terrain the ground is the grid (with the margin), not the union of every feature's envelope.
+  const [minX, maxX, minZ, maxZ] = grid
+    ? [grid.minX - GROUND_MARGIN, grid.maxX + GROUND_MARGIN, grid.minZ - GROUND_MARGIN, grid.maxZ + GROUND_MARGIN]
+    : extent.isEmpty()
     ? [-DEFAULT_HALF_EXTENT, DEFAULT_HALF_EXTENT, -DEFAULT_HALF_EXTENT, DEFAULT_HALF_EXTENT]
     : [extent.min.x - GROUND_MARGIN, extent.max.x + GROUND_MARGIN, extent.min.y - GROUND_MARGIN, extent.max.y + GROUND_MARGIN];
-  groups.ground.add(groundPlane(minX, maxX, minZ, maxZ));
+  groups.ground.add(terrain.hasGround ? terrainGround(terrain, minX, maxX, minZ, maxZ) : groundPlane(minX, maxX, minZ, maxZ));
   return world;
+}
+
+/**
+ * Switches every road of a world between its exact and smoothed heights, in place: the stored arrays
+ * are read again and each road's vertices move; nothing is rebuilt. A world without terrain is unchanged.
+ */
+export function setRoadMode(world: THREE.Object3D, mode: RoadMode): void {
+  const terrain: Terrain | undefined = world.userData.terrain;
+  world.userData.roadMode = mode;
+  if (!terrain?.hasGround) return;
+  world.getObjectByName("roads")?.children.forEach((child) => {
+    const mesh = child as THREE.Mesh;
+    const stored = mesh.userData.drape as { lines: Local[][]; heights: Record<RoadMode, number[][] | null> } | undefined;
+    if (!stored) return;
+    const position = mesh.geometry.getAttribute("position") as THREE.BufferAttribute;
+    drape(position.array, roadSurface(stored.lines, stored.heights[mode], terrain.heightAtLocal).at);
+    position.needsUpdate = true;
+    shadeGeometry(mesh.geometry); // the slope changed, so the shade did
+    mesh.geometry.computeBoundingSphere();
+    mesh.geometry.computeBoundingBox();
+  });
 }

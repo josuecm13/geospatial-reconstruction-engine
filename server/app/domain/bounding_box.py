@@ -2,7 +2,7 @@ import math
 from dataclasses import dataclass
 
 EARTH_RADIUS_METERS = 6_371_000.0
-MAX_AREA_SQUARE_METERS = 1_000_000.0  # 1 km x 1 km
+MAX_AREA_SQUARE_METERS = 10_000_000.0  # 10 km²
 
 
 class InvalidBoundingBox(ValueError):
@@ -57,7 +57,7 @@ class BoundingBox:
         if area > MAX_AREA_SQUARE_METERS:
             raise InvalidBoundingBox(
                 f"bounding box area {area:.1f} m^2 exceeds the maximum of "
-                f"{MAX_AREA_SQUARE_METERS:.1f} m^2 (1 km x 1 km)"
+                f"{MAX_AREA_SQUARE_METERS:.1f} m^2 (10 km²)"
             )
 
     def width_meters(self) -> float:

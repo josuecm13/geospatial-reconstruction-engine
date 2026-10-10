@@ -35,7 +35,7 @@ def ring_batches(
 
     An item belongs to ring `floor(distance / width)`. Within a ring, items are ordered by distance,
     then by `tie_break`, so the result is deterministic. Distance is equirectangular, on the same
-    sphere as the local projection (accurate at the ≤ 1 km of an import area).
+    sphere as the local projection (accurate to well under a metre across an import area).
     """
     meters_per_degree = math.pi * EARTH_RADIUS_METERS / 180
     longitude_scale = meters_per_degree * math.cos(math.radians(center.latitude))

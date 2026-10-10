@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Ensures every geographic area accepted by the system is a well-formed WGS84 bounding box no larger than 1 km × 1 km, so later import and ingestion work always operates on a bounded, meter-measurable area.
+Ensures every geographic area accepted by the system is a well-formed WGS84 bounding box no larger than 10 km², so later import and ingestion work always operates on a bounded, meter-measurable area.
 
 ## Requirements
 
@@ -21,13 +21,13 @@ A candidate bounding box is defined by a minimum (southwest) and maximum (northe
 - **WHEN** a bounding box is submitted where the minimum latitude or longitude is greater than or equal to the corresponding maximum
 - **THEN** the system rejects it with an error indicating the coordinates are inverted or degenerate
 
-### Requirement: Bounding box area SHALL NOT exceed 1 km × 1 km
-Given a structurally valid bounding box, the system SHALL compute its ground area using meter-based (geodesic) measurement and SHALL reject the bounding box if that area exceeds 1 square kilometer (equivalent to a 1 km × 1 km bound).
+### Requirement: Bounding box area SHALL NOT exceed 10 km²
+Given a structurally valid bounding box, the system SHALL compute its ground area using meter-based (geodesic) measurement and SHALL reject the bounding box if that area exceeds 10 square kilometers (a limit on area, not on side length).
 
 #### Scenario: Bounding box within the size limit
-- **WHEN** a structurally valid bounding box has a computed area of 1 square kilometer or less
+- **WHEN** a structurally valid bounding box has a computed area of 10 square kilometers or less
 - **THEN** the system accepts the bounding box
 
 #### Scenario: Bounding box exceeds the size limit
-- **WHEN** a structurally valid bounding box has a computed area greater than 1 square kilometer
+- **WHEN** a structurally valid bounding box has a computed area greater than 10 square kilometers
 - **THEN** the system rejects it with an error stating the computed area and the maximum allowed area

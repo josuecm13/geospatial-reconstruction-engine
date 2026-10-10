@@ -13,6 +13,7 @@ from app.ingestion.osm_adapter import OSMIngestionError, PayloadOutsideBoundingB
 from app.ingestion.overpass import IncompleteSourceResponse
 from app.ingestion.service import OSMIngestionService
 from app.persistence.models import (
+    AreaFeatureModel,
     BuildingModel,
     ImportAreaModel,
     RoadModel,
@@ -512,6 +513,37 @@ def test_car_scoped_restriction_is_honored(db_session, key):
     assert _prohibited_movements(db_session) == 1
 
 
+def _square(lat, lon, size=0.0004):
+    return [
+        {"lat": lat, "lon": lon}, {"lat": lat, "lon": lon + size}, {"lat": lat + size, "lon": lon + size},
+        {"lat": lat + size, "lon": lon}, {"lat": lat, "lon": lon},
+    ]
+
+
+def _water_relation(*rings):
+    members = [{"type": "way", "ref": index + 1, "role": "outer", "geometry": ring} for index, ring in enumerate(rings)]
+    return {"elements": [{"type": "relation", "id": 950, "members": members, "tags": {"type": "multipolygon", "natural": "water"}}]}
+
+
+def test_multipolygon_ring_outside_the_box_is_dropped_when_another_ring_touches_it(db_session):
+    # Ring 0 crosses the box's north edge (9.935); ring 1 lies far to the north.
+    payload = _water_relation(_square(9.9348, -84.0800), _square(9.9500, -84.0800))
+
+    result = OSMIngestionService(db_session).import_fixture(_bbox(), payload)
+
+    assert result.area_feature_count == 1
+    assert db_session.scalars(select(AreaFeatureModel.source_id)).all() == ["relation/950/0"]
+
+
+def test_multipolygon_with_every_ring_outside_the_box_is_still_rejected(db_session):
+    payload = _water_relation(_square(9.9500, -84.0800), _square(9.9600, -84.0800))
+
+    with pytest.raises(PayloadOutsideBoundingBox) as error:
+        OSMIngestionService(db_session).import_fixture(_bbox(), payload)
+
+    assert error.value.source_ids == ["relation/950/0", "relation/950/1"]
+
+
 def test_multipolygon_building_imports_and_keeps_its_id_on_reimport(db_session):
     payload = json.loads(FIXTURE.read_text())
     ring = [{"lat": 9.9340, "lon": -84.0800}, {"lat": 9.9340, "lon": -84.0795}, {"lat": 9.9345, "lon": -84.0795}, {"lat": 9.9340, "lon": -84.0800}]
@@ -561,6 +593,34 @@ def test_poi_area_entirely_outside_the_box_is_still_rejected(db_session):
 
 def test_poi_node_outside_the_box_is_still_rejected(db_session):
     payload = {"elements": [{"type": "node", "id": 1, "lat": 9.9351, "lon": -84.0800, "tags": {"amenity": "cafe"}}]}
+
+    with pytest.raises(PayloadOutsideBoundingBox):
+        OSMIngestionService(db_session).import_fixture(_bbox(), payload)
+
+
+def test_open_way_poi_crossing_the_edge_is_accepted_though_its_middle_vertex_is_outside(db_session):
+    payload = {
+        "elements": [
+            {"type": "node", "id": 1, "lat": 9.9340, "lon": -84.0800},
+            {"type": "node", "id": 2, "lat": 9.9360, "lon": -84.0800},
+            {"type": "node", "id": 3, "lat": 9.9361, "lon": -84.0800},
+            {"type": "way", "id": 10, "nodes": [1, 2, 3], "tags": {"amenity": "bench"}},
+        ]
+    }
+
+    result = OSMIngestionService(db_session).import_fixture(_bbox(), payload)
+
+    assert result.poi_count == 1
+
+
+def test_open_way_poi_entirely_outside_the_box_is_still_rejected(db_session):
+    payload = {
+        "elements": [
+            {"type": "node", "id": 1, "lat": 9.9360, "lon": -84.0800},
+            {"type": "node", "id": 2, "lat": 9.9361, "lon": -84.0800},
+            {"type": "way", "id": 10, "nodes": [1, 2], "tags": {"amenity": "bench"}},
+        ]
+    }
 
     with pytest.raises(PayloadOutsideBoundingBox):
         OSMIngestionService(db_session).import_fixture(_bbox(), payload)

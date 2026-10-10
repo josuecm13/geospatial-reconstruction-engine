@@ -218,7 +218,7 @@ Key decisions:
   as `NULL` and never fails an import. CHECKs keep `height_meters > 0` and `levels >= 0`.
   Estimating a height from levels is inference and belongs to generated content (Milestone 11).
 - **`buildings.block_id` is nullable and denormalized.** Set via `ST_Contains(block.boundary,
-  building.geom)` at derivation time. A building near the 1 km bbox edge may sit in a
+  building.geom)` at derivation time. A building near the bbox edge may sit in a
   partially-captured block whose enclosing loop wasn't fully imported — that is a legitimate
   "unknown," not an error.
 
@@ -253,6 +253,62 @@ Key decisions:
   so "the whole area" can also be expressed as a boundary.
 - **Single ring, no holes**, matching the domain `Polygon` type. There is no in-place edit: a
   boundary is deleted and created again.
+
+## Terrain elevation (Milestone 10)
+
+```mermaid
+erDiagram
+    IMPORT_AREAS ||--o| AREA_ELEVATION_GRIDS : "ground for"
+    BUILDINGS ||--o| BUILDING_ELEVATIONS : "base of"
+    ROAD_SEGMENTS ||--o| ROAD_SEGMENT_ELEVATIONS : "heights of"
+
+    AREA_ELEVATION_GRIDS {
+        uuid import_area_id PK "FK import_areas, ON DELETE CASCADE"
+        float8 origin_latitude "SW corner"
+        float8 origin_longitude "SW corner"
+        float8 lat_step
+        float8 lon_step
+        int rows "includes both edges"
+        int cols "includes both edges"
+        bytea heights "float32 little-endian, row-major south to north, west to east"
+        text source "aws-terrain-tiles"
+        text algorithm "terrarium-z15-bilinear-v1"
+        int version "starts at 1, bumps only when the grid changes"
+        float8 smoothing_meters "30.0"
+        timestamptz analysed_at
+    }
+    BUILDING_ELEVATIONS {
+        uuid building_id PK "FK buildings, ON DELETE CASCADE"
+        float8 base_elevation_meters "not null; lowest ground under the footprint"
+    }
+    ROAD_SEGMENT_ELEVATIONS {
+        uuid road_segment_id PK "FK road_segments, ON DELETE CASCADE"
+        float8_array exact_meters "not null; one value per geometry vertex, in order"
+        float8_array smoothed_meters "not null; one value per geometry vertex, in order"
+    }
+```
+
+Key decisions:
+
+- **Separate from the observed tables.** Elevation is derived from an external model, not observed by
+  OSM, so none of these tables is a column on `buildings`, `road_segments`, or `import_areas`
+  (`docs/architecture.md`, "Terrain elevation"). Re-import's reconcile never touches them directly:
+  they cascade with the rows they describe.
+- **One grid per import area, and its version.** The grid is the single record of an area's ground.
+  Its `version` bumps only when the stored heights, size, or origin change, so re-analysis is
+  idempotent and a later generation run can detect that its input is stale.
+- **Derived heights are stored, not computed on read.** Building bases and road vertex heights are
+  computed once from the grid and kept, so the API, the scene, the glTF export, and generated content
+  all read the same values.
+- **Cascades keep the existing paths working.** Deleting an import area (`ImportAreaRepository.delete`)
+  and re-import's sweep need no change: the foreign keys remove the grid and the derived heights with
+  their parents.
+- **Road heights are arrays, one per vertex.** `exact_meters` and `smoothed_meters` are parallel to the
+  segment's geometry, so a clipped segment can be re-sampled at its clipped vertices without a second
+  lookup.
+
+- **Checks on the grid.** `area_elevation_grids` has `CHECK (rows >= 2 AND cols >= 2)` and
+  `CHECK (octet_length(heights) = rows * cols * 4)`, so a stored grid always matches its declared size.
 
 ## Constraints and indexes
 

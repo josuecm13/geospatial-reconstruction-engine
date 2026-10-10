@@ -3,11 +3,14 @@ import type { BoundingBox } from "../api/types";
 import { areaSquareMeters, bboxFromCorners, bboxProblem, bboxRing, formatSquareKilometers, roundBbox, sameBbox } from "./bbox";
 
 // [s, w, n, e, area m² as the server computes it, does the server accept it], computed with
-// server/app/domain/bounding_box.py, so the client's 1 km² rule can't drift from the server's.
+// server/app/domain/bounding_box.py, so the client's 10 km² rule can't drift from the server's.
 const SERVER_VECTORS: [number, number, number, number, number, boolean][] = [
   [52.5285, 13.3995, 52.531, 13.4035, 75220.358196, true],
   [9.933, -84.081, 9.935, -84.079, 48715.889577, true],
-  [52.52, 13.4, 52.529, 13.4148, 1002129.069672, false],
+  [52.52, 13.4, 52.529, 13.4148, 1002129.069672, true],
+  [52.52, 13.4, 52.54, 13.44, 6018793.144806, true],
+  [52.52, 13.4, 52.549, 13.4448, 9774520.035364, true],
+  [52.5, 13.4, 52.54, 13.44, 12043065.551978, false],
   [52.52, 13.4, 52.529, 13.4146, 988586.784993, true],
   [-33.87, 151.2, -33.861, 151.2108, 997868.809282, true],
   [64.14, -21.95, 64.149, -21.93, 970737.699761, true],
@@ -15,7 +18,7 @@ const SERVER_VECTORS: [number, number, number, number, number, boolean][] = [
 
 const box = (s: number, w: number, n: number, e: number): BoundingBox => ({ min_latitude: s, min_longitude: w, max_latitude: n, max_longitude: e });
 
-describe("the 1 km² rule matches the server", () => {
+describe("the 10 km² rule matches the server", () => {
   it.each(SERVER_VECTORS)("%f,%f,%f,%f", (s, w, n, e, area, accepted) => {
     expect(areaSquareMeters(box(s, w, n, e))).toBeCloseTo(area, 3);
     expect(bboxProblem(box(s, w, n, e)) === null).toBe(accepted);
@@ -29,8 +32,8 @@ describe("bboxProblem", () => {
   it("flags coordinates out of range", () => {
     expect(bboxProblem(box(89.9, 13.4, 90.1, 13.41))).toBe("out_of_range");
   });
-  it("flags a box over 1 km²", () => {
-    expect(bboxProblem(box(52.52, 13.4, 52.529, 13.4148))).toBe("too_large");
+  it("flags a box over 10 km²", () => {
+    expect(bboxProblem(box(52.5, 13.4, 52.54, 13.44))).toBe("too_large");
   });
 });
 
@@ -51,5 +54,6 @@ describe("helpers", () => {
   it("formats km²", () => {
     expect(formatSquareKilometers(75220)).toBe("0.075 km²");
     expect(formatSquareKilometers(988586)).toBe("0.99 km²");
+    expect(formatSquareKilometers(9774520)).toBe("9.77 km²");
   });
 });

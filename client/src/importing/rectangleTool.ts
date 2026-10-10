@@ -23,7 +23,7 @@ interface ActiveDrag {
  * Draw a rectangle by dragging on the map, then adjust it with pointer events (so touch works):
  * drag inside to move it, an edge to resize along that axis, a corner to resize both. The cursor
  * says what each part does, a label shows the live size and area while dragging, and the
- * rectangle turns to the over-limit style past 1 km². Escape during a drag restores the rectangle
+ * rectangle turns to the over-limit style past 10 km². Escape during a drag restores the rectangle
  * as it was. Reports every change, including while dragging, so the area readout is live.
  */
 export class RectangleTool {

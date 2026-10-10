@@ -36,7 +36,7 @@ const link = (href: string, text: string, className?: string): HTMLAnchorElement
 };
 
 const FACTS: readonly [string, string][] = [
-  ["In", "A rectangle of up to 1 km² on the OpenStreetMap map, fetched live from Overpass."],
+  ["In", "A rectangle of up to 10 km² on the OpenStreetMap map, fetched live from Overpass."],
   [
     "Out",
     "A city model the engine owns: streets with lanes and widths, buildable blocks, buildings at the height OpenStreetMap gives them, and a road graph that can be routed over.",
@@ -127,7 +127,7 @@ export const mount: Mount<{ page: "landing" }> = (el, ctx) => {
   turn.append(element("div", "landing-cta-grid"));
   const turnInner = element("div", "landing-inner landing-cta-inner");
   const turnCopy = element("div", "landing-cta-copy");
-  const turnHead = sectionHead("Your turn", "Your street, rebuilt in under a minute.", "Draw a rectangle of up to 1 km² and watch it build, live from OpenStreetMap.");
+  const turnHead = sectionHead("Your turn", "Your street, rebuilt in under a minute.", "Draw a rectangle of up to 10 km² and watch it build, live from OpenStreetMap.");
   turnCopy.append(turnHead, importButton("Rebuild your own place", true));
   turnInner.append(turnCopy, selectionDemo());
   turn.append(turnInner);

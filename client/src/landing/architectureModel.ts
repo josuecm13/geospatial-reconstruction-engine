@@ -25,7 +25,7 @@ export const STAGES: readonly Stage[] = [
     id: "overpass",
     title: "Overpass",
     caption: "OpenStreetMap",
-    produces: ["Roads, building footprints, points of interest and parks for a rectangle of up to 1 km²", "Fetched live, or replayed from a fixture"],
+    produces: ["Roads, building footprints, points of interest and parks for a rectangle of up to 10 km²", "Fetched live, or replayed from a fixture"],
     docHref: `${DOCS}/architecture.md#osm-translation`,
     docLabel: "OSM translation",
   },

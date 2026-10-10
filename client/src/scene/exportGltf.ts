@@ -5,9 +5,16 @@ export const GENERATOR = "geospatial-reconstruction-engine";
 export const ATTRIBUTION = "© OpenStreetMap contributors";
 export const AXES = "x east, y up, z south; meters";
 
-/** The root node's `extras`: where the world is, how to place it on the globe, and its credit. */
+/** The credit the file carries: OSM's, and the terrain source's when the world has terrain. */
+function credit(world: THREE.Object3D): string {
+  const { attribution, elevation } = world.userData;
+  return [attribution ?? ATTRIBUTION, elevation?.attribution].filter(Boolean).join(" · ");
+}
+
+/** The root node's `extras`: where the world is, how to place it on the globe, and its credit. With terrain, the
+ * grid's `version` and the road mode on show (the roads in the file are draped on that mode's heights) go along. */
 function metadata(world: THREE.Object3D) {
-  const { scope, projection, attribution } = world.userData;
+  const { scope, projection, attribution, elevation, roadMode } = world.userData;
   return {
     generator: GENERATOR,
     scope,
@@ -18,6 +25,7 @@ function metadata(world: THREE.Object3D) {
     },
     attribution: attribution ?? ATTRIBUTION,
     axes: AXES,
+    ...(elevation ? { elevation: { source: elevation.source, version: elevation.version, attribution: elevation.attribution, road_mode: roadMode } } : {}),
   };
 }
 
@@ -32,11 +40,29 @@ export async function exportWorld(world: THREE.Group): Promise<ArrayBuffer> {
   const original = new Map<THREE.Object3D, Record<string, unknown>>();
   const meta = metadata(world);
   const hidden: THREE.Object3D[] = [];
+  // No material uses a texture, so the UVs are dead weight in the file: taken off for the export.
+  const uvs: [THREE.BufferGeometry, THREE.BufferAttribute | THREE.InterleavedBufferAttribute][] = [];
+  // Every palette material is a MeshBasicMaterial, written as KHR_materials_unlit: lighting is ignored, so normals are
+  // dead weight too (a viewer computes flat ones when they are absent, as the glTF spec says). Taken off for the export.
+  const normals: [THREE.BufferGeometry, THREE.BufferAttribute | THREE.InterleavedBufferAttribute][] = [];
   world.traverse((object) => {
     // Building edges are a viewer effect: left out, since `onlyVisible` skips what is hidden.
     if ((object as THREE.LineSegments).isLineSegments && object.visible) {
       object.visible = false;
       hidden.push(object);
+    }
+    const geometry = (object as THREE.Mesh).isMesh ? (object as THREE.Mesh).geometry : undefined;
+    const uv = geometry?.getAttribute("uv");
+    if (geometry && uv && !uvs.some(([g]) => g === geometry)) {
+      uvs.push([geometry, uv]);
+      geometry.deleteAttribute("uv");
+    }
+    const normal = geometry?.getAttribute("normal");
+    const material = (object as THREE.Mesh).isMesh ? (object as THREE.Mesh).material : undefined;
+    const unlit = Array.isArray(material) ? material.every((m) => (m as THREE.MeshBasicMaterial).isMeshBasicMaterial) : (material as THREE.MeshBasicMaterial | undefined)?.isMeshBasicMaterial;
+    if (geometry && normal && unlit && !normals.some(([g]) => g === geometry)) {
+      normals.push([geometry, normal]);
+      geometry.deleteAttribute("normal");
     }
     original.set(object, object.userData);
     if (object === world) object.userData = meta;
@@ -47,11 +73,13 @@ export async function exportWorld(world: THREE.Group): Promise<ArrayBuffer> {
   });
   try {
     // `copyright` sets asset.copyright (GLTFExporter's own option in this three.js version).
-    const result = await new GLTFExporter().parseAsync(world, { binary: true, onlyVisible: true, copyright: meta.attribution });
+    const result = await new GLTFExporter().parseAsync(world, { binary: true, onlyVisible: true, copyright: credit(world) });
     return result as ArrayBuffer;
   } finally {
     original.forEach((userData, object) => (object.userData = userData));
     hidden.forEach((object) => (object.visible = true));
+    uvs.forEach(([geometry, uv]) => geometry.setAttribute("uv", uv));
+    normals.forEach(([geometry, normal]) => geometry.setAttribute("normal", normal));
   }
 }
 

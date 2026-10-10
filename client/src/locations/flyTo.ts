@@ -66,7 +66,7 @@ export function fitZoom(bbox: BoundingBox, viewport: Viewport, padding = FLY_PAD
 /**
  * The `flyTo` options that take the map from `from` to a view framing `toBbox`. The centre is the
  * rectangle's own (in Mercator, as the map fits), the zoom fits it with padding, and the duration
- * grows with the distance. Rectangles are at most 1 km², so none crosses the antimeridian.
+ * grows with the distance. Rectangles are at most 10 km², so none crosses the antimeridian.
  */
 export function flyParams(from: Camera, toBbox: BoundingBox, viewport: Viewport, padding = FLY_PADDING): FlyParams {
   const lon = (toBbox.min_longitude + toBbox.max_longitude) / 2;

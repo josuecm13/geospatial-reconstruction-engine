@@ -14,6 +14,7 @@ function event(stage: ImportStage, ring = 0): StageEvent {
     roads: { projection, road_segments: empty },
     blocks: { projection, blocks: empty },
     buildings: { projection, ring, buildings: empty },
+    elevation: { projection, elevation: null, error: null },
     generated: {},
     completed: area,
     failed: { code: "ingestion_failed", message: "bad way", details: null },
@@ -82,6 +83,13 @@ describe("StagedBuild", () => {
     const present = new StagedBuild();
     expect(play(present, [event("roads"), event("blocks"), event("generated"), event("completed")])).toEqual(["roads", "blocks"]);
     expect(present.end).toEqual({ kind: "done", area });
+  });
+
+  it("takes the elevation stage between buildings and completed without drawing it, and still releases the blocks", () => {
+    const machine = new StagedBuild();
+    const steps = play(machine, [event("roads"), event("blocks"), event("buildings", 0), event("elevation"), event("elevation"), event("completed")]);
+    expect(steps).toEqual(["roads", "buildings:0", "blocks"]);
+    expect(machine.end).toEqual({ kind: "done", area });
   });
 
   it("ends failed mid-way with the server's code and plays nothing after", () => {

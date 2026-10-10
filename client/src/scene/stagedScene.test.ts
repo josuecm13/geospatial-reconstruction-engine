@@ -32,10 +32,11 @@ const inner: MapData = {
     },
   ]),
   buildings: fc([
-    { type: "Feature", id: "bu1", geometry: { type: "Polygon", coordinates: square(-84, 10.0002) }, properties: { category: "house", block_id: null, height_meters: null, levels: null, import_area_id: "inner-1" } },
+    { type: "Feature", id: "bu1", geometry: { type: "Polygon", coordinates: square(-84, 10.0002) }, properties: { category: "house", block_id: null, height_meters: null, levels: null, import_area_id: "inner-1", base_elevation_meters: null } },
   ]),
   pois: fc([]),
   area_features: fc([]),
+  elevation: null,
 };
 
 describe("an inner area in a staged build", () => {

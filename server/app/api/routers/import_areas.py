@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import uuid
 from collections.abc import AsyncIterator
 
@@ -13,11 +14,12 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.api.background_import import PROVIDER, background_import_work
+from app.api.background_import import PROVIDER, analyse_elevation, background_import_work, elevation_work
 from app.api.dependencies import (
     SessionScope,
     completed_import_area,
     composed_import_area_ids,
+    get_elevation_source,
     get_geocoder,
     get_import_jobs,
     get_job_session_scope,
@@ -32,6 +34,7 @@ from app.api.mappers import (
     area_feature_feature,
     block_feature,
     building_feature,
+    elevation_out,
     feature_collection,
     import_area_out,
     node_feature,
@@ -53,10 +56,12 @@ from app.api.schemas import (
 from app.domain.bounding_box import BoundingBox, Coordinate
 from app.domain.covered_areas import compose_by_source_id
 from app.domain.cross_section import cross_sections_by_segment
+from app.domain.elevation import StoredGrid, smoothed
 from app.domain.enums import ImportStatus
 from app.domain.import_area import ImportArea
 from app.domain.local_projection import local_projection_for
 from app.domain.traced_boundary import TracedBoundary
+from app.ingestion.elevation_source import ElevationUnavailable, TerrainTilesSource
 from app.ingestion.jobs import ImportAlreadyRunning, ImportJob, ImportJobRegistry
 from app.ingestion.overpass import IncompleteSourceResponse, OverpassClient
 from app.ingestion.service import OSMIngestionService
@@ -64,11 +69,13 @@ from app.persistence.map_scope import ClippedGeometries, clip_to_scope, ids_inte
 from app.persistence.repositories.area_feature import AreaFeatureRepository
 from app.persistence.repositories.block import BlockRepository
 from app.persistence.repositories.building import BuildingRepository
+from app.persistence.repositories.elevation import ElevationRepository
 from app.persistence.repositories.import_area import ImportAreaRepository
 from app.persistence.repositories.poi import PointOfInterestRepository
 from app.persistence.repositories.road_graph import NavigableNodeRepository, RoadSegmentRepository
 
 router = APIRouter(tags=["import-areas"])
+logger = logging.getLogger(__name__)
 
 
 KEEP_ALIVE_SECONDS = 15.0
@@ -96,6 +103,7 @@ def create_import_area(
     jobs: ImportJobRegistry = Depends(get_import_jobs),
     session_scope: SessionScope = Depends(get_job_session_scope),
     geocoder: Geocoder | None = Depends(get_geocoder),
+    elevation_source: TerrainTilesSource | None = Depends(get_elevation_source),
 ) -> ImportAreaOut | JSONResponse:
     bbox = BoundingBox(
         min_corner=Coordinate(body.bbox.min_latitude, body.bbox.min_longitude),
@@ -106,7 +114,7 @@ def create_import_area(
     if existing is not None and jobs.is_running(existing.id):
         raise _import_in_progress(existing.id)
     if body.background:
-        return _start_background_import(body, bbox, session, overpass, jobs, session_scope, geocoder)
+        return _start_background_import(body, bbox, session, overpass, jobs, session_scope, geocoder, elevation_source)
     payload = body.payload
     if payload is None:
         try:
@@ -127,8 +135,16 @@ def create_import_area(
     named = name_area(areas, result.import_area, geocoder)
     # The import committed before the lookup; the name needs its own commit or the session's close drops it.
     session.commit()
+    try:
+        analyse_elevation(session, named, elevation_source)
+    except ElevationUnavailable as exc:
+        logger.warning("elevation for area %s unavailable, the import stays flat: %s", named.id, exc)
+    except Exception:
+        # Elevation never fails an import; analyse_elevation already rolled back its own work.
+        logger.exception("elevation for area %s failed unexpectedly, the import stays flat", named.id)
     return import_area_out(
-        named, result.block_count, result.linked_building_count, result.skipped_restriction_count
+        named, result.block_count, result.linked_building_count, result.skipped_restriction_count,
+        result.skipped_feature_count,
     )
 
 
@@ -140,6 +156,7 @@ def _start_background_import(
     jobs: ImportJobRegistry,
     session_scope: SessionScope,
     geocoder: Geocoder | None,
+    elevation_source: TerrainTilesSource | None,
 ) -> JSONResponse:
     try:
         area = ImportAreaRepository(session).get_or_create(PROVIDER, bbox)
@@ -149,7 +166,31 @@ def _start_background_import(
         session.rollback()
         raise ApiError(409, "import_conflict", "a concurrent request already created this import area") from exc
     try:
-        jobs.start(area.id, background_import_work(bbox, body.payload, overpass, session_scope, geocoder))
+        jobs.start(area.id, background_import_work(bbox, body.payload, overpass, session_scope, geocoder, elevation_source))
+    except ImportAlreadyRunning as exc:
+        raise _import_in_progress(area.id) from exc
+    started = ImportStartedOut(import_area_id=area.id, events_url=f"/import-areas/{area.id}/events")
+    return JSONResponse(status_code=202, content=started.model_dump(mode="json"))
+
+
+@router.post(
+    "/import-areas/{import_area_id}/elevation",
+    status_code=202,
+    response_model=ImportStartedOut,
+)
+def reanalyse_elevation(
+    area: ImportArea = Depends(completed_import_area),
+    jobs: ImportJobRegistry = Depends(get_import_jobs),
+    session_scope: SessionScope = Depends(get_job_session_scope),
+    elevation_source: TerrainTilesSource | None = Depends(get_elevation_source),
+) -> JSONResponse:
+    """Re-analyses the area's elevation in the background, with the same events as an import: one
+    `elevation`, then `completed` (`version`, `changed`) or `failed`. Fetches no OSM data and
+    changes no entity; a second run changes nothing."""
+    if elevation_source is None:
+        raise ApiError(503, "elevation_unavailable", "elevation is disabled (ELEVATION_URL)")
+    try:
+        jobs.start(area.id, elevation_work(area, elevation_source, session_scope))
     except ImportAlreadyRunning as exc:
         raise _import_in_progress(area.id) from exc
     started = ImportStartedOut(import_area_id=area.id, events_url=f"/import-areas/{area.id}/events")
@@ -284,21 +325,34 @@ def get_map_data(
         pois = [poi for poi in pois if poi.id in in_scope.pois]
         area_features = [feature for feature in area_features if feature.id in in_scope.area_features]
 
+    elevations = ElevationRepository(session)
+    stored_grid = elevations.get_grid(area.id)
+    base_elevations: dict = {}
+    for owner_id in owner_ids:
+        base_elevations.update(elevations.building_bases(owner_id))
+    segment_heights = elevations.segment_heights(area.id)
+
     layers = {
-        "road_segments": [segment_feature(entry, cross_sections[entry.segment.id]) for entry in segments],
+        "road_segments": [
+            segment_feature(entry, cross_sections[entry.segment.id], segment_heights.get(entry.segment.id))
+            for entry in segments
+        ],
         "navigable_nodes": [node_feature(node) for node in nodes],
         "blocks": [block_feature(block) for block in blocks],
-        "buildings": [building_feature(building) for building in buildings],
+        "buildings": [building_feature(building, base_elevations.get(building.id)) for building in buildings],
         "pois": [poi_feature(poi) for poi in pois],
         "area_features": [area_feature_feature(feature) for feature in area_features],
     }
     if mode is ExportMode.CLIP:
         layers = _clipped(layers, clip_to_scope(session, area.id, scope.id if scope else None, composed_area_ids))
+        if stored_grid is not None:
+            layers["road_segments"] = _resampled(layers["road_segments"], stored_grid)
 
     return MapDataOut(
         scope=scope_out,
         mode=mode,
         projection=projection_out(projection),
+        elevation=elevation_out(stored_grid),
         **{name: feature_collection(features) for name, features in layers.items()},
     )
 
@@ -322,4 +376,26 @@ def _clipped(layers: dict[str, list[Feature]], clipped: ClippedGeometries) -> di
         ]
     for block in result["blocks"]:
         block.properties = {**block.properties, "buildable_area": clipped.block_buildable_areas.get(block.id)}
+    return result
+
+
+def _vertices(geometry: dict) -> list[Coordinate]:
+    """A (Multi)LineString's vertices in order, the parts of a MultiLineString flattened."""
+    lines = [geometry["coordinates"]] if geometry["type"] == "LineString" else geometry["coordinates"]
+    return [Coordinate(latitude=lat, longitude=lon) for line in lines for lon, lat in line]
+
+
+def _resampled(segments: list[Feature], stored: StoredGrid) -> list[Feature]:
+    """Clipping cuts a segment's geometry, so its stored vertex heights no longer line up: sample
+    the exact grid and the smoothed grid again at the clipped vertices."""
+    smooth = smoothed(stored.grid, stored.smoothing_meters)
+    result = []
+    for feature in segments:
+        vertices = _vertices(feature.geometry)
+        properties = {
+            **feature.properties,
+            "elevation_exact": [stored.grid.sample(vertex) for vertex in vertices],
+            "elevation_smoothed": [smooth.sample(vertex) for vertex in vertices],
+        }
+        result.append(feature.model_copy(update={"properties": properties}))
     return result

@@ -65,6 +65,9 @@ export interface RoadSegmentProperties {
   width_meters: number;
   is_vehicle_accessible: boolean;
   street: { id: string; name: string | null; classification: string };
+  /** Ground height at each vertex of the geometry, in order; null when the area has no terrain. */
+  elevation_exact: number[] | null;
+  elevation_smoothed: number[] | null;
 }
 
 export interface BuildingProperties {
@@ -74,6 +77,8 @@ export interface BuildingProperties {
   levels: number | null;
   /** The area that stores it: the requested one, or an inner area it composes. */
   import_area_id: string;
+  /** The lowest ground under the footprint, metres above sea level; null when the area has no terrain. */
+  base_elevation_meters: number | null;
 }
 
 export interface BlockProperties {
@@ -102,6 +107,25 @@ export interface Projection {
   meters_per_degree_longitude: number;
 }
 
+/** The area's ground: a regular lat/lon grid, row-major from the SW corner (south to north, west to east). */
+export interface ElevationGrid {
+  origin: Coordinate;
+  lat_step: number;
+  lon_step: number;
+  rows: number;
+  cols: number;
+  /** `rows * cols` heights in metres above sea level. */
+  heights: number[];
+}
+
+export interface Elevation {
+  source: string;
+  attribution: string;
+  version: number;
+  smoothing_meters: number;
+  grid: ElevationGrid;
+}
+
 export type ExportMode = "filter" | "clip";
 
 export interface MapData {
@@ -116,6 +140,8 @@ export interface MapData {
   buildings: FeatureCollection<BuildingProperties>;
   pois: FeatureCollection<PoiProperties>;
   area_features: FeatureCollection<AreaFeatureProperties>;
+  /** Null when the area has no terrain yet (not analysed, or the source was unavailable). */
+  elevation: Elevation | null;
 }
 
 export interface BoundaryProperties {
@@ -155,6 +181,7 @@ export type ErrorCode =
   | "import_area_not_ready"
   | "import_conflict"
   | "import_in_progress"
+  | "elevation_unavailable"
   | "import_job_not_found"
   | "building_not_found"
   | "invalid_boundary"
@@ -172,14 +199,14 @@ export type ErrorCode =
   | "configuration_error"
   | "internal_error";
 
-/** The 202 answer to `POST /import-areas` with `background: true`. */
+/** The 202 answer to `POST /import-areas` with `background: true`, and to `POST /import-areas/{id}/elevation`. */
 export interface ImportStarted {
   import_area_id: string;
   events_url: string;
 }
 
 /** The stages of a background import's event stream, in the order the server sends them. */
-export const IMPORT_STAGES = ["fetched", "ground", "roads", "blocks", "buildings", "generated", "completed", "failed"] as const;
+export const IMPORT_STAGES = ["fetched", "ground", "roads", "blocks", "buildings", "elevation", "generated", "completed", "failed"] as const;
 export type ImportStage = (typeof IMPORT_STAGES)[number];
 
 /** The `data` of each stage's event (server/app/api/background_import.py). */
@@ -190,6 +217,8 @@ export interface StageData {
   blocks: { projection: Projection; blocks: FeatureCollection<BlockProperties> };
   /** `ring` counts the non-empty rings from the centre out: 0, 1, 2, ... */
   buildings: { projection: Projection; ring: number; buildings: FeatureCollection<BuildingProperties> };
+  /** `error` is "elevation_unavailable" when the source failed; the import still completes, flat. */
+  elevation: { projection: Projection; elevation: Elevation | null; error: string | null };
   /** Reserved for Milestone 11; not sent yet. */
   generated: Record<string, unknown>;
   completed: ImportArea;

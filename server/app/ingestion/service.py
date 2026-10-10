@@ -75,6 +75,7 @@ class ImportResult:
     updated_count: int = 0
     removed_count: int = 0
     skipped_restriction_count: int = 0
+    skipped_feature_count: int = 0
 
 
 class OSMIngestionService:
@@ -96,6 +97,7 @@ class OSMIngestionService:
             area_repo.mark_importing(import_area.id)
             with self._step(import_area.id, "parse"):
                 records = self.adapter.parse(with_way_nodes_from_geometry(payload))
+            records = self._without_rings_outside_box(bbox, records)
             self._validate_within_bounding_box(bbox, records)
             inner_areas = area_repo.completed_areas_covered_by(bbox, exclude_id=import_area.id)
             result = self._persist(import_area, records, inner_areas=inner_areas)
@@ -235,6 +237,12 @@ class OSMIngestionService:
                 area_id, len(skipped_restrictions), ", ".join(skipped_restrictions),
             )
 
+        if records.skipped_features:
+            logger.warning(
+                "import area %s: skipped %d building or area way(s) that aren't a closed ring: %s",
+                area_id, len(records.skipped_features), ", ".join(records.skipped_features),
+            )
+
         # 6. Derive fresh blocks and link buildings over the reconciled network.
         with self._step(area_id, "block derivation"):
             blocks = block_service.derive_for_import_area(area_id)
@@ -276,6 +284,7 @@ class OSMIngestionService:
             updated_count=updated_count,
             removed_count=removed_count,
             skipped_restriction_count=len(skipped_restrictions),
+            skipped_feature_count=len(records.skipped_features),
             **counts,
         )
 
@@ -293,6 +302,7 @@ class OSMIngestionService:
         try:
             area_repo.mark_importing(import_area.id)
             records = self.adapter.parse(with_way_nodes_from_geometry(payload))
+            records = self._without_rings_outside_box(bbox, records)
             self._validate_within_bounding_box(bbox, records)
             inner_areas = area_repo.completed_areas_covered_by(bbox, exclude_id=import_area.id)
             emit(
@@ -427,6 +437,52 @@ class OSMIngestionService:
         }
 
     @staticmethod
+    def _envelope_intersects(bbox: BoundingBox, records: ImportRecords, node_ids: tuple[str, ...]) -> bool:
+        lats = [records.nodes[node_id].latitude for node_id in node_ids]
+        lons = [records.nodes[node_id].longitude for node_id in node_ids]
+        return not (
+            max(lats) < bbox.min_corner.latitude
+            or min(lats) > bbox.max_corner.latitude
+            or max(lons) < bbox.min_corner.longitude
+            or min(lons) > bbox.max_corner.longitude
+        )
+
+    @staticmethod
+    def _without_rings_outside_box(bbox: BoundingBox, records: ImportRecords) -> ImportRecords:
+        """`records` without the multipolygon rings that lie wholly outside the box, when another
+        ring of the same relation touches it.
+
+        Overpass returns a relation whole, so a big one (harbour water, a waterfront park) arrives
+        with rings far from the box. Each ring is its own feature (`relation/<id>[/<ring>]`), and one
+        outside ring would otherwise fail the import. A relation with no ring in the box is kept
+        whole, so the bounding-box check still rejects it."""
+
+        def relation_of(source_id: str) -> str | None:
+            parts = source_id.split("/")
+            return "/".join(parts[:2]) if parts[0] == "relation" and len(parts) >= 2 else None
+
+        def touches(feature) -> bool:
+            return OSMIngestionService._envelope_intersects(bbox, records, feature.node_ids)
+
+        touching = {
+            relation
+            for feature in (*records.buildings, *records.areas)
+            if (relation := relation_of(feature.source_id)) is not None and touches(feature)
+        }
+
+        def keep(feature) -> bool:
+            relation = relation_of(feature.source_id)
+            return relation is None or relation not in touching or touches(feature)
+
+        buildings = tuple(feature for feature in records.buildings if keep(feature))
+        areas = tuple(feature for feature in records.areas if keep(feature))
+        if len(buildings) == len(records.buildings) and len(areas) == len(records.areas):
+            return records
+        # The dropped rings' synthetic nodes stay in `records.nodes`: only road nodes and the
+        # features' own node ids are read from it, so they're never persisted.
+        return replace(records, buildings=buildings, areas=areas)
+
+    @staticmethod
     def _validate_within_bounding_box(bbox: BoundingBox, records: ImportRecords) -> None:
         """Reject a payload with features outside the declared bounding box.
 
@@ -443,14 +499,7 @@ class OSMIngestionService:
             offending_refs.append(f"{osm_type}/{source_id}")
 
         def envelope_intersects(node_ids: tuple[str, ...]) -> bool:
-            lats = [records.nodes[node_id].latitude for node_id in node_ids]
-            lons = [records.nodes[node_id].longitude for node_id in node_ids]
-            return not (
-                max(lats) < bbox.min_corner.latitude
-                or min(lats) > bbox.max_corner.latitude
-                or max(lons) < bbox.min_corner.longitude
-                or min(lons) > bbox.max_corner.longitude
-            )
+            return OSMIngestionService._envelope_intersects(bbox, records, node_ids)
 
         for road in records.roads:
             if not envelope_intersects(road.node_ids):

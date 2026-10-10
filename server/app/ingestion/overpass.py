@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 # The public instance refuses requests without an identifying User-Agent (HTTP 406).
 USER_AGENT = "geospatial-reconstruction-engine/0.1 (+https://github.com/josuecm13/geospatial-reconstruction-engine)"
-QUERY_TIMEOUT_SECONDS = 60
+QUERY_TIMEOUT_SECONDS = 180
 # Overpass's queue-full (429) and busy (504, sometimes 502/503) answers are worth retrying after a
 # pause, sequentially: its fair-use policy expects one query at a time per client.
 RETRYABLE_STATUSES = frozenset({429, 502, 503, 504})

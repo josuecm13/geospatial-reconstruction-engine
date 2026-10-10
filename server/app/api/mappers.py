@@ -11,6 +11,8 @@ from typing import Any
 from app.api.schemas import (
     BoundingBoxIn,
     CoordinateIn,
+    ElevationGridOut,
+    ElevationOut,
     Feature,
     FeatureCollection,
     ImportAreaOut,
@@ -22,6 +24,7 @@ from app.domain.block import Block
 from app.domain.bounding_box import BoundingBox, Coordinate
 from app.domain.building import Building
 from app.domain.cross_section import SegmentCrossSection
+from app.domain.elevation import TERRAIN_ATTRIBUTION, StoredGrid
 from app.domain.geometry import LineString, MultiPolygon, Polygon
 from app.domain.import_area import ImportArea
 from app.domain.local_projection import LocalProjection
@@ -69,6 +72,7 @@ def import_area_out(
     block_count: int,
     linked_building_count: int | None = None,
     skipped_restriction_count: int | None = None,
+    skipped_feature_count: int | None = None,
 ) -> ImportAreaOut:
     return ImportAreaOut(
         id=area.id,
@@ -83,6 +87,7 @@ def import_area_out(
         block_count=block_count,
         linked_building_count=linked_building_count,
         skipped_restriction_count=skipped_restriction_count,
+        skipped_feature_count=skipped_feature_count,
         imported_at=area.imported_at,
         place_name=area.place_name,
         place_context=area.place_context,
@@ -101,18 +106,44 @@ def poi_feature(poi: PointOfInterest) -> Feature:
     )
 
 
-def building_feature(building: Building) -> Feature:
-    return Feature(
-        id=building.id,
-        geometry=polygon_geometry(building.geom),
-        properties={
-            "category": building.category.value,
-            "block_id": building.block_id,
-            "height_meters": building.height_meters,
-            "levels": building.levels,
-            "import_area_id": building.import_area_id,
-        },
-    )
+def elevation_out(stored: StoredGrid | None) -> dict[str, Any] | None:
+    """The `elevation` object of map-data and the `elevation` stage; heights are rounded to 0.1 m.
+    None when the area has no grid."""
+    if stored is None:
+        return None
+    grid = stored.grid
+    return ElevationOut(
+        source=stored.source,
+        attribution=TERRAIN_ATTRIBUTION,
+        version=stored.version,
+        smoothing_meters=stored.smoothing_meters,
+        grid=ElevationGridOut(
+            origin=CoordinateIn(latitude=grid.origin.latitude, longitude=grid.origin.longitude),
+            lat_step=grid.lat_step,
+            lon_step=grid.lon_step,
+            rows=grid.rows,
+            cols=grid.cols,
+            heights=[round(height, 1) for height in grid.heights],
+        ),
+    ).model_dump(mode="json")
+
+
+# Marks "no elevation requested": the stages and spatial queries don't carry elevation properties,
+# while map-data always does (null when the area has none).
+NOT_REQUESTED: Any = object()
+
+
+def building_feature(building: Building, base_elevation_meters: float | None = NOT_REQUESTED) -> Feature:
+    properties = {
+        "category": building.category.value,
+        "block_id": building.block_id,
+        "height_meters": building.height_meters,
+        "levels": building.levels,
+        "import_area_id": building.import_area_id,
+    }
+    if base_elevation_meters is not NOT_REQUESTED:
+        properties["base_elevation_meters"] = base_elevation_meters
+    return Feature(id=building.id, geometry=polygon_geometry(building.geom), properties=properties)
 
 
 def area_feature_feature(feature: AreaFeature) -> Feature:
@@ -138,11 +169,17 @@ def block_feature(block: Block) -> Feature:
     )
 
 
-def segment_feature(entry: RoadSegmentWithStreet, cross_section: SegmentCrossSection) -> Feature:
+def segment_feature(
+    entry: RoadSegmentWithStreet,
+    cross_section: SegmentCrossSection,
+    elevation: tuple[tuple[float, ...], tuple[float, ...]] | None = NOT_REQUESTED,
+) -> Feature:
     """`lane_count` is the generated count for the segment's direction; what the
-    source stated (or null) stays visible as `source_lane_count`."""
+    source stated (or null) stays visible as `source_lane_count`. `elevation` is the stored
+    (exact, smoothed) vertex heights, or None when there are none; omitted, no elevation
+    properties are added."""
     segment = entry.segment
-    return Feature(
+    feature = Feature(
         id=segment.id,
         geometry=linestring_geometry(segment.geom),
         properties={
@@ -162,6 +199,11 @@ def segment_feature(entry: RoadSegmentWithStreet, cross_section: SegmentCrossSec
             },
         },
     )
+    if elevation is not NOT_REQUESTED:
+        exact, smoothed = elevation if elevation is not None else (None, None)
+        feature.properties["elevation_exact"] = list(exact) if exact is not None else None
+        feature.properties["elevation_smoothed"] = list(smoothed) if smoothed is not None else None
+    return feature
 
 
 def segment_feature_plain(segment: RoadSegment) -> Feature:
