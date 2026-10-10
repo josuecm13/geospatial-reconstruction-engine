@@ -50,6 +50,10 @@ class BlockRepository:
         """Just the ids of the area's own blocks, for the road-graph hash of a generation run."""
         return list(self.session.scalars(select(BlockModel.id).where(BlockModel.import_area_id == import_area_id)))
 
+    def get_import_area_id(self, block_id: uuid.UUID) -> uuid.UUID | None:
+        """The area a block belongs to, or None when there is no such block."""
+        return self.session.scalar(select(BlockModel.import_area_id).where(BlockModel.id == block_id))
+
     def list_composable(self, inner_area_ids: list[uuid.UUID], outer_area_id: uuid.UUID) -> list[Block]:
         """The inner areas' whole blocks that the outer area does not hold itself.
 

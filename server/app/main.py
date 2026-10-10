@@ -7,6 +7,7 @@ from app.api.errors import register_error_handlers
 from app.api.middleware import BodySizeLimitMiddleware, CompressionMiddleware
 from app.config.logging import configure_logging
 from app.api.routers import (
+    generation_router,
     import_areas_router,
     route_planning_router,
     settings_router,
@@ -28,6 +29,7 @@ def create_app() -> FastAPI:
     app.include_router(route_planning_router)
     app.include_router(traced_boundaries_router)
     app.include_router(settings_router)
+    app.include_router(generation_router)
 
     @app.get("/health")
     def health(session: Session = Depends(get_session)) -> dict:

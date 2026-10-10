@@ -20,6 +20,7 @@ from app.api.mappers import (
     building_feature,
     elevation_out,
     feature_collection,
+    generation_run_out,
     import_area_out,
     poi_feature,
     projection_out,
@@ -30,6 +31,7 @@ from app.domain.bounding_box import BoundingBox
 from app.domain.cross_section import cross_sections_by_segment
 from app.domain.import_area import ImportArea
 from app.domain.local_projection import local_projection_for
+from app.generation.run import GenerationService, stale_reasons
 from app.ingestion.elevation_analysis import ElevationAnalysis, ElevationResult
 from app.ingestion.elevation_source import ElevationUnavailable, TerrainTilesSource
 from app.ingestion.jobs import ImportJob
@@ -148,6 +150,30 @@ def elevation_work(
                 _, code, message, details = describe_error(exc)
                 if code == "internal_error":
                     logger.exception("elevation analysis of area %s failed unexpectedly", area.id)
+                job.emit("failed", {"code": code, "message": message, "details": details})
+
+    return work
+
+
+def generation_work(area: ImportArea, seed: int, session_scope: SessionScope) -> Callable[[ImportJob], None]:
+    """The job body of a generation: it reads the observed data and replaces the area's run in one
+    transaction. Emits `generation` with the number of eligible blocks, then `completed` with the new
+    run, or `failed` (rolled back, the previous run untouched) with the error's code."""
+
+    def work(job: ImportJob) -> None:
+        with session_scope() as session:
+            try:
+                run = GenerationService(session).generate(
+                    area, seed, progress=lambda block_count: job.emit("generation", {"block_count": block_count})
+                )
+                session.commit()
+                run_out = generation_run_out(run, stale_reasons(session, area, run))
+                job.emit("completed", {"run": _dump(run_out)})
+            except Exception as exc:
+                session.rollback()
+                _, code, message, details = describe_error(exc)
+                if code == "internal_error":
+                    logger.exception("generation for area %s failed unexpectedly", area.id)
                 job.emit("failed", {"code": code, "message": message, "details": details})
 
     return work
