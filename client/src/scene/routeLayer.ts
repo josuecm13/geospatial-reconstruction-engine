@@ -1,10 +1,11 @@
 import * as THREE from "three";
 import type { Geometry, Position, Projection } from "../api/types";
-import { flatGeometry, footprintShape } from "./extrude";
+import { drapedGeometry, flatGeometry, footprintShape } from "./extrude";
 import { toLocal, toLonLat } from "./projection";
 import { MATERIALS } from "./palette";
 import { roadPolygon } from "./roadGeometry";
 import { shadeGeometry } from "./shading";
+import { flatTerrain, maxEdgeFor, type Terrain } from "./terrain";
 
 /** Just above the road surfaces (LAYER_Y.roads = 0.05), so the ribbon doesn't z-fight them. */
 export const ROUTE_Y = 0.08;
@@ -33,6 +34,7 @@ export function createRouteLayer(camera: THREE.Camera, canvas: HTMLElement): Rou
   const raycaster = new THREE.Raycaster();
   let world: THREE.Object3D | undefined;
   let projection: Projection | undefined;
+  let terrain: Terrain = flatTerrain();
   let markers: THREE.Mesh[] = [];
   let ribbon: THREE.Mesh | undefined;
 
@@ -48,6 +50,7 @@ export function createRouteLayer(camera: THREE.Camera, canvas: HTMLElement): Rou
       layer.clear();
       world = next;
       projection = next?.userData.projection;
+      terrain = next?.userData.terrain ?? flatTerrain();
     },
     pick(clientX, clientY) {
       if (!world || !projection) return null;
@@ -71,7 +74,7 @@ export function createRouteLayer(camera: THREE.Camera, canvas: HTMLElement): Rou
         const { x, z } = toLocal(projection, point);
         // Tip down, so the point of the cone is the picked spot; baked in, as the shade can't see a mesh rotation.
         const cone = new THREE.Mesh(shadeGeometry(new THREE.ConeGeometry(2.5, MARKER_HEIGHT, 12).rotateX(Math.PI)), material);
-        cone.position.set(x, MARKER_HEIGHT / 2, z);
+        cone.position.set(x, terrain.heightAtLocal(x, z) + MARKER_HEIGHT / 2, z);
         markers.push(cone);
         root.add(cone);
       }
@@ -85,7 +88,9 @@ export function createRouteLayer(camera: THREE.Camera, canvas: HTMLElement): Rou
         ROUTE_WIDTH,
       );
       if (!outline.length) return;
-      ribbon = new THREE.Mesh(flatGeometry([footprintShape(outline)]), MATERIALS.route);
+      // Lifted vertex by vertex onto the ground, so the route climbs the slope with the roads.
+      const surface = terrain.hasGround ? drapedGeometry([footprintShape(outline)], terrain.heightAtLocal, maxEdgeFor(terrain)) : flatGeometry([footprintShape(outline)]);
+      ribbon = new THREE.Mesh(surface, MATERIALS.route);
       ribbon.position.y = ROUTE_Y;
       ribbon.name = "route:ribbon";
       root.add(ribbon);

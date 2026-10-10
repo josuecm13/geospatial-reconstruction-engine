@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import type { Local } from "./projection";
 import { shadeGeometry } from "./shading";
+import { drape, subdivideTriangles } from "./terrain";
 
 /** A shape from a ring in local meters. Shape coordinates are (x, -z): rotating the geometry by
  * -90 degrees about x then lands the ring back on (x, z) with the extrusion pointing up. A closing
@@ -22,6 +23,22 @@ export function polygonShape(rings: Local[][]): THREE.Shape {
 export function extrudeFootprints(shapes: THREE.Shape[], height: number): THREE.BufferGeometry {
   const geometry = new THREE.ExtrudeGeometry(shapes, { depth: height, bevelEnabled: false });
   geometry.rotateX(-Math.PI / 2);
+  return shadeGeometry(geometry);
+}
+
+/**
+ * Flat shapes laid over the terrain: triangulated, split until no edge is longer than `maxEdge` (a flat
+ * triangle would cut through a slope), then each vertex's y is set to `height(x, z)`, and shaded.
+ * Position the mesh to add a layer's offset on top.
+ */
+export function drapedGeometry(shapes: THREE.Shape[], height: (x: number, z: number) => number, maxEdge: number): THREE.BufferGeometry {
+  const flat = new THREE.ShapeGeometry(shapes);
+  flat.rotateX(-Math.PI / 2);
+  const split = subdivideTriangles(flat.getAttribute("position").array, flat.getIndex()!.array, maxEdge);
+  flat.dispose();
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(drape(split.positions, height), 3));
+  geometry.setIndex(split.indices);
   return shadeGeometry(geometry);
 }
 
