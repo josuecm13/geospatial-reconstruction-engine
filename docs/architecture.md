@@ -150,8 +150,11 @@ deleted at close-out; the numbers are named constants in `app/domain/generation.
   30% (from the stored grid; skipped without one), and non-residential land use (forest, farmland,
   cemetery, railway, industrial, park) are subtracted, and each leaves a zone for display. The front
   setback is added per block once its reference is known. The block's **style** is `informal` near low
-  water (within 150 m and under 2 m above it, never without a grid), `sparse` when real buildings cover
-  under 5% of the land within 500 m, and `regular` otherwise.
+  water (within 150 m and under 2 m above it, never without a grid), `sparse` when the road length within
+  500 m of the block centroid (clipped to the circle, and to the area of context) is under 6 km per km² of
+  land, water excluded (no land counts as density 0), and `regular` otherwise. Roads, not buildings, decide
+  it: OSM maps roads far more completely than buildings, so building coverage would call an under-mapped
+  town rural.
 - **References.** A block that is at least 70% built along its frontage, with three or more real
   buildings, is an **exemplar**, and its **fingerprint** (median and spread of width, depth, front
   setback and side gap, median levels) is measured from those buildings. Every other eligible block

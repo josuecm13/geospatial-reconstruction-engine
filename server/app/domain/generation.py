@@ -24,7 +24,7 @@ STEEP_SLOPE = 0.30  # rise over run, as a ratio
 INFORMAL_WATER_DISTANCE_METERS = 150.0
 INFORMAL_HEIGHT_ABOVE_WATER_METERS = 2.0
 STYLE_CONTEXT_RADIUS_METERS = 500.0
-SPARSE_COVERAGE_BELOW = 0.05
+SPARSE_ROAD_DENSITY_BELOW_KM_PER_KM2 = 6.0
 
 
 class SettlementStyle(str, enum.Enum):
@@ -43,13 +43,15 @@ class ZoneReason(str, enum.Enum):
 def settlement_style(
     *,
     near_low_water: bool,
-    building_coverage: float,
+    road_density_km_per_km2: float,
 ) -> SettlementStyle:
     """`informal` wins over `sparse`, which wins over `regular`. `near_low_water` is false whenever
-    there is no elevation, so `informal` is never chosen without it."""
+    there is no elevation, so `informal` is never chosen without it. Road density is the road length
+    within the style radius per square kilometre of land there; roads are mapped far more completely
+    than buildings, so it measures ruralness where building coverage measures OSM's completeness."""
     if near_low_water:
         return SettlementStyle.INFORMAL
-    if building_coverage < SPARSE_COVERAGE_BELOW:
+    if road_density_km_per_km2 < SPARSE_ROAD_DENSITY_BELOW_KM_PER_KM2:
         return SettlementStyle.SPARSE
     return SettlementStyle.REGULAR
 

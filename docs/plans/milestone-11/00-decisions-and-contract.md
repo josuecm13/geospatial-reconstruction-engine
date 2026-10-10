@@ -70,8 +70,11 @@ Style, one per block:
 - **`informal`** when the block's suitable-area centroid lies within 150 m of water and its ground
   height minus the nearest water's ground height is under **2 m**. That's height above nearest water;
   both heights are sampled from the stored grid.
-- **`sparse`** when real-building coverage within 500 m of the block centroid is under **5%** of land
-  area, which counts as rural.
+- **`sparse`** when the road length within 500 m of the block centroid, clipped to that circle and to
+  the area of context, is under **6 km per km²** of land (water excluded), which counts as rural. With no
+  land in the circle the density is 0, so the block is `sparse`. Road density, not building coverage:
+  roads are mapped far more completely than buildings, so coverage measures OSM's completeness, not
+  ruralness (an under-mapped town with a full street grid stays `regular`).
 - **`regular`** otherwise.
 - Without elevation, `informal` is never chosen.
 

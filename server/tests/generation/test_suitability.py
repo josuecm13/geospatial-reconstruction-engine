@@ -37,8 +37,14 @@ BLOCK = Block(
     buildable_area=(BUILDABLE,),
     buildable_area_square_meters=40_000.0,
 )
-# One big house, so real coverage is about 8% of the land nearby (the sparse threshold is 5%).
-HOUSE = _rect(0.0006, 0.0006, 0.0012, 0.0012)
+def _line(*points):
+    return tuple(Coordinate(lat, lon) for lat, lon in points)
+
+
+# Five 245 m streets across the 0.06 km2 context: about 20 km of road per km2 (the sparse threshold is 6).
+STREET_GRID = tuple(_line((lat, 0.0), (lat, 0.0022)) for lat in (0.0002, 0.0007, 0.0012, 0.0017, 0.0021))
+# Two 100 m streets: about 3.3 km per km2.
+TWO_ROADS = (_line((0.0010, 0.0), (0.0010, 0.0009)), _line((0.0, 0.0010), (0.0009, 0.0010)))
 
 
 def _feature(kind, ring):
@@ -57,14 +63,14 @@ def _grid(height_for_col):
     )
 
 
-def _run(*, water=(), landuse=(), grid=None, buildings=(HOUSE,)):
+def _run(*, water=(), landuse=(), grid=None, roads=STREET_GRID):
     return suitability(
         BLOCK,
         projection=PROJECTION,
         water=list(water),
         landuse=list(landuse),
         grid=grid,
-        real_buildings_nearby=list(buildings),
+        roads_nearby=list(roads),
         area_of_context=CONTEXT,
     )
 
@@ -163,9 +169,20 @@ def test_style_is_never_informal_without_a_grid():
     assert _run(water=[water], grid=None).style is SettlementStyle.REGULAR
 
 
-def test_style_is_sparse_with_little_building_coverage():
-    assert _run(buildings=()).style is SettlementStyle.SPARSE
+def test_style_is_sparse_with_little_road_density():
+    assert _run(roads=TWO_ROADS).style is SettlementStyle.SPARSE
 
 
-def test_style_is_regular_with_enough_building_coverage():
-    assert _run().style is SettlementStyle.REGULAR
+def test_style_is_sparse_with_no_roads_at_all():
+    assert _run(roads=()).style is SettlementStyle.SPARSE
+
+
+def test_style_is_regular_with_a_dense_street_grid_however_few_buildings_are_mapped():
+    # Suitability takes no buildings: an under-mapped town with a full street grid is not rural.
+    assert _run(roads=STREET_GRID).style is SettlementStyle.REGULAR
+
+
+def test_style_ignores_roads_outside_the_context():
+    outside = (_line((0.0010, 0.01), (0.0010, 0.02)),)
+
+    assert _run(roads=outside).style is SettlementStyle.SPARSE

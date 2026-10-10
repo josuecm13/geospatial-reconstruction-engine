@@ -50,7 +50,7 @@ def _suitability(style=SettlementStyle.REGULAR):
         water=[],
         landuse=[],
         grid=None,
-        real_buildings_nearby=[],
+        roads_nearby=[],
         area_of_context=_rect(-1000, -1000, 1000, 1000),
     )
     return replace(result, style=style)

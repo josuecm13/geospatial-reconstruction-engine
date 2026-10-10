@@ -8,6 +8,7 @@ import math
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 
+from shapely.geometry import LineString as ShapelyLineString
 from shapely.geometry import MultiPolygon as ShapelyMultiPolygon
 from shapely.geometry import Point
 from shapely.geometry import Polygon as ShapelyPolygon
@@ -30,11 +31,12 @@ from app.domain.generation import (
     is_near_low_water,
     settlement_style,
 )
-from app.domain.geometry import Polygon
+from app.domain.geometry import LineString, Polygon
 from app.domain.local_projection import LocalProjection
 from app.generation.geometry import (
     as_multipolygon,
     from_local_xy,
+    linestring_to_local,
     multipolygon_to_local,
     polygon_to_local,
     polygons_of,
@@ -86,13 +88,14 @@ def suitability(
     water: Sequence[AreaFeature],
     landuse: Sequence[AreaFeature],
     grid: ElevationGrid | None,
-    real_buildings_nearby: Sequence[Polygon],
+    roads_nearby: Sequence[LineString],
     area_of_context: Polygon,
 ) -> Suitability:
     """`water` and `landuse` are the area's features (others are ignored: only `water` counts as
     water, and only the land-use kinds in `LANDUSE_EXCLUDED_KINDS` are excluded). `grid` is None for
     an area without elevation: no steep zone, and the style is never `informal`.
-    `real_buildings_nearby` are footprints within about 500 m of the block, and `area_of_context` is
+    `roads_nearby` are the area's road segments within about 500 m of the block (their length is
+    clipped to the 500 m circle to give the road density behind `sparse`), and `area_of_context` is
     the import area's outline, so land beyond it doesn't count as empty."""
     if block.buildable_area is None:
         raise ValueError("suitability needs a block with a buildable area")
@@ -130,7 +133,7 @@ def suitability(
         centre_source=suitable_area if not suitable_area.is_empty else buildable,
         water_shapes=water_shapes,
         grid=grid,
-        real_buildings=[polygon_to_local(projection, ring) for ring in real_buildings_nearby],
+        roads=[linestring_to_local(projection, line) for line in roads_nearby],
         context=polygon_to_local(projection, area_of_context),
     )
     return Suitability(buildable, suitable_area, tuple(zones), style, projection)
@@ -175,7 +178,7 @@ def _style(
     centre_source: BaseGeometry,
     water_shapes: list[BaseGeometry],
     grid: ElevationGrid | None,
-    real_buildings: list[ShapelyPolygon],
+    roads: list[ShapelyLineString],
     context: ShapelyPolygon,
 ) -> SettlementStyle:
     near_low_water = False
@@ -195,6 +198,9 @@ def _style(
     if water_shapes:
         land = land.difference(unary_union(water_shapes))
     land_area = land.area
-    built = sum(footprint.intersection(land).area for footprint in real_buildings if footprint.intersects(land))
-    coverage = built / land_area if land_area > 0 else 0.0
-    return settlement_style(near_low_water=near_low_water, building_coverage=coverage)
+    if land_area > 0:
+        road_km = sum(line.intersection(land).length for line in roads if line.intersects(land)) / 1000.0
+        density = road_km / (land_area / 1_000_000.0)
+    else:
+        density = 0.0
+    return settlement_style(near_low_water=near_low_water, road_density_km_per_km2=density)

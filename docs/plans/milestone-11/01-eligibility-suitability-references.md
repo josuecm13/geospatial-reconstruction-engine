@@ -35,7 +35,7 @@ list.
 `server/app/generation/__init__.py`, `server/app/generation/suitability.py`:
 - Work in local metres. Write a small helper module (`app/generation/geometry.py`) to convert domain
   polygons and lines to and from shapely in local metres, using `local_projection_for`.
-- `suitability(block, *, water, landuse, grid, real_buildings_nearby, area_of_context) -> Suitability`
+- `suitability(block, *, water, landuse, grid, roads_nearby, area_of_context) -> Suitability`
   (or a similar clear signature) returns the suitable MultiPolygon, the zones as `(reason, polygon)`,
   and the style.
 - The steep zone comes from the stored grid (`app/domain/elevation.py` `ElevationGrid`). Compute the
@@ -48,7 +48,7 @@ list.
   - water buffered by 20 m is excluded;
   - a steep strip is excluded only with a grid;
   - a landuse polygon is excluded;
-  - style `informal` near low water, `sparse` with low coverage, `regular` otherwise, and never
+  - style `informal` near low water, `sparse` with low road density, `regular` otherwise, and never
     `informal` without a grid.
 
 ## 4. Fingerprints and exemplars (contract §4)

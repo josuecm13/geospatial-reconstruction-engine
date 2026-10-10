@@ -31,7 +31,7 @@ from app.domain.generation import (
     MIN_FOOTPRINT_SQUARE_METERS,
     MIN_GENERATION_BUILDABLE_SQUARE_METERS,
     REFERENCE_RADIUS_METERS,
-    SPARSE_COVERAGE_BELOW,
+    SPARSE_ROAD_DENSITY_BELOW_KM_PER_KM2,
     STEEP_SLOPE,
     STYLE_CONTEXT_RADIUS_METERS,
     WATER_BUFFER_METERS,
@@ -60,10 +60,11 @@ from app.domain.generation import (
 )
 from app.domain.generation import stale_reasons as domain_stale_reasons
 from app.domain.import_area import ImportArea
+from app.domain.road_graph import RoadSegment
 from app.domain.local_projection import LocalProjection, local_projection_for
 from app.generation.fingerprint import measure_block
 from app.generation.generator import generate_block
-from app.generation.geometry import from_local_xy, polygon_from_local, polygon_to_local, solid_polygons
+from app.generation.geometry import from_local_xy, linestring_to_local, polygon_from_local, polygon_to_local, solid_polygons
 from app.generation.suitability import Suitability, suitability
 from app.persistence.repositories.area_feature import AreaFeatureRepository
 from app.persistence.repositories.block import BlockRepository
@@ -71,10 +72,10 @@ from app.persistence.repositories.building import BuildingRepository
 from app.persistence.repositories.elevation import ElevationRepository
 from app.persistence.repositories.generation import BlockFeedbackRepository, GenerationRepository
 from app.persistence.repositories.import_area import ImportAreaRepository
+from app.persistence.repositories.road_graph import RoadSegmentRepository
 
 logger = logging.getLogger(__name__)
 
-NEARBY_BUILDINGS_METERS = 500.0
 
 
 def stale_reasons(session: Session, area: ImportArea, run: GenerationRun) -> list[StaleReason]:
@@ -139,6 +140,7 @@ class GenerationService:
                 by_block.setdefault(building.block_id, []).append(building)
         footprints = _FootprintIndex(projection, composed_buildings)
 
+        roads = _RoadIndex(projection, RoadSegmentRepository(self.session).list_for_import_area(area.id))
         water = [feature for feature in features if feature.kind == AreaFeatureKind.WATER]
         suitabilities: dict[uuid.UUID, Suitability] = {
             block.id: suitability(
@@ -147,7 +149,7 @@ class GenerationService:
                 water=water,
                 landuse=features,
                 grid=grid,
-                real_buildings_nearby=footprints.within(centres[block.id], NEARBY_BUILDINGS_METERS),
+                roads_nearby=roads.within(centres[block.id], STYLE_CONTEXT_RADIUS_METERS),
                 area_of_context=area.bbox.ring(),
             )
             for block in eligible
@@ -242,7 +244,7 @@ class GenerationService:
                 "steep_slope": STEEP_SLOPE,
                 "informal_water_distance_meters": INFORMAL_WATER_DISTANCE_METERS,
                 "informal_height_above_water_meters": INFORMAL_HEIGHT_ABOVE_WATER_METERS,
-                "sparse_coverage_below": SPARSE_COVERAGE_BELOW,
+                "sparse_road_density_below_km_per_km2": SPARSE_ROAD_DENSITY_BELOW_KM_PER_KM2,
                 "style_context_radius_meters": STYLE_CONTEXT_RADIUS_METERS,
                 "exemplar_min_coverage": EXEMPLAR_MIN_COVERAGE,
                 "exemplar_min_buildings": EXEMPLAR_MIN_BUILDINGS,
@@ -323,6 +325,22 @@ class _FootprintIndex:
         """The buildings, in local metres, within `meters` of a block's outline (its own, and those
         straddling or next to it)."""
         return [self.shapes[index] for index in self._indices(shape.buffer(meters))]
+
+
+class _RoadIndex:
+    """The area's road segments in local metres, searchable by distance."""
+
+    def __init__(self, projection: LocalProjection, segments: Sequence[RoadSegment]):
+        self.lines = [segment.geom for segment in segments if len(segment.geom) >= 2]
+        shapes = [linestring_to_local(projection, line) for line in self.lines]
+        self.tree = STRtree(shapes) if shapes else None
+
+    def within(self, centre: Point, meters: float):
+        """The segments (as WGS84 point sequences) that touch the circle of `meters` around `centre`."""
+        if self.tree is None:
+            return []
+        hits = self.tree.query(centre.buffer(meters), predicate="intersects")
+        return [self.lines[index] for index in sorted(int(i) for i in hits)]
 
 
 class _ReferenceMatcher:

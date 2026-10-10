@@ -21,7 +21,7 @@ Brief 01 already added these. Build on them, and don't rewrite them:
 - **`app/generation/geometry.py`:** domain ↔ shapely in local metres (`polygon_to_local`,
   `multipolygon_from_local`, …).
 - **`app/generation/suitability.py`:**
-  - `suitability(block, *, projection, water, landuse, grid, real_buildings_nearby, area_of_context) -> Suitability`,
+  - `suitability(block, *, projection, water, landuse, grid, roads_nearby, area_of_context) -> Suitability`,
     with `.suitable`, `.zones` and `.style`;
   - `Suitability.with_setback(strip)`.
 - **`app/generation/fingerprint.py`:** `fingerprint(block, buildings, *, style, projection)`,
@@ -69,7 +69,7 @@ Brief 01 already added these. Build on them, and don't rewrite them:
      features, the grid (if any), the area's feedback, and the previous run (for calibration);
   2. computes eligibility for each block;
   3. computes suitability for the eligible blocks (`area_of_context` is the area's bbox ring, and
-     `real_buildings_nearby` are the composed buildings within 500 m);
+     `roads_nearby` are the area's road segments within 500 m);
   4. fingerprints the exemplars (the area's own eligible blocks, plus exemplars from `blocks_within`
      500 m in other areas; fingerprint those from their own buildings), then matches the rest with
      `best_reference` or the defaults;
