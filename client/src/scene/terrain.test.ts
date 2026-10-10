@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { Elevation, Feature, Projection, RoadSegmentProperties } from "../api/types";
+import { gridCutTriangles } from "./gridCut";
 import type { Local } from "./projection";
-import { clipPolygonToRect, clipRingToRect, createTerrain, drape, flatTerrain, groundMesh, maxEdgeFor, roadSurface, splitByLines, subdivideRing, subdivideTriangles } from "./terrain";
+import { clipPolygonToRect, clipRingToRect, createTerrain, drape, flatTerrain, groundMesh, roadSurface, splitByLines } from "./terrain";
 
 // 1 degree = 100 m both ways, so local meters are easy to read: x = (lon - 10) * 100, z = -(lat - 20) * 100.
 const projection: Projection = { origin: { latitude: 20, longitude: 10 }, meters_per_degree_latitude: 100, meters_per_degree_longitude: 100 };
@@ -21,7 +22,6 @@ function elevation(base = 100): Elevation {
 }
 
 const terrain = createTerrain(elevation(), projection);
-const edge = (positions: number[], a: number, b: number) => Math.hypot(positions[a * 3] - positions[b * 3], positions[a * 3 + 2] - positions[b * 3 + 2]);
 /** Degrees times 100 leaves floating-point dust (1.0000000000000009), and -0 for the southern line. */
 const clean = (v: number) => Math.round(v * 1e6) / 1e6 + 0;
 
@@ -81,67 +81,20 @@ describe("flatTerrain", () => {
     const flat = flatTerrain();
     expect([flat.hasGround, flat.baseline, flat.heightAtLocal(5, 7), flat.heightAtLonLat([1, 2]), flat.lowestUnder([{ x: 0, z: 0 }]), flat.gridLines()]).toEqual([false, 0, 0, 0, 0, null]);
     expect(flat.roadHeights({ properties: { elevation_exact: [1] } } as unknown as Feature<RoadSegmentProperties>, "exact")).toBeNull();
-    expect(maxEdgeFor(flat)).toBe(Infinity);
-  });
-});
-
-describe("subdivideRing", () => {
-  it("bounds every edge and keeps the corners and the closure", () => {
-    const ring: Local[] = [{ x: 0, z: 0 }, { x: 10, z: 0 }, { x: 10, z: 4 }, { x: 0, z: 0 }];
-    const out = subdivideRing(ring, 3);
-    for (let i = 0; i + 1 < out.length; i++) expect(Math.hypot(out[i + 1].x - out[i].x, out[i + 1].z - out[i].z)).toBeLessThanOrEqual(3 + 1e-9);
-    expect(out[0]).toEqual(ring[0]);
-    expect(out.at(-1)).toEqual(ring.at(-1));
-    expect(out).toContainEqual({ x: 10, z: 0 });
-  });
-});
-
-describe("subdivideTriangles", () => {
-  const long = { positions: [0, 0, 0, 20, 0, 0, 0, 0, 20], indices: [0, 1, 2] };
-
-  it("bounds every edge by maxEdge", () => {
-    const { positions, indices } = subdivideTriangles(long.positions, long.indices, 4);
-    for (let t = 0; t < indices.length; t += 3) {
-      for (let k = 0; k < 3; k++) expect(edge(positions, indices[t + k], indices[t + ((k + 1) % 3)])).toBeLessThanOrEqual(4 + 1e-9);
-    }
-  });
-
-  it("keeps the area and the facing", () => {
-    const { positions, indices } = subdivideTriangles(long.positions, long.indices, 4);
-    let area = 0;
-    for (let t = 0; t < indices.length; t += 3) {
-      const [a, b, c] = [indices[t], indices[t + 1], indices[t + 2]].map((i) => ({ x: positions[i * 3], z: positions[i * 3 + 2] }));
-      area += ((b.x - a.x) * (c.z - a.z) - (b.z - a.z) * (c.x - a.x)) / 2; // signed
-    }
-    const original = (20 * 20) / 2; // (0,0) -> (20,0) -> (0,20): positive in this convention
-    expect(area).toBeCloseTo(original);
-  });
-
-  it("splits a shared edge once, so two triangles stay joined", () => {
-    // Two triangles sharing the long diagonal; every vertex of the result used by both sides is the same index.
-    const quad = { positions: [0, 0, 0, 10, 0, 0, 10, 0, 10, 0, 0, 10], indices: [0, 1, 2, 0, 2, 3] };
-    const { positions, indices } = subdivideTriangles(quad.positions, quad.indices, 3);
-    const used = new Set(indices);
-    // No two distinct vertices share a position.
-    const keys = new Set([...used].map((i) => `${positions[i * 3].toFixed(6)},${positions[i * 3 + 2].toFixed(6)}`));
-    expect(keys.size).toBe(used.size);
-  });
-
-  it("leaves small triangles alone", () => {
-    const small = { positions: [0, 0, 0, 1, 0, 0, 0, 0, 1], indices: [0, 1, 2] };
-    expect(subdivideTriangles(small.positions, small.indices, 4)).toEqual(small);
   });
 });
 
 describe("drape", () => {
-  it("puts every vertex of a subdivided, sloped surface on the terrain", () => {
-    const { positions, indices } = subdivideTriangles([0, 0, -2, 3, 0, -2, 3, 0, 0, 0, 0, 0], [0, 1, 2, 0, 2, 3], 0.4);
-    expect(positions.length / 3).toBeGreaterThan(20);
+  it("puts every vertex of a grid-cut, sloped surface on the terrain", () => {
+    const square: Local[] = [{ x: 0.2, z: -1.8 }, { x: 2.7, z: -1.8 }, { x: 2.7, z: -0.1 }, { x: 0.2, z: -0.1 }];
+    const flat = gridCutTriangles([[square]], terrain.gridLines()!);
+    const positions: number[] = [];
+    for (let i = 0; i < flat.length; i += 2) positions.push(flat[i], 0, flat[i + 1]);
+    expect(positions.length / 3).toBeGreaterThan(12); // 3 x 2 cells, cut at every grid line
     drape(positions, terrain.heightAtLocal, 0.05);
     for (let i = 0; i < positions.length; i += 3) expect(positions[i + 1]).toBeCloseTo(terrain.heightAtLocal(positions[i], positions[i + 2]) + 0.05);
-    // The slope shows: the north-east corner (3, -2) is 23 m above the baseline.
-    expect(Math.max(...positions.filter((_, i) => i % 3 === 1))).toBeGreaterThan(20);
-    expect(indices.length).toBeGreaterThan(6);
+    // The slope shows: the north-west corner (0.2, -1.8) is 18 m above the baseline, the south-east one far less.
+    expect(Math.max(...positions.filter((_, i) => i % 3 === 1))).toBeGreaterThan(15);
   });
 });
 

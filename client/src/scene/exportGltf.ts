@@ -42,6 +42,9 @@ export async function exportWorld(world: THREE.Group): Promise<ArrayBuffer> {
   const hidden: THREE.Object3D[] = [];
   // No material uses a texture, so the UVs are dead weight in the file: taken off for the export.
   const uvs: [THREE.BufferGeometry, THREE.BufferAttribute | THREE.InterleavedBufferAttribute][] = [];
+  // Every palette material is a MeshBasicMaterial, written as KHR_materials_unlit: lighting is ignored, so normals are
+  // dead weight too (a viewer computes flat ones when they are absent, as the glTF spec says). Taken off for the export.
+  const normals: [THREE.BufferGeometry, THREE.BufferAttribute | THREE.InterleavedBufferAttribute][] = [];
   world.traverse((object) => {
     // Building edges are a viewer effect: left out, since `onlyVisible` skips what is hidden.
     if ((object as THREE.LineSegments).isLineSegments && object.visible) {
@@ -53,6 +56,13 @@ export async function exportWorld(world: THREE.Group): Promise<ArrayBuffer> {
     if (geometry && uv && !uvs.some(([g]) => g === geometry)) {
       uvs.push([geometry, uv]);
       geometry.deleteAttribute("uv");
+    }
+    const normal = geometry?.getAttribute("normal");
+    const material = (object as THREE.Mesh).isMesh ? (object as THREE.Mesh).material : undefined;
+    const unlit = Array.isArray(material) ? material.every((m) => (m as THREE.MeshBasicMaterial).isMeshBasicMaterial) : (material as THREE.MeshBasicMaterial | undefined)?.isMeshBasicMaterial;
+    if (geometry && normal && unlit && !normals.some(([g]) => g === geometry)) {
+      normals.push([geometry, normal]);
+      geometry.deleteAttribute("normal");
     }
     original.set(object, object.userData);
     if (object === world) object.userData = meta;
@@ -69,6 +79,7 @@ export async function exportWorld(world: THREE.Group): Promise<ArrayBuffer> {
     original.forEach((userData, object) => (object.userData = userData));
     hidden.forEach((object) => (object.visible = true));
     uvs.forEach(([geometry, uv]) => geometry.setAttribute("uv", uv));
+    normals.forEach(([geometry, normal]) => geometry.setAttribute("normal", normal));
   }
 }
 

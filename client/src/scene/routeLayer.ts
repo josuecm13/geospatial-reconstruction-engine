@@ -5,7 +5,7 @@ import { toLocal, toLonLat } from "./projection";
 import { MATERIALS } from "./palette";
 import { roadPolygon } from "./roadGeometry";
 import { shadeGeometry } from "./shading";
-import { flatTerrain, maxEdgeFor, type Terrain } from "./terrain";
+import { flatTerrain, type Terrain } from "./terrain";
 
 /** Just above the road surfaces (LAYER_Y.roads = 0.05), so the ribbon doesn't z-fight them. */
 export const ROUTE_Y = 0.08;
@@ -89,7 +89,8 @@ export function createRouteLayer(camera: THREE.Camera, canvas: HTMLElement): Rou
       );
       if (!outline.length) return;
       // Lifted vertex by vertex onto the ground, so the route climbs the slope with the roads.
-      const surface = terrain.hasGround ? drapedGeometry([footprintShape(outline)], terrain.heightAtLocal, maxEdgeFor(terrain)) : flatGeometry([footprintShape(outline)]);
+      const gridLines = terrain.gridLines();
+      const surface = gridLines ? drapedGeometry([[outline]], terrain.heightAtLocal, gridLines) : flatGeometry([footprintShape(outline)]);
       ribbon = new THREE.Mesh(surface, MATERIALS.route);
       ribbon.position.y = ROUTE_Y;
       ribbon.name = "route:ribbon";

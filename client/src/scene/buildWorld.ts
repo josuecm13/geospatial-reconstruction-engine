@@ -6,7 +6,7 @@ import { MATERIALS, roadMaterial } from "./palette";
 import { toLocal, type Local } from "./projection";
 import { dedupeTwins, roadPolygon } from "./roadGeometry";
 import { shadeGeometry } from "./shading";
-import { clipPolygonToRect, clipRingToRect, createTerrain, drape, flatTerrain, groundMesh, maxEdgeFor, roadSurface, splitByLines, ringInside, subdivideRing, type RoadMode, type Terrain } from "./terrain";
+import { clipPolygonToRect, clipRingToRect, createTerrain, drape, flatTerrain, groundMesh, roadSurface, splitByLines, ringInside, type RoadMode, type Terrain } from "./terrain";
 
 /** The layer groups of a world, in order. `generated` is reserved for Milestone 11. */
 export const WORLD_GROUPS = ["ground", "area_features", "roads", "blocks", "buildings", "generated"] as const;
@@ -77,15 +77,12 @@ const group = (name: string) => Object.assign(new THREE.Group(), { name });
 export function buildWorld(data: MapData, roadMode: RoadMode = DEFAULT_ROAD_MODE): THREE.Group {
   const projection = data.projection;
   const terrain = data.elevation ? createTerrain(data.elevation, projection) : flatTerrain();
-  const maxEdge = maxEdgeFor(terrain);
   const grid = terrain.extent();
-  /** On terrain, a polygon is cut to the grid before subdividing: past its edge heights only clamp, so the vertices would be wasted. */
+  const gridLines = terrain.gridLines();
+  /** On terrain, a polygon is cut to the grid first: past its edge heights only clamp, so nothing is gained by cutting it further out. */
   const clipped = (polygons: Rings[]): Rings[] => (grid ? polygons.map((rings) => clipPolygonToRect(rings, grid)).filter((rings): rings is Rings => rings !== null) : polygons);
   /** Flat polygons, over the terrain when the area has one. The layer's offset is the mesh's position.y. */
-  const surface = (polygons: Rings[]): THREE.BufferGeometry =>
-    terrain.hasGround
-      ? drapedGeometry(polygons.map((rings) => polygonShape(rings.map((ring) => subdivideRing(ring, maxEdge)))), terrain.heightAtLocal, maxEdge)
-      : flatGeometry(polygons.map(polygonShape));
+  const surface = (polygons: Rings[]): THREE.BufferGeometry => (gridLines ? drapedGeometry(polygons, terrain.heightAtLocal, gridLines) : flatGeometry(polygons.map(polygonShape)));
   const world = group("world");
   world.userData = {
     scope: data.scope,
@@ -128,7 +125,7 @@ export function buildWorld(data: MapData, roadMode: RoadMode = DEFAULT_ROAD_MODE
     const outlines = lines.map((line) => roadPolygon(line, feature.properties.width_meters)).filter((outline) => outline.length);
     if (!outlines.length) continue;
     roadOutlines.push(...outlines);
-    // A road that runs past the grid is cut to it, like the area features, so its subdivision stops there.
+    // A road that runs past the grid is cut to it, like the area features, so its triangles stop there.
     const drawnOutlines = grid ? outlines.map((outline) => (ringInside(outline, grid) ? outline : clipRingToRect(outline, grid))).filter((outline) => outline.length) : outlines;
     if (!drawnOutlines.length) continue;
     // Both stored height arrays stay on the mesh, so the road mode can switch without a rebuild.
@@ -136,11 +133,11 @@ export function buildWorld(data: MapData, roadMode: RoadMode = DEFAULT_ROAD_MODE
       exact: splitByLines(terrain.roadHeights(feature, "exact"), lines),
       smoothed: splitByLines(terrain.roadHeights(feature, "smoothed"), lines),
     };
-    const shapes = drawnOutlines.map(footprintShape);
+    const shapes = gridLines ? [] : drawnOutlines.map(footprintShape);
     const mesh = entity(
       "road",
       feature,
-      terrain.hasGround ? drapedGeometry(shapes, roadSurface(lines, heights[roadMode], terrain.heightAtLocal).at, maxEdge) : flatGeometry(shapes),
+      gridLines ? drapedGeometry(drawnOutlines.map((outline) => [outline]), roadSurface(lines, heights[roadMode], terrain.heightAtLocal).at, gridLines) : flatGeometry(shapes),
       roadMaterial(feature.properties.lane_type),
     );
     if (terrain.hasGround) mesh.userData.drape = { lines, heights };
