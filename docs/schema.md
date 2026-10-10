@@ -307,6 +307,9 @@ Key decisions:
   segment's geometry, so a clipped segment can be re-sampled at its clipped vertices without a second
   lookup.
 
+- **Checks on the grid.** `area_elevation_grids` has `CHECK (rows >= 2 AND cols >= 2)` and
+  `CHECK (octet_length(heights) = rows * cols * 4)`, so a stored grid always matches its declared size.
+
 ## Constraints and indexes
 
 - `UNIQUE (import_area_id, source_id)` on `streets`, `roads`, `navigable_nodes`, `buildings`,
