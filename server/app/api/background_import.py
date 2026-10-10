@@ -117,6 +117,10 @@ def elevation_stage_data(session, area: ImportArea, source: TerrainTilesSource |
     except ElevationUnavailable as exc:
         logger.warning("elevation for area %s unavailable, the import completes flat: %s", area.id, exc)
         error = "elevation_unavailable"
+    except Exception:
+        # Elevation never fails an import: whatever went wrong, the committed import stands.
+        logger.exception("elevation for area %s failed unexpectedly, the import completes flat", area.id)
+        error = "elevation_failed"
     elevation = elevation_out(ElevationRepository(session).get_grid(area.id)) if error is None else None
     return {"projection": projection, "elevation": elevation, "error": error}
 

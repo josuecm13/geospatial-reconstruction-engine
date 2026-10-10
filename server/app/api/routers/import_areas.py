@@ -139,6 +139,9 @@ def create_import_area(
         analyse_elevation(session, named, elevation_source)
     except ElevationUnavailable as exc:
         logger.warning("elevation for area %s unavailable, the import stays flat: %s", named.id, exc)
+    except Exception:
+        # Elevation never fails an import; analyse_elevation already rolled back its own work.
+        logger.exception("elevation for area %s failed unexpectedly, the import stays flat", named.id)
     return import_area_out(
         named, result.block_count, result.linked_building_count, result.skipped_restriction_count,
         result.skipped_feature_count,

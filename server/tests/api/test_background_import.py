@@ -9,7 +9,7 @@ from app.api.dependencies import get_elevation_source, get_import_jobs, get_job_
 from app.ingestion.jobs import ImportJobRegistry
 from app.ingestion.overpass import UpstreamUnavailable
 from app.persistence.block_derivation import BlockDerivationService
-from tests.api.elevation_stubs import DownSource, SlopedSource
+from tests.api.elevation_stubs import BrokenSource, DownSource, SlopedSource
 
 FIXTURE = Path(__file__).parents[1] / "fixtures" / "osm_neighborhood.json"
 BBOX = {"min_latitude": 9.933, "min_longitude": -84.081, "max_latitude": 9.935, "max_longitude": -84.079}
@@ -275,3 +275,24 @@ def test_a_synchronous_import_runs_elevation_and_survives_its_failure(client, in
     again = client.post("/import-areas", json={"bbox": BBOX, "payload": _payload()})
     assert again.status_code == 200
     assert again.json()["id"] == response.json()["id"]
+
+
+def test_an_unexpected_elevation_failure_still_completes_the_import_with_its_data(client, inline):
+    client.app.dependency_overrides[get_elevation_source] = lambda: BrokenSource()
+
+    area_id = _start(client, _payload()).json()["import_area_id"]
+    stage, completed = _elevation_event(client, area_id)
+
+    assert stage["elevation"] is None and stage["error"] == "elevation_failed"
+    assert completed["status"] == "completed"
+    assert client.get(f"/import-areas/{area_id}").json()["status"] == "completed"
+    assert len(client.get(f"/import-areas/{area_id}/map-data").json()["road_segments"]["features"]) == 5
+
+
+def test_a_synchronous_import_survives_an_unexpected_elevation_failure(client, inline):
+    client.app.dependency_overrides[get_elevation_source] = lambda: BrokenSource()
+
+    response = client.post("/import-areas", json={"bbox": BBOX, "payload": _payload()})
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "completed"

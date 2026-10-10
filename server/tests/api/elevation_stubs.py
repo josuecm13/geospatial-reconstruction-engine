@@ -34,3 +34,10 @@ class DownSource:
         from app.ingestion.elevation_source import ElevationUnavailable
 
         raise ElevationUnavailable("terrain tiles are down")
+
+
+class BrokenSource:
+    """A terrain source with a bug: it fails with something other than `ElevationUnavailable`."""
+
+    def fetch_grid(self, bbox: BoundingBox) -> ElevationGrid:
+        raise RuntimeError("the terrain source is broken")
