@@ -50,6 +50,29 @@ export function createTargetEase(instant: () => boolean, durationMs = EASE_MS): 
   };
 }
 
+/** Where the orbit target should go once fly mode is back, decided while walking: the shared pin
+ * (or the centre after "Reset to centre"). A pin set while flying eases at once, so nothing is pending. */
+export interface FlyIntent {
+  /** A pin set (or cleared, giving `centre`) while not flying. */
+  request(pin: Vec3 | null, centre: Vec3): void;
+  /** The pending destination, once; null when there is none. */
+  take(): Vec3 | null;
+}
+
+export function createFlyIntent(): FlyIntent {
+  let pending: Vec3 | null = null;
+  return {
+    request(pin, centre) {
+      pending = pin ?? centre;
+    },
+    take() {
+      const at = pending;
+      pending = null;
+      return at;
+    },
+  };
+}
+
 /** The pin on the ground at local (x, z): its y is the terrain height there (0 on flat ground). */
 export function pinOnTerrain(terrain: Terrain | undefined, x: number, z: number): Vec3 {
   return { x, y: terrain?.heightAtLocal(x, z) ?? 0, z };

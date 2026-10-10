@@ -47,6 +47,8 @@ export function createCameraModes(
   canvas: HTMLElement,
   container: HTMLElement,
   toolbar: HTMLElement = container,
+  /** Called when the user switches from walk back to fly (not when a world change ends a walk), after the camera is restored. */
+  onEnterFly: () => void = () => {},
 ): CameraModes {
   const look = new PointerLockControls(camera, canvas);
   const button = Object.assign(document.createElement("button"), { className: "scene-mode", type: "button", textContent: "Walk", hidden: true });
@@ -89,7 +91,7 @@ export function createCameraModes(
     help.hidden = false;
   };
 
-  const enterFly = () => {
+  const enterFly = (notify = false) => {
     mode = "fly";
     held.clear();
     if (look.isLocked) look.unlock();
@@ -99,9 +101,10 @@ export function createCameraModes(
     orbit.update();
     button.textContent = "Walk";
     help.hidden = true;
+    if (notify) onEnterFly();
   };
 
-  const toggle = () => (mode === "fly" ? enterWalk() : enterFly());
+  const toggle = () => (mode === "fly" ? enterWalk() : enterFly(true));
   button.addEventListener("click", toggle);
   canvas.addEventListener("click", () => {
     if (mode === "walk" && !look.isLocked) look.lock();

@@ -15,6 +15,8 @@ export interface RoutingDeps {
 
 export interface RoutePanel {
   setWorld(world: THREE.Object3D | undefined): void;
+  /** Turns the Route tool off, if it is on. */
+  disarm(): void;
   /** Removes the `window` listener; call when the page is left. */
   dispose(): void;
 }
@@ -36,6 +38,8 @@ export function createRoutePanel(
   canvas: HTMLElement,
   deps: RoutingDeps,
   canPick: () => boolean,
+  /** Called when the Route tool is turned on, so the host can disarm the tools it excludes (Set point). */
+  onEnable: () => void = () => {},
 ): RoutePanel {
   const layer = createRouteLayer(camera, canvas);
   scene.add(layer.root);
@@ -149,7 +153,10 @@ export function createRoutePanel(
   window.addEventListener("keydown", onKeyDown);
   enabled.addEventListener("change", () => {
     canvas.style.cursor = enabled.checked ? "crosshair" : "";
-    if (enabled.checked) void loadStrategies();
+    if (enabled.checked) {
+      onEnable();
+      void loadStrategies();
+    }
     render();
   });
 
@@ -159,6 +166,11 @@ export function createRoutePanel(
       state = IDLE;
       panel.hidden = !world;
       render();
+    },
+    disarm() {
+      if (!enabled.checked) return;
+      enabled.checked = false;
+      enabled.dispatchEvent(new Event("change"));
     },
     dispose() {
       window.removeEventListener("keydown", onKeyDown);

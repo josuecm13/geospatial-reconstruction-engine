@@ -10,7 +10,8 @@ import { createCameraModes } from "../scene/cameraModes";
 import { createFramingPolicy, overview, rectangleOverview } from "../scene/framing";
 import { createExportButton } from "../scene/exportButton";
 import { createPinLayer } from "../scene/pinLayer";
-import { createTargetEase, type Vec3 } from "../scene/pinPoint";
+import { createFlyIntent, createTargetEase, type Vec3 } from "../scene/pinPoint";
+import { createToolGroup } from "../scene/toolGroup";
 import { createTerrainControls, type TerrainDeps } from "../scene/terrainControls";
 import { createRoutePanel, type RoutingDeps } from "../scene/routePanel";
 import type { SceneTarget } from "../scene/sceneLoader";
@@ -90,7 +91,15 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
   // The row of buttons under the layer toggle: Rotate | Download glTF | Walk, right to left.
   const actions = Object.assign(document.createElement("div"), { className: "scene-actions" });
   container.appendChild(actions);
-  const modes = createCameraModes(camera, controls, renderer.domElement, container, actions);
+  // Back from walk to fly, the orbit target eases to the shared pin (or the centre, after a reset in walk mode),
+  // keeping the camera's distance and angle.
+  const flyIntent = createFlyIntent();
+  const modes = createCameraModes(camera, controls, renderer.domElement, container, actions, () => {
+    const destination = flyIntent.take();
+    if (!destination) return;
+    easeOffset.subVectors(camera.position, controls.target);
+    ease.start({ x: controls.target.x, y: controls.target.y, z: controls.target.z }, destination);
+  });
   // Turntable rotation in fly mode; never during a staged build (the waiting wireframe spins).
   const rotate = createAutoRotate(!prefersReducedMotion());
   controls.autoRotateSpeed = ROTATE_SPEED;
@@ -105,7 +114,11 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
   let building = false;
   const clock = new THREE.Clock();
   // Route between two picked points (routePanel.ts); clicks only pick while flying.
-  const routes = routing && createRoutePanel(container, scene, camera, renderer.domElement, routing, () => modes.mode === "fly");
+  // Set point and Route both turn clicks into picks, so arming one disarms the other.
+  const tools = createToolGroup();
+  const armRoute = tools.join("route", () => routes?.disarm());
+  const armPin = tools.join("pin", () => pins.disarm());
+  const routes = routing && createRoutePanel(container, scene, camera, renderer.domElement, routing, () => modes.mode === "fly", armRoute);
 
   // Set point: the pin the orbit target eases to (keeping the camera's offset), and walk mode starts at.
   // The area's centre is where "Reset to centre" goes back to.
@@ -119,11 +132,12 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
     actions,
     (pin) => {
       modes.setPin(pin);
-      if (modes.mode !== "fly") return;
+      // The pin is one point for both modes: set while walking, it waits for the return to fly.
+      if (modes.mode !== "fly") return flyIntent.request(pin, centre);
       easeOffset.subVectors(camera.position, controls.target);
       ease.start({ x: controls.target.x, y: controls.target.y, z: controls.target.z }, pin ?? centre);
     },
-    () => modes.mode === "fly",
+    armPin,
   );
 
   const exporter = createExportButton(actions);
@@ -180,6 +194,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
       showTerrain(data);
       terrainControls?.setWorld(!data.elevation);
       modes.setWorld(world);
+      flyIntent.take(); // a pin from the old world is gone
       pins.setWorld(world);
       routes?.setWorld(world);
       exporter.setWorld(world);
@@ -205,6 +220,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
     beginStaged(bbox) {
       removeWorld();
       modes.setWorld(undefined);
+      flyIntent.take(); // a pin from the old world is gone
       pins.setWorld(undefined);
       routes?.setWorld(undefined);
       exporter.setWorld(undefined);
@@ -246,6 +262,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
       framing.reset();
       removeWorld();
       modes.setWorld(undefined);
+      flyIntent.take(); // a pin from the old world is gone
       pins.setWorld(undefined);
       routes?.setWorld(undefined);
       exporter.setWorld(undefined);

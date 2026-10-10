@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildFootprintIndex } from "./collision";
-import { createTargetEase, easeInOut, easeTarget, nearestOpenPoint, pinOnTerrain, walkStart } from "./pinPoint";
+import { createFlyIntent, createTargetEase, easeInOut, easeTarget, nearestOpenPoint, pinOnTerrain, walkStart } from "./pinPoint";
 import { flatTerrain, type Terrain } from "./terrain";
 
 const square = [
@@ -41,6 +41,27 @@ describe("easing", () => {
     ease.start({ x: 0, y: 0, z: 0 }, { x: 8, y: 1, z: 2 });
     expect(ease.step(0)).toEqual({ x: 8, y: 1, z: 2 });
     expect(ease.step(16)).toBeNull();
+  });
+});
+
+describe("createFlyIntent", () => {
+  const centre = { x: 0, y: 0, z: 0 };
+  const pin = { x: 5, y: 1, z: 5 };
+
+  it("holds the latest pin set while walking, once", () => {
+    const intent = createFlyIntent();
+    expect(intent.take()).toBeNull();
+    intent.request({ x: 1, y: 0, z: 1 }, centre);
+    intent.request(pin, centre);
+    expect(intent.take()).toBe(pin);
+    expect(intent.take()).toBeNull();
+  });
+
+  it("holds the centre after a reset", () => {
+    const intent = createFlyIntent();
+    intent.request(pin, centre);
+    intent.request(null, centre);
+    expect(intent.take()).toBe(centre);
   });
 });
 
