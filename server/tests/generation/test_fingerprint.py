@@ -196,3 +196,29 @@ def test_a_building_belongs_to_the_nearest_of_several_rings():
     assert measurement.frontage_m == pytest.approx(320.0, abs=0.01)
     assert [measure.edge_index for measure in measurement.measures] == [1]
     assert measurement.coverage == pytest.approx(10 / 320, abs=0.001)
+
+
+def test_a_through_block_building_is_two_frontage_runs_not_one_giant_one():
+    block = _block(100, 60)
+    through = _house(40, 2, 70, 58)  # runs the whole depth of the block, fronting both long sides
+
+    measurement = measure_block(block, [through])
+
+    assert measurement is not None
+    (measure,) = measurement.measures
+    assert len(measure.runs) == 2
+    assert measure.width_m == pytest.approx(30.0, abs=0.01)  # its frontage on one street, not half the ring
+    assert measure.front_setback_m == pytest.approx(2.0, abs=0.01)
+    assert measurement.coverage == pytest.approx(60 / 320, abs=0.001)  # both long sides, neither short end
+
+
+def test_a_deep_house_near_a_corner_is_one_run_on_its_own_street():
+    block = _block(100, 40)
+
+    measurement = measure_block(block, [_house(10, 3, 16, 11)])
+
+    assert measurement is not None
+    (measure,) = measurement.measures
+    assert len(measure.runs) == 1
+    assert measure.width_m == pytest.approx(6.0, abs=0.01)
+    assert measurement.coverage == pytest.approx(6 / 280, abs=0.001)

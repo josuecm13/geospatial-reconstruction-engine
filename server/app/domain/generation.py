@@ -115,7 +115,8 @@ class Fingerprint:
 class BuildingMeasure:
     """One real building against its nearest frontage ring (`edge_index` is the ring's index).
     `start_m` and `end_m` are its extent along that ring, measured from the ring's start; `end_m`
-    runs past the ring's length when the building straddles the start."""
+    runs past the ring's length when the building straddles the start. They are the building's
+    longest frontage run; `runs` holds every run (a through-block building fronts two streets)."""
 
     edge_index: int
     start_m: float
@@ -125,6 +126,7 @@ class BuildingMeasure:
     front_setback_m: float
     area_square_meters: float
     levels: int | None
+    runs: tuple[tuple[float, float], ...] = ()
 
 
 def median(values: Sequence[float]) -> float:

@@ -27,7 +27,10 @@ from app.generation.geometry import multipolygon_to_local, polygon_to_local, pol
 
 _MIN_EDGE_METERS = 1e-6
 _DENSIFY_METERS = 1.0
-_FRONT_MIN_BAND_METERS = 2.0
+# Outline points within this of the building's nearest approach to the ring face the street.
+_FRONT_BAND_METERS = 5.0
+# Projected points farther apart than this along the ring start a new run.
+_RUN_BREAK_METERS = 5.0
 _TANGENT_HALF_SPAN_METERS = 0.5
 # A building farther than this from the curb line is interior, not frontage.
 _FRONTAGE_REACH_METERS = 25.0
@@ -85,37 +88,47 @@ def frontage_length(edges: Sequence[Edge]) -> float:
     return sum(edge.length for edge in edges)
 
 
-def _arc_along(ring: LineString, footprint: ShapelyPolygon) -> tuple[float, float]:
-    """The footprint's (start, width) along the closed `ring`: the smallest arc holding the
-    projection of its street-facing outline. The outline is densified first so the largest gap
-    between projections is the stretch the building does not cover, whatever its length against the
-    ring's. Only the front half of the outline (by distance to the ring) is projected: a far corner
-    of a deep building can sit nearer to a different stretch of the ring and would drag the arc
-    round a corner the building does not face."""
+def _runs_along(ring: LineString, footprint: ShapelyPolygon, near: float) -> list[tuple[float, float]]:
+    """The footprint's frontage runs along the closed `ring`, as (start, end) with start in
+    [0, length) and end past the length when a run straddles the ring's start. The outline is
+    densified, only points within `_FRONT_BAND_METERS` of its nearest approach to the ring are
+    projected (so the far corner of a deep house near a street corner stays out), and the sorted
+    positions are cut into runs wherever neighbours are more than `_RUN_BREAK_METERS` apart, round
+    the ring's start included. A corner building is one run; a through-block building is two."""
     length = ring.length
     outline = [Point(x, y) for x, y in shapely.segmentize(footprint.exterior, _DENSIFY_METERS).coords]
-    distances = [ring.distance(point) for point in outline]
-    near, far = min(distances), max(distances)
-    reach = near + max(_FRONT_MIN_BAND_METERS, (far - near) / 2)
     positions = sorted(
-        ring.project(point) % length for point, distance in zip(outline, distances) if distance <= reach
+        ring.project(point) % length for point in outline if ring.distance(point) <= near + _FRONT_BAND_METERS
     )
-    gaps = [(positions[index + 1] - positions[index], index) for index in range(len(positions) - 1)]
-    gaps.append((positions[0] + length - positions[-1], len(positions) - 1))
-    gap, index = max(gaps)  # the lowest index on a tie
-    start = positions[(index + 1) % len(positions)]
-    return start, length - gap
+    count = len(positions)
+    gaps = [positions[(index + 1) % count] - positions[index] + (length if index == count - 1 else 0.0) for index in range(count)]
+    breaks = [index for index, gap in enumerate(gaps) if gap > _RUN_BREAK_METERS]
+    if not breaks:
+        return [(0.0, length)]
+    runs = []
+    for position, index in enumerate(breaks):
+        first = (index + 1) % count  # the run begins after a break
+        last = breaks[(position + 1) % len(breaks)]
+        start, end = positions[first], positions[last]
+        if end < start or (end == start and first != last):
+            end += length
+        runs.append((start, end))
+    return runs
 
 
 def measure_building(footprint: ShapelyPolygon, rings: Sequence[LineString], levels: int | None = None) -> BuildingMeasure:
-    """`footprint` against the nearest frontage ring (the lowest index on a tie). `start_m` is where
-    the building begins along that ring and `end_m` is `start_m + width_m`, so it runs past the
-    ring's length when the building straddles the ring's start. `front_setback_m` is the distance to
-    the ring, and `depth_m` the extent across the ring at the middle of the interval."""
+    """`footprint` against the nearest frontage ring (the lowest index on a tie). `runs` are its
+    stretches along that ring; `start_m`, `end_m` and `width_m` describe the longest, its main
+    frontage (`end_m` runs past the ring's length when it straddles the ring's start).
+    `front_setback_m` is the distance to the ring, and `depth_m` the extent across the ring at the
+    middle of the main run."""
     ring_index = min(range(len(rings)), key=lambda index: (footprint.distance(rings[index]), index))
     ring = rings[ring_index]
     length = ring.length
-    start, width = _arc_along(ring, footprint)
+    setback = footprint.distance(ring)
+    runs = _runs_along(ring, footprint, setback)
+    start, end = max(runs, key=lambda run: run[1] - run[0])
+    width = end - start
     middle = (start + width / 2) % length
     before = ring.interpolate((middle - _TANGENT_HALF_SPAN_METERS) % length)
     after = ring.interpolate((middle + _TANGENT_HALF_SPAN_METERS) % length)
@@ -130,12 +143,13 @@ def measure_building(footprint: ShapelyPolygon, rings: Sequence[LineString], lev
     return BuildingMeasure(
         edge_index=ring_index,
         start_m=start,
-        end_m=start + width,
+        end_m=end,
         width_m=width,
         depth_m=depth,
-        front_setback_m=footprint.distance(ring),
+        front_setback_m=setback,
         area_square_meters=footprint.area,
         levels=levels,
+        runs=tuple(runs),
     )
 
 
@@ -169,9 +183,10 @@ def measure_block(
     for index, ring in enumerate(rings):
         length = ring.length
         arcs = sorted(
-            (measure.start_m, measure.end_m)
+            run
             for measure in measures
             if measure.edge_index == index and measure.front_setback_m <= _FRONTAGE_REACH_METERS
+            for run in (measure.runs or ((measure.start_m, measure.end_m),))
         )
         if len(arcs) > 1:
             reached = arcs[0][1]
