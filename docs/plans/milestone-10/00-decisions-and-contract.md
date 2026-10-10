@@ -116,8 +116,9 @@ without changing them.
 - `409 import_area_not_ready` when the area isn't `completed`.
 - `409 import_in_progress` when a job for the area is running. That's the same registry and the
   same error as imports.
-- `503 elevation_unavailable` only for the synchronous case below. In the background, a source
-  failure is a `failed` event with code `elevation_unavailable`.
+- `503 elevation_unavailable` at once, with no job started, when elevation is disabled
+  (`ELEVATION_URL=off`). In the background, a source failure is a `failed` event with code
+  `elevation_unavailable`.
 
 **Background import stages**: a new stage, `elevation`, runs after the import has committed and
 the area is named, and before `completed`.

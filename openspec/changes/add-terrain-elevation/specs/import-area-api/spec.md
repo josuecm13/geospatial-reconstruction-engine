@@ -31,7 +31,7 @@ Building features SHALL carry `base_elevation_meters`, a number or null when the
 - **THEN** the arrays have one value per vertex of the clipped geometry, sampled from the stored grid at those vertices
 
 ### Requirement: The API SHALL re-analyse an import area's elevation in the background
-`POST /import-areas/{id}/elevation` SHALL start a background re-analysis of a completed import area and SHALL answer 202 with `import_area_id` and `events_url` (`/import-areas/{id}/events`), in the same shape as a background import. The re-analysis SHALL publish one `elevation` event, then `completed` or `failed`, on the area's existing event stream. A source failure during the re-analysis SHALL be a `failed` event with code `elevation_unavailable`. The request SHALL fail with 404 `import_area_not_found` when the area does not exist, with 409 `import_area_not_ready` when the area is not `completed`, and with 409 `import_in_progress` when a job for the area is running, using the same registry and error as imports.
+`POST /import-areas/{id}/elevation` SHALL start a background re-analysis of a completed import area and SHALL answer 202 with `import_area_id` and `events_url` (`/import-areas/{id}/events`), in the same shape as a background import. The re-analysis SHALL publish one `elevation` event, then `completed` or `failed`, on the area's existing event stream. A source failure during the re-analysis SHALL be a `failed` event with code `elevation_unavailable`. The request SHALL fail with 404 `import_area_not_found` when the area does not exist, with 409 `import_area_not_ready` when the area is not `completed`, and with 409 `import_in_progress` when a job for the area is running, using the same registry and error as imports. When elevation is disabled (`ELEVATION_URL=off`), the request SHALL fail at once with 503 `elevation_unavailable` and start no job.
 
 #### Scenario: Re-analysing a completed area
 - **WHEN** a client posts to `/import-areas/{id}/elevation` for a completed area with no running job
@@ -49,6 +49,6 @@ Building features SHALL carry `base_elevation_meters`, a number or null when the
 - **WHEN** a client posts to `/import-areas/{id}/elevation` while an import or re-analysis job for the area is running
 - **THEN** the API answers 409 with code `import_in_progress`
 
-#### Scenario: The source is unavailable in the synchronous case
-- **WHEN** an elevation analysis run synchronously cannot reach the terrain source
-- **THEN** the API answers 503 with code `elevation_unavailable`, and no stored grid or derived height changes
+#### Scenario: Elevation is disabled
+- **WHEN** a client posts to `/import-areas/{id}/elevation` while elevation is disabled
+- **THEN** the API answers 503 with code `elevation_unavailable`, no job starts, and no stored grid or derived height changes
