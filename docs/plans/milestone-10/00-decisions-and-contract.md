@@ -126,6 +126,8 @@ the area is named, and before `completed`.
   "error": null | "<code>"}`.
 - On a source failure, the stage still emits with `elevation: null` and `error:
   "elevation_unavailable"`, and the import completes.
+- On any other error in the elevation step, the stage emits `elevation: null` and `error:
+  "elevation_failed"` (the error is logged), and the import still completes.
 - The client's `IMPORT_STAGES` becomes
   `["fetched", "ground", "roads", "blocks", "buildings", "elevation", "generated", "completed", "failed"]`.
 
