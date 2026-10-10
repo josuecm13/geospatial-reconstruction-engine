@@ -34,7 +34,7 @@ class TracedBoundary:
 def validate_traced_boundary(name: str, polygon: Polygon, bbox: BoundingBox) -> str:
     """Raises `InvalidTracedBoundary` for the first rule the boundary breaks, and returns the
     stripped name. Geometry is treated as planar on longitude/latitude, as PostGIS does for
-    SRID 4326, which is accurate at the ≤ 1 km scale of an import area."""
+    SRID 4326, which is accurate to well under a metre across an import area of up to 10 km²."""
     stripped = name.strip()
     if not stripped:
         raise InvalidTracedBoundary("blank_name", "boundary name must not be blank")

@@ -218,7 +218,7 @@ Key decisions:
   as `NULL` and never fails an import. CHECKs keep `height_meters > 0` and `levels >= 0`.
   Estimating a height from levels is inference and belongs to generated content (Milestone 11).
 - **`buildings.block_id` is nullable and denormalized.** Set via `ST_Contains(block.boundary,
-  building.geom)` at derivation time. A building near the 1 km bbox edge may sit in a
+  building.geom)` at derivation time. A building near the bbox edge may sit in a
   partially-captured block whose enclosing loop wasn't fully imported — that is a legitimate
   "unknown," not an error.
 

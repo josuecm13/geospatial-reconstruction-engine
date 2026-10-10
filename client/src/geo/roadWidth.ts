@@ -7,7 +7,7 @@ export function metersPerPixel(zoom: number, latitude: number): number {
 
 /**
  * A MapLibre `line-width` expression that draws each road at its generated `width_meters` on the
- * ground, at every zoom, for an area around `latitude` (1 km boxes make one latitude exact enough).
+ * ground, at every zoom, for an area around `latitude` (an import area spans a few km at most, so one latitude is exact enough).
  * Pixel width doubles per zoom level, so an exponential base-2 interpolation between two stops is exact.
  */
 export function roadWidthExpression(latitude: number, minPixels = 1): unknown[] {
