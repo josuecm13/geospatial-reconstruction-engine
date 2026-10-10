@@ -217,6 +217,12 @@ describe("generation", () => {
     await expect(missing.client.generation("a1")).rejects.toMatchObject({ status: 404, code: "generation_not_found" });
   });
 
+  it("surfaces import_in_progress when deleting a run while a job runs", async () => {
+    const { client } = recording(json(409, { error: { code: "import_in_progress", message: "running", details: null } }));
+
+    await expect(client.deleteGeneration("a1")).rejects.toMatchObject({ status: 409, code: "import_in_progress" });
+  });
+
   it("deletes the run and returns nothing for a 204", async () => {
     const { client, calls } = recording(new Response(null, { status: 204 }));
 
@@ -249,12 +255,11 @@ describe("block feedback", () => {
     await expect(missing.client.deleteBlockFeedback("b1")).rejects.toMatchObject({ status: 404, code: "feedback_not_found" });
   });
 
-  it("lists an area's feedback, from a bare array or a wrapped one", async () => {
-    const entry = { block_id: "b1", building_count: null, no_buildings: true, updated_at: "t", orphaned: false };
+  it("lists an area's feedback from the wrapping object", async () => {
+    const entry = { block_id: "b1", import_area_id: "a1", building_count: null, no_buildings: true, updated_at: "t", orphaned: false };
+    const { client, calls } = recording(json(200, { feedback: [entry] }));
 
-    const bare = recording(json(200, [entry]));
-    await expect(bare.client.areaFeedback("a1")).resolves.toEqual([entry]);
-    expect(bare.calls[0].url).toBe("/api/import-areas/a1/feedback");
-    await expect(recording(json(200, { feedback: [entry] })).client.areaFeedback("a1")).resolves.toEqual([entry]);
+    await expect(client.areaFeedback("a1")).resolves.toEqual([entry]);
+    expect(calls[0].url).toBe("/api/import-areas/a1/feedback");
   });
 });

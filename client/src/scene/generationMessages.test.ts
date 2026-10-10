@@ -60,8 +60,8 @@ describe("generateButtonState", () => {
 
 describe("generationProgressText", () => {
   it("names the block count when known", () => {
-    expect(generationProgressText(57)).toBe("Generating buildings on 57 blocks…");
-    expect(generationProgressText(1)).toBe("Generating buildings on 1 block…");
+    expect(generationProgressText(57)).toBe("Generating buildings on 57 eligible blocks…");
+    expect(generationProgressText(1)).toBe("Generating buildings on 1 eligible block…");
     expect(generationProgressText(null)).toBe("Generating buildings…");
   });
 });

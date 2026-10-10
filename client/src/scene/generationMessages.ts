@@ -36,7 +36,7 @@ export function generateButtonState(run: GenerationRun | null): { label: string;
 
 /** The status line while a run is going. */
 export const generationProgressText = (blockCount: number | null): string =>
-  blockCount == null ? "Generating buildings…" : `Generating buildings on ${blockCount} ${blockCount === 1 ? "block" : "blocks"}…`;
+  blockCount == null ? "Generating buildings…" : `Generating buildings on ${blockCount} eligible ${blockCount === 1 ? "block" : "blocks"}…`;
 
 const short = (id: string) => id.slice(0, 8);
 

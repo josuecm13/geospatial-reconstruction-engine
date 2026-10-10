@@ -143,6 +143,7 @@ export interface GenerationRun {
   algorithm_version: string;
   created_at: string;
   building_count: number;
+  /** Blocks that got at least one building: can be lower than `eligible_block_count`. */
   block_count: number;
   eligible_block_count: number;
   stale: boolean;
@@ -154,9 +155,14 @@ export interface GenerationRun {
 /** The body of `PUT /blocks/{id}/feedback`: exactly one of the two. */
 export type BlockFeedbackBody = { building_count: number } | { no_buildings: true };
 
-/** An entry of `GET /import-areas/{id}/feedback`. */
-export interface AreaFeedbackEntry extends BlockFeedback {
+/** What `PUT /blocks/{id}/feedback` returns: the stored feedback and whose it is. */
+export interface StoredFeedback extends BlockFeedback {
   block_id: string;
+  import_area_id: string;
+}
+
+/** An entry of `GET /import-areas/{id}/feedback`. */
+export interface AreaFeedbackEntry extends StoredFeedback {
   /** True when its block no longer exists. */
   orphaned: boolean;
 }

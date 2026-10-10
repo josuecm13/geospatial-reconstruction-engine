@@ -1,8 +1,8 @@
 import { API_PREFIX } from "../../devServer";
 import type {
   AreaFeedbackEntry,
-  BlockFeedback,
   BlockFeedbackBody,
+  StoredFeedback,
   BoundaryProperties,
   BoundingBox,
   Coordinate,
@@ -131,12 +131,13 @@ export class ApiClient {
     return this.request("GET", `/import-areas/${encodeURIComponent(areaId)}/generation`);
   }
 
+  /** 404 `generation_not_found`; 409 `import_in_progress` while a job for the area runs. */
   deleteGeneration(areaId: string): Promise<void> {
     return this.request("DELETE", `/import-areas/${encodeURIComponent(areaId)}/generation`);
   }
 
   /** Records how many buildings a block should have (or that it has none); applies on the next generation. */
-  putBlockFeedback(blockId: string, body: BlockFeedbackBody): Promise<BlockFeedback> {
+  putBlockFeedback(blockId: string, body: BlockFeedbackBody): Promise<StoredFeedback> {
     return this.request("PUT", `/blocks/${encodeURIComponent(blockId)}/feedback`, body);
   }
 
@@ -144,10 +145,9 @@ export class ApiClient {
     return this.request("DELETE", `/blocks/${encodeURIComponent(blockId)}/feedback`);
   }
 
-  /** The area's feedback; an entry whose block is gone is `orphaned`. The contract doesn't fix the list's envelope, so a bare array and `{feedback: [...]}` both read. */
+  /** The area's feedback (`{feedback: [...]}` on the wire); an entry whose block is gone is `orphaned`. */
   async areaFeedback(areaId: string): Promise<AreaFeedbackEntry[]> {
-    const body = await this.request<AreaFeedbackEntry[] | { feedback: AreaFeedbackEntry[] }>("GET", `/import-areas/${encodeURIComponent(areaId)}/feedback`);
-    return Array.isArray(body) ? body : body.feedback;
+    return (await this.request<{ feedback: AreaFeedbackEntry[] }>("GET", `/import-areas/${encodeURIComponent(areaId)}/feedback`)).feedback;
   }
 
   route(areaId: string, origin: Coordinate, destination: Coordinate, strategy?: string): Promise<Route> {
