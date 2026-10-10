@@ -45,7 +45,7 @@ def test_height_at_is_row_major_from_the_south_west():
 def test_sample_is_bilinear_and_exact_at_grid_points():
     g = grid(3, 3, lambda r, c: 2.0 * c + 10.0 * r)  # a plane
 
-    assert g.sample(at(1, 2)) == pytest.approx(22.0)
+    assert g.sample(at(1, 2)) == pytest.approx(14.0)  # 2 * 2 + 10 * 1
     assert g.sample(Coordinate(10.0005, 20.0015)) == pytest.approx(0.5 * 10 + 1.5 * 2)
     # The mean of four corners that aren't a plane.
     saddle = ElevationGrid(ORIGIN, STEP, STEP, 2, 2, (0.0, 4.0, 8.0, 0.0))
