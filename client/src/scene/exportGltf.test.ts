@@ -33,10 +33,11 @@ const data: MapData = {
     },
   ]),
   buildings: fc([
-    { type: "Feature", id: "bu1", geometry: { type: "Polygon", coordinates: square(-84, 10.0002) }, properties: { category: "house", block_id: null, height_meters: 12, levels: null, import_area_id: "area-1" } },
+    { type: "Feature", id: "bu1", geometry: { type: "Polygon", coordinates: square(-84, 10.0002) }, properties: { category: "house", block_id: null, height_meters: 12, levels: null, import_area_id: "area-1", base_elevation_meters: null } },
   ]),
   pois: fc([]),
   area_features: fc([]),
+  elevation: null,
 };
 
 /** The glTF JSON chunk of a .glb: a 12-byte header, then the chunk length (4), type (4), and data. */

@@ -102,6 +102,11 @@ export class ApiClient {
     return this.request("DELETE", `/import-areas/${encodeURIComponent(areaId)}`);
   }
 
+  /** Re-analyses an area's terrain in the background; its progress streams on `importEvents`. */
+  analyseElevation(areaId: string): Promise<ImportStarted> {
+    return this.request("POST", `/import-areas/${encodeURIComponent(areaId)}/elevation`);
+  }
+
   route(areaId: string, origin: Coordinate, destination: Coordinate, strategy?: string): Promise<Route> {
     return this.request("POST", `/import-areas/${encodeURIComponent(areaId)}/routes`, {
       origin,

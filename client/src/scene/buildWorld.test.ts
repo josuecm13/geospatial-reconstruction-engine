@@ -31,13 +31,14 @@ const data: MapData = {
     },
   ]),
   buildings: fc([
-    { type: "Feature", id: "bu1", geometry: { type: "Polygon", coordinates: square(-84, 10.0002) }, properties: { category: "house", block_id: null, height_meters: null, levels: null, import_area_id: "area-1" } },
-    { type: "Feature", id: "bu2", geometry: { type: "Polygon", coordinates: square(-84, 10.0004) }, properties: { category: "house", block_id: null, height_meters: 12, levels: null, import_area_id: "area-1" } },
+    { type: "Feature", id: "bu1", geometry: { type: "Polygon", coordinates: square(-84, 10.0002) }, properties: { category: "house", block_id: null, height_meters: null, levels: null, import_area_id: "area-1", base_elevation_meters: null } },
+    { type: "Feature", id: "bu2", geometry: { type: "Polygon", coordinates: square(-84, 10.0004) }, properties: { category: "house", block_id: null, height_meters: 12, levels: null, import_area_id: "area-1", base_elevation_meters: null } },
   ]),
   pois: fc([]),
   area_features: fc([{ type: "Feature", id: "a1", geometry: { type: "Polygon", coordinates: square(-84, 9.9998) }, properties: { kind: "water", import_area_id: "area-1" } },
     { type: "Feature", id: "a2", geometry: { type: "Polygon", coordinates: square(-84, 9.9996) }, properties: { kind: "park", import_area_id: "area-1" } },
   ]),
+  elevation: null,
 };
 
 describe("buildWorld", () => {
