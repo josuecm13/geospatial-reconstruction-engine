@@ -18,6 +18,8 @@ export const COLORS = {
   route: "#ff6b3d",
   origin: "#e8e4dc",
   destination: "#ff6b3d",
+  // The Set point pin and its ground ring.
+  pin: "#ffd166",
   // The waiting wireframe of a staged build.
   waiting: "#8e959c",
   // The pale outline of each building's edges.
@@ -51,6 +53,8 @@ export const MATERIALS = {
   route: flat(COLORS.route, { side: THREE.DoubleSide }),
   origin: flat(COLORS.origin),
   destination: flat(COLORS.destination),
+  pin: flat(COLORS.pin),
+  pinRing: decal(COLORS.pin, { side: THREE.DoubleSide, transparent: true, opacity: 0.8 }),
   // A wireframe, not faces: no shade.
   waiting: new THREE.MeshBasicMaterial({ color: COLORS.waiting, wireframe: true }),
   // Building edge lines, shared by every building: lines, so no shade.

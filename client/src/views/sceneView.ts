@@ -9,6 +9,8 @@ import { createAutoRotate, ROTATE_SPEED } from "../scene/autoRotate";
 import { createCameraModes } from "../scene/cameraModes";
 import { createFramingPolicy, overview, rectangleOverview } from "../scene/framing";
 import { createExportButton } from "../scene/exportButton";
+import { createPinLayer } from "../scene/pinLayer";
+import { createTargetEase, type Vec3 } from "../scene/pinPoint";
 import { createTerrainControls, type TerrainDeps } from "../scene/terrainControls";
 import { createRoutePanel, type RoutingDeps } from "../scene/routePanel";
 import type { SceneTarget } from "../scene/sceneLoader";
@@ -84,6 +86,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
   camera.position.set(0, 400, 500);
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.maxPolarAngle = Math.PI / 2.1;
+  controls.zoomToCursor = true;
   // The row of buttons under the layer toggle: Rotate | Download glTF | Walk, right to left.
   const actions = Object.assign(document.createElement("div"), { className: "scene-actions" });
   container.appendChild(actions);
@@ -103,6 +106,25 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
   const clock = new THREE.Clock();
   // Route between two picked points (routePanel.ts); clicks only pick while flying.
   const routes = routing && createRoutePanel(container, scene, camera, renderer.domElement, routing, () => modes.mode === "fly");
+
+  // Set point: the pin the orbit target eases to (keeping the camera's offset), and walk mode starts at.
+  // The area's centre is where "Reset to centre" goes back to.
+  const ease = createTargetEase(prefersReducedMotion);
+  const easeOffset = new THREE.Vector3();
+  let centre: Vec3 = { x: 0, y: 0, z: 0 };
+  const pins = createPinLayer(
+    scene,
+    camera,
+    renderer.domElement,
+    actions,
+    (pin) => {
+      modes.setPin(pin);
+      if (modes.mode !== "fly") return;
+      easeOffset.subVectors(camera.position, controls.target);
+      ease.start({ x: controls.target.x, y: controls.target.y, z: controls.target.z }, pin ?? centre);
+    },
+    () => modes.mode === "fly",
+  );
 
   const exporter = createExportButton(actions);
   const terrainControls = terrain && createTerrainControls(actions, container, terrain);
@@ -133,6 +155,11 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
     const context = { fly: modes.mode === "fly", world: !!world, building };
     const turning = rotate.update(delta, context);
     if (context.fly) {
+      const eased = ease.step(delta * 1000);
+      if (eased) {
+        controls.target.set(eased.x, eased.y, eased.z);
+        camera.position.copy(controls.target).add(easeOffset);
+      }
       controls.autoRotate = turning;
       controls.update(delta);
     }
@@ -153,6 +180,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
       showTerrain(data);
       terrainControls?.setWorld(!data.elevation);
       modes.setWorld(world);
+      pins.setWorld(world);
       routes?.setWorld(world);
       exporter.setWorld(world);
       scene.remove(placeholder);
@@ -162,6 +190,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
       // Frame the whole world from a raised, angled viewpoint, unless the user moved the camera
       // during the staged build that this world finishes.
       const view = overview(new THREE.Box3().setFromObject(world));
+      centre = { x: view.target.x, y: view.target.y, z: view.target.z };
       if (framing.shouldFrame()) {
         camera.far = view.far;
         controls.target.copy(view.target);
@@ -176,6 +205,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
     beginStaged(bbox) {
       removeWorld();
       modes.setWorld(undefined);
+      pins.setWorld(undefined);
       routes?.setWorld(undefined);
       exporter.setWorld(undefined);
       framing.stagedStarted();
@@ -216,6 +246,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
       framing.reset();
       removeWorld();
       modes.setWorld(undefined);
+      pins.setWorld(undefined);
       routes?.setWorld(undefined);
       exporter.setWorld(undefined);
       scene.add(placeholder);
@@ -232,6 +263,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
     shown() {
       resize();
       modes.setActive(true);
+      pins.setActive(true);
       if (!running) {
         clock.getDelta();
         running = true;
@@ -241,10 +273,12 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
     hidden() {
       running = false;
       modes.setActive(false);
+      pins.setActive(false);
     },
     dispose() {
       running = false;
       modes.setActive(false);
+      pins.dispose();
       observer.disconnect();
       modes.dispose();
       routes?.dispose();

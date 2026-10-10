@@ -143,7 +143,7 @@ body:has(#map-view[hidden]) .panel { display: none; }
 }
 .scene-toggle[hidden] { display: none; }
 .scene-actions { position: absolute; top: 48px; right: 12px; display: flex; flex-direction: row-reverse; gap: 8px; }
-.scene-mode, .scene-rotate, .scene-terrain {
+.scene-mode, .scene-rotate, .scene-terrain, .scene-pin {
   padding: 7px 12px; border: 1px solid var(--border); border-radius: 8px; text-box: trim-both cap alphabetic;
   background: transparent; color: var(--text); font-size: 13px; cursor: pointer;
 }
@@ -160,7 +160,7 @@ body:has(#map-view[hidden]) .panel { display: none; }
 .route-output { margin-top: 4px; }
 .route-error { color: var(--danger); }
 .route-warning { color: var(--warning); }
-.scene-rotate[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.scene-rotate[aria-pressed="true"], .scene-pin[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); }
 .scene-rotate:disabled, .scene-terrain:disabled { opacity: 0.5; cursor: default; }
 /* The terrain credit and the "Add terrain" progress line sit along the bottom of the scene, clear of the build label (centre) and Skip (right). */
 .scene-attribution, .scene-terrain-note {
@@ -671,12 +671,12 @@ main > .page.landing { padding: var(--header-height) 0 0; background: var(--bg);
 .feature-popup { padding: 10px 28px 10px 14px; font-size: 13px; }
 
 /* Buttons in the overlays: ghost by default, --accent for the primary one, hover and pressed steps from color-mix. */
-.panel button:not(.link):hover, .scene-mode:hover, .scene-rotate:hover, .scene-terrain:hover, .scene-export:hover { background: color-mix(in oklch, var(--text) 9%, transparent); }
-.panel button:not(.link):active, .scene-mode:active, .scene-rotate:active, .scene-terrain:active, .scene-export:active { background: color-mix(in oklch, var(--text) 16%, transparent); }
+.panel button:not(.link):hover, .scene-mode:hover, .scene-rotate:hover, .scene-terrain:hover, .scene-pin:hover, .scene-export:hover { background: color-mix(in oklch, var(--text) 9%, transparent); }
+.panel button:not(.link):active, .scene-mode:active, .scene-rotate:active, .scene-terrain:active, .scene-pin:active, .scene-export:active { background: color-mix(in oklch, var(--text) 16%, transparent); }
 .panel button.primary:hover, .scene-rotate[aria-pressed="true"]:hover { background: color-mix(in oklch, var(--accent) 85%, var(--text)); }
 .panel button.primary:active, .scene-rotate[aria-pressed="true"]:active { background: color-mix(in oklch, var(--accent) 80%, var(--bg)); }
 .panel button:disabled:hover, .scene-rotate:disabled:hover, .scene-terrain:disabled:hover, .scene-export:disabled:hover { background: transparent; }
-.panel button:focus-visible, .scene-mode:focus-visible, .scene-rotate:focus-visible, .scene-terrain:focus-visible, .scene-export:focus-visible { outline: 2px solid color-mix(in oklch, var(--accent) 80%, transparent); outline-offset: 1px; }
+.panel button:focus-visible, .scene-mode:focus-visible, .scene-rotate:focus-visible, .scene-terrain:focus-visible, .scene-pin:focus-visible, .scene-export:focus-visible { outline: 2px solid color-mix(in oklch, var(--accent) 80%, transparent); outline-offset: 1px; }
 
 /* The API status tooltip: a hint popover on the header's status pill, shown on hover or focus through `interestfor`. */
 .api-tip {
