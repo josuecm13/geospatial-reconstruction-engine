@@ -121,6 +121,34 @@ def elevation_stage_data(session, area: ImportArea, source: TerrainTilesSource |
     return {"projection": projection, "elevation": elevation, "error": error}
 
 
+def elevation_work(
+    area: ImportArea, source: TerrainTilesSource, session_scope: SessionScope
+) -> Callable[[ImportJob], None]:
+    """The job body of a re-analysis: it fetches no OSM data and changes no entity. Emits
+    `elevation`, then `completed` with the version and whether the stored grid changed, or
+    `failed` (rolled back) with the error's code."""
+
+    def work(job: ImportJob) -> None:
+        with session_scope() as session:
+            try:
+                result = analyse_elevation(session, area, source)
+                projection = projection_out(local_projection_for(area.bbox.ring())).model_dump(mode="json")
+                elevation = elevation_out(ElevationRepository(session).get_grid(area.id))
+                job.emit("elevation", {"projection": projection, "elevation": elevation, "error": None})
+                job.emit(
+                    "completed",
+                    {"import_area_id": str(area.id), "version": result.version, "changed": result.changed},
+                )
+            except Exception as exc:
+                session.rollback()
+                _, code, message, details = describe_error(exc)
+                if code == "internal_error":
+                    logger.exception("elevation analysis of area %s failed unexpectedly", area.id)
+                job.emit("failed", {"code": code, "message": message, "details": details})
+
+    return work
+
+
 def background_import_work(
     bbox: BoundingBox,
     payload: dict | None,

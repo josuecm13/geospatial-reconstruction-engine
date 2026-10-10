@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.api.background_import import PROVIDER, analyse_elevation, background_import_work
+from app.api.background_import import PROVIDER, analyse_elevation, background_import_work, elevation_work
 from app.api.dependencies import (
     SessionScope,
     completed_import_area,
@@ -161,6 +161,30 @@ def _start_background_import(
         raise ApiError(409, "import_conflict", "a concurrent request already created this import area") from exc
     try:
         jobs.start(area.id, background_import_work(bbox, body.payload, overpass, session_scope, geocoder, elevation_source))
+    except ImportAlreadyRunning as exc:
+        raise _import_in_progress(area.id) from exc
+    started = ImportStartedOut(import_area_id=area.id, events_url=f"/import-areas/{area.id}/events")
+    return JSONResponse(status_code=202, content=started.model_dump(mode="json"))
+
+
+@router.post(
+    "/import-areas/{import_area_id}/elevation",
+    status_code=202,
+    response_model=ImportStartedOut,
+)
+def reanalyse_elevation(
+    area: ImportArea = Depends(completed_import_area),
+    jobs: ImportJobRegistry = Depends(get_import_jobs),
+    session_scope: SessionScope = Depends(get_job_session_scope),
+    elevation_source: TerrainTilesSource | None = Depends(get_elevation_source),
+) -> JSONResponse:
+    """Re-analyses the area's elevation in the background, with the same events as an import: one
+    `elevation`, then `completed` (`version`, `changed`) or `failed`. Fetches no OSM data and
+    changes no entity; a second run changes nothing."""
+    if elevation_source is None:
+        raise ApiError(503, "elevation_unavailable", "elevation is disabled (ELEVATION_URL)")
+    try:
+        jobs.start(area.id, elevation_work(area, elevation_source, session_scope))
     except ImportAlreadyRunning as exc:
         raise _import_in_progress(area.id) from exc
     started = ImportStartedOut(import_area_id=area.id, events_url=f"/import-areas/{area.id}/events")

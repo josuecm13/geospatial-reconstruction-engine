@@ -9,6 +9,7 @@ from app.domain.enums import ImportStatus
 from app.domain.import_area import ImportArea
 from app.persistence.geometry import bbox_to_geom
 from app.persistence.models import (
+    AreaElevationGridModel,
     AreaFeatureModel,
     BlockBoundarySegmentModel,
     BlockModel,
@@ -194,6 +195,15 @@ class ImportAreaRepository:
             .where(ImportAreaModel.place_name.is_(None))
             .order_by(ImportAreaModel.created_at, ImportAreaModel.id)
         )
+        return [self._to_domain(model) for model in self.session.execute(query).scalars().all()]
+
+    def list_completed(self, without_elevation: bool = False) -> list[ImportArea]:
+        """Every completed area, oldest first; with `without_elevation`, only those with no grid."""
+        query = select(ImportAreaModel).where(ImportAreaModel.status == ImportStatus.COMPLETED)
+        if without_elevation:
+            query = query.where(~select(AreaElevationGridModel.import_area_id)
+                                .where(AreaElevationGridModel.import_area_id == ImportAreaModel.id).exists())
+        query = query.order_by(ImportAreaModel.created_at, ImportAreaModel.id)
         return [self._to_domain(model) for model in self.session.execute(query).scalars().all()]
 
     def mark_importing(self, import_area_id: uuid.UUID) -> ImportArea:
