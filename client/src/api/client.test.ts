@@ -90,6 +90,38 @@ describe("deleteImportArea", () => {
   });
 });
 
+describe("featured area setting", () => {
+  it("reads the featured id, null when none", async () => {
+    const { client, calls } = recording(json(200, { import_area_id: "a1" }));
+
+    await expect(client.featuredArea()).resolves.toBe("a1");
+    expect(calls[0].url).toBe("/api/settings/featured-area");
+    expect(calls[0].init?.method).toBe("GET");
+    await expect(recording(json(200, { import_area_id: null })).client.featuredArea()).resolves.toBeNull();
+  });
+
+  it("puts the id, and null to clear", async () => {
+    const { client, calls } = recording(json(200, { import_area_id: "a1" }));
+
+    await expect(client.setFeaturedArea("a1")).resolves.toBe("a1");
+    expect(calls[0].init?.method).toBe("PUT");
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ import_area_id: "a1" });
+
+    const cleared = recording(json(200, { import_area_id: null }));
+    await expect(cleared.client.setFeaturedArea(null)).resolves.toBeNull();
+    expect(JSON.parse(String(cleared.calls[0].init?.body))).toEqual({ import_area_id: null });
+  });
+
+  it("surfaces a refusal by its code", async () => {
+    const { client } = recording(json(409, { error: { code: "import_area_not_ready", message: "not ready", details: null } }));
+
+    const error = await client.setFeaturedArea("a1").catch((e) => e);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect([error.status, error.code]).toEqual([409, "import_area_not_ready"]);
+  });
+});
+
 describe("listImportAreas", () => {
   it("asks for completed areas and unwraps the list", async () => {
     const calls: string[] = [];

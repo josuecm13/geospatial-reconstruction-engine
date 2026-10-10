@@ -23,6 +23,7 @@ from app.persistence.models import (
     TracedBoundaryModel,
     TurnMovementModel,
 )
+from app.persistence.repositories.site_settings import SiteSettingsRepository
 
 
 class ImportAreaRepository:
@@ -133,6 +134,8 @@ class ImportAreaRepository:
         ]
         for statement in statements:
             self.session.execute(statement)
+        # A deleted area can't stay the landing page's featured place.
+        SiteSettingsRepository(self.session).clear_featured_area_if(import_area_id)
         result = self.session.execute(delete(ImportAreaModel).where(ImportAreaModel.id == import_area_id))
         return result.rowcount > 0
 

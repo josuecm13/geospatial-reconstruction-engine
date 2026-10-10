@@ -14,7 +14,7 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.dialects.postgresql import ENUM as PgEnum
-from sqlalchemy.dialects.postgresql import ARRAY, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase
 
 from app.domain.enums import (
@@ -322,6 +322,18 @@ class TracedBoundaryModel(Base):
 
     __table_args__ = (
         UniqueConstraint("import_area_id", "name", name="uq_traced_boundaries_import_area_name"),
+    )
+
+
+class SiteSettingModel(Base):
+    """A deployment-wide setting, e.g. the import area the landing page features."""
+
+    __tablename__ = "site_settings"
+
+    key = Column(String, primary_key=True)
+    value = Column(JSONB, nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )
 
 

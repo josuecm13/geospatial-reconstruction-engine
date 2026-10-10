@@ -1,6 +1,6 @@
 import type { ImportArea } from "../api/types";
 import { renderReportedError, useErrorReporter } from "../errors/errorReporter";
-import { renderLocationCard } from "../locations/card";
+import { renderLocationCard, setCardFeatured } from "../locations/card";
 import { deleteOutcome } from "../locations/deleteMessage";
 import { filterCards, sortCards, toCard, type LocationCard, type SortKey } from "../locations/cardModel";
 import { readGalleryState, withGalleryState, type GalleryState } from "../locations/galleryState";
@@ -74,6 +74,9 @@ export const mount: Mount<{ page: "locations" }> = (el, ctx) => {
   let cards: LocationCard[] = [];
   const items = new Map<string, HTMLLIElement>();
   const deleting = new Set<string>();
+  /** The landing page's featured area, as the server has it (null when none, or when it couldn't be read). */
+  let featuredId: string | null = null;
+  let choosing = false;
 
   // --- history state ---
   const save = () => {
@@ -140,6 +143,7 @@ export const mount: Mount<{ page: "locations" }> = (el, ctx) => {
   /** Drops a card from the gallery's list and the page, then re-arranges so the count, filter and empty state stay right. */
   const removeCard = (id: string) => {
     cards = cards.filter((card) => card.id !== id);
+    if (featuredId === id) featuredId = null; // the server clears the setting with the area
     items.get(id)?.remove();
     items.delete(id);
     arrange();
@@ -164,6 +168,27 @@ export const mount: Mount<{ page: "locations" }> = (el, ctx) => {
     }
   };
 
+  /** Marks the featured card and clears the mark from the rest, without rebuilding any card. */
+  const markFeatured = () => {
+    for (const [id, item] of items) setCardFeatured(item.firstElementChild as HTMLElement, id === featuredId);
+  };
+
+  const onFeature = async (card: LocationCard, featured: boolean) => {
+    if (choosing) return;
+    choosing = true;
+    notice.hidden = true;
+    try {
+      featuredId = await ctx.api.setFeaturedArea(featured ? card.id : null);
+      if (!disposed) markFeatured();
+    } catch (error) {
+      if (disposed) return;
+      notice.textContent = reportError(error).sentence;
+      notice.hidden = false;
+    } finally {
+      choosing = false;
+    }
+  };
+
   const show = (areas: ImportArea[]) => {
     const now = new Date();
     cards = areas.map((area) => toCard(area, now));
@@ -171,7 +196,7 @@ export const mount: Mount<{ page: "locations" }> = (el, ctx) => {
     grid.replaceChildren();
     for (const card of cards) {
       const item = document.createElement("li");
-      item.append(renderLocationCard(card, { previews, onOpen: save, onDelete }));
+      item.append(renderLocationCard(card, { previews, onOpen: save, onDelete, featured: card.id === featuredId, onFeature }));
       items.set(card.id, item);
     }
     grid.setAttribute("aria-busy", "false");
@@ -184,7 +209,9 @@ export const mount: Mount<{ page: "locations" }> = (el, ctx) => {
     notice.hidden = true;
     showSkeletons();
     try {
-      const areas = await ctx.api.listImportAreas({ limit: LIST_LIMIT });
+      // The setting only badges a card, so a failed read is not worth failing the gallery for.
+      const [areas, featured] = await Promise.all([ctx.api.listImportAreas({ limit: LIST_LIMIT }), ctx.api.featuredArea().catch(() => null)]);
+      featuredId = featured;
       if (!disposed) show(areas);
     } catch (error) {
       if (!disposed) showError(error);

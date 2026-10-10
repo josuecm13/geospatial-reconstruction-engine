@@ -6,7 +6,7 @@ import { renderArchitecture } from "../landing/architecture";
 import { renderBento } from "../landing/bento";
 import { selectionDemo } from "../landing/selectionDemo";
 import type { FeaturedStage } from "../landing/featuredStage";
-import { pickFeatured } from "../landing/featured";
+import { resolveFeatured } from "../landing/featured";
 import { renderFooter } from "../landing/footer";
 import { importTarget } from "../landing/importTarget";
 import { shareMapData } from "../landing/sharedMapData";
@@ -272,13 +272,10 @@ export const mount: Mount<{ page: "landing" }> = (el, ctx) => {
 
   api.listImportAreas({ status: "completed", limit: RECENT_LIMIT }).then(
     async (list) => {
-      // The configured area may be older than the recent list, so fetch it when it isn't in there.
-      const configured = featuredId
-        ? (list.find((a) => a.id === featuredId) ?? (await api.getImportArea(featuredId).catch(() => null)))
-        : null;
+      // The server setting first (a failed request falls through), then the environment variable, then the most recent.
+      const featured = await resolveFeatured(list, { setting: () => api.featuredArea(), env: featuredId, getArea: (id) => api.getImportArea(id) });
       if (disposed) return;
       areas = list;
-      const featured = pickFeatured(list, configured);
       if (featured) {
         shared.share(featured.id);
         renderFeatured(featured);

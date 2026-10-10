@@ -9,6 +9,7 @@ from app.config.logging import configure_logging
 from app.api.routers import (
     import_areas_router,
     route_planning_router,
+    settings_router,
     spatial_queries_router,
     traced_boundaries_router,
 )
@@ -26,6 +27,7 @@ def create_app() -> FastAPI:
     app.include_router(spatial_queries_router)
     app.include_router(route_planning_router)
     app.include_router(traced_boundaries_router)
+    app.include_router(settings_router)
 
     @app.get("/health")
     def health(session: Session = Depends(get_session)) -> dict:

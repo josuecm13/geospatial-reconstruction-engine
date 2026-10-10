@@ -11,6 +11,21 @@ export interface CardContext {
   onOpen?: (card: LocationCard) => void;
   /** When given, the card shows a quiet "Delete" button that calls this. Without it the card is read-only. */
   onDelete?: (card: LocationCard) => void;
+  /** Whether this card is the landing page's featured place. */
+  featured?: boolean;
+  /** When given, a completed card shows "Show on landing" (or, on the featured card, a "Featured" badge and "Remove from landing") that calls this with the choice. */
+  onFeature?: (card: LocationCard, featured: boolean) => void;
+}
+
+/** Shows or hides the card's "Featured" badge, and flips its button between "Show on landing" and "Remove from landing". A card without the button is left alone. */
+export function setCardFeatured(article: HTMLElement, featured: boolean): void {
+  article.dataset.featured = String(featured);
+  const badge = article.querySelector<HTMLElement>(".location-featured");
+  if (badge) badge.hidden = !featured;
+  const button = article.querySelector<HTMLButtonElement>("button.location-feature");
+  if (!button) return;
+  button.textContent = featured ? "Remove from landing" : "Show on landing";
+  button.setAttribute("aria-pressed", String(featured));
 }
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, text?: string): HTMLElementTagNameMap[K] => {
@@ -86,6 +101,20 @@ export function renderLocationCard(card: LocationCard, ctx: CardContext): HTMLEl
   }
 
   article.append(preview, body);
+  if (ctx.onFeature && card.status === "completed") {
+    // Siblings of the title link, above its stretched click area, so they never open the card.
+    const badge = el("span", "location-featured", "Featured");
+    preview.append(badge);
+    const choose = el("button", "location-feature");
+    choose.type = "button";
+    choose.addEventListener("click", (event) => {
+      event.stopPropagation();
+      event.preventDefault();
+      ctx.onFeature!(card, article.dataset.featured !== "true");
+    });
+    body.append(choose);
+    setCardFeatured(article, ctx.featured === true);
+  }
   if (ctx.onDelete) {
     // A sibling of the title link, above its stretched click area, so it never opens the card.
     const remove = el("button", "location-delete", "Delete");

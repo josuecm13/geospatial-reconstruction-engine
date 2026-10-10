@@ -102,6 +102,16 @@ export class ApiClient {
     return this.request("DELETE", `/import-areas/${encodeURIComponent(areaId)}`);
   }
 
+  /** The id of the import area the landing page features, or null when none is chosen. */
+  async featuredArea(): Promise<string | null> {
+    return (await this.request<{ import_area_id: string | null }>("GET", "/settings/featured-area")).import_area_id;
+  }
+
+  /** Chooses the landing page's featured area (a completed one); null clears the choice. Returns the stored id. */
+  async setFeaturedArea(areaId: string | null): Promise<string | null> {
+    return (await this.request<{ import_area_id: string | null }>("PUT", "/settings/featured-area", { import_area_id: areaId })).import_area_id;
+  }
+
   /** Re-analyses an area's terrain in the background; its progress streams on `importEvents`. */
   analyseElevation(areaId: string): Promise<ImportStarted> {
     return this.request("POST", `/import-areas/${encodeURIComponent(areaId)}/elevation`);
