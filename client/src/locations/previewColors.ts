@@ -5,8 +5,12 @@ import { AMBIENT, LIGHT_DIRECTION, shade } from "../scene/shading";
 const UP = shade(new THREE.Vector3(0, 1, 0));
 /** The south-facing wall of a building, the side the raised preview shows. */
 const WALL = shade(new THREE.Vector3(0, 0, 1));
-/** How much darker than the face it outlines an edge is drawn. */
-const EDGE = 0.7;
+/** The alpha of the pale `COLORS.edge` strokes over the ground: the area outline is 2.9:1 against it, the hatch a quiet 1.4:1, the building outline in between. */
+const OUTLINE_ALPHA = 0.35;
+const HATCH_ALPHA = 0.12;
+const BUILDING_EDGE_ALPHA = 0.5;
+/** How far toward black the shadow is mixed (0.5 is half way): on the dark ground, ambient light alone is a barely visible step (1.10:1). */
+const SHADOW_DARKEN = 0.5;
 
 /** A palette colour times a shade, as the 3D scene's vertex colours multiply it. */
 const clay = (color: string, factor: number): string => `#${new THREE.Color(color).multiplyScalar(factor).getHexString()}`;
@@ -21,8 +25,8 @@ const withAlpha = (hex: string, alpha: number): string => {
 export const PREVIEW_COLORS = {
   background: SCENE_BACKGROUND,
   ground: clay(COLORS.ground, UP),
-  edge: withAlpha(clay(COLORS.ground, UP * EDGE), 0.8),
-  hatch: withAlpha(clay(COLORS.ground, UP * EDGE), 0.25),
+  edge: withAlpha(COLORS.edge, OUTLINE_ALPHA),
+  hatch: withAlpha(COLORS.edge, HATCH_ALPHA),
   water: clay(COLORS.water, UP),
   green: clay(COLORS.green, UP),
   roadWide: clay(COLORS.roadWide, UP),
@@ -32,9 +36,9 @@ export const PREVIEW_COLORS = {
   buildingWall: clay(COLORS.buildingMeasured, WALL),
   buildingDefaulted: clay(COLORS.buildingDefaulted, UP),
   buildingDefaultedWall: clay(COLORS.buildingDefaulted, WALL),
-  buildingEdge: clay(COLORS.buildingMeasured, UP * EDGE * EDGE),
-  /** The ground in a building's shadow: lit by ambient light only. */
-  shadow: clay(COLORS.ground, AMBIENT),
+  buildingEdge: withAlpha(COLORS.edge, BUILDING_EDGE_ALPHA),
+  /** The ground in a building's shadow: lit by ambient light only, mixed toward black so it stays a visible darker tone. */
+  shadow: clay(COLORS.ground, AMBIENT * (1 - SHADOW_DARKEN)),
 } as const;
 
 /**

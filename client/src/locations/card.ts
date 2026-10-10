@@ -1,6 +1,7 @@
 import { formatRoute } from "../routing/routes";
 import type { LocationCard } from "./cardModel";
 import { markFlyTo } from "./flyTo";
+import { claimPlace } from "../ui/viewTransition";
 import type { PreviewLoader } from "./preview";
 
 export interface CardContext {
@@ -45,6 +46,7 @@ export function renderLocationCard(card: LocationCard, ctx: CardContext): HTMLEl
       if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       markFlyTo(card.id);
       ctx.onOpen?.(card);
+      claimPlace(preview); // this click's listener runs before the router's delegated one, so the name is on before the page swap starts
     });
     heading.append(link);
   } else {
@@ -76,6 +78,7 @@ export function renderLocationCard(card: LocationCard, ctx: CardContext): HTMLEl
     scene.addEventListener("click", (event) => {
       if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       ctx.onOpen?.(card);
+      claimPlace(preview);
     });
     body.append(scene);
   }

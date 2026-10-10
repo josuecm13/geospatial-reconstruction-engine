@@ -63,6 +63,15 @@ describe("exportWorld", () => {
     for (const mesh of json.meshes) for (const primitive of mesh.primitives) expect(primitive.attributes).toHaveProperty("COLOR_0");
   });
 
+  it("leaves the building edge lines out of the file, and shows them again afterwards", async () => {
+    const world = buildWorld(data);
+    const edges = world.getObjectByName("building:bu1")!.getObjectByName("edges")!;
+    const json = jsonChunk(await exportWorld(world));
+    for (const mesh of json.meshes) for (const primitive of mesh.primitives) expect(primitive.mode ?? 4).not.toBe(1);
+    expect(json.nodes.map((n: { name?: string }) => n.name)).not.toContain("edges");
+    expect(edges.visible).toBe(true);
+  });
+
   it("names nodes by layer and id, and leaves out the hidden buildable-area layer", async () => {
     const json = jsonChunk(await exportWorld(buildWorld(data)));
     const names = json.nodes.map((n: { name?: string }) => n.name);

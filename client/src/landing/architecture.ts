@@ -1,9 +1,9 @@
-import { EDGES, STAGES, type Stage } from "./architectureModel";
+import { docPath, EDGES, STAGES, stageNumber, type Stage } from "./architectureModel";
+import { svg } from "./svg";
 
-const SVG_NS = "http://www.w3.org/2000/svg";
-const NODE_W = 210;
-const NODE_H = 64;
-const GAP_X = 56;
+const NODE_W = 176;
+const NODE_H = 52;
+const GAP_X = 36;
 const GAP_Y = 44;
 const PAD = 12;
 
@@ -12,7 +12,7 @@ export interface Placement {
   y: number;
 }
 
-/** Where each stage sits when the diagram wraps after `columns` stages, in pipeline order, plus the drawing's size. */
+/** Where each stage sits when the diagram wraps after `columns` stages, in pipeline order, plus the drawing's size. Six columns is one line. */
 export function layout(columns: number): { positions: Placement[]; width: number; height: number } {
   const rows = Math.ceil(STAGES.length / columns);
   return {
@@ -24,12 +24,6 @@ export function layout(columns: number): { positions: Placement[]; width: number
     height: 2 * PAD + rows * NODE_H + (rows - 1) * GAP_Y,
   };
 }
-
-const svg = <K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string, string | number> = {}): SVGElementTagNameMap[K] => {
-  const el = document.createElementNS(SVG_NS, tag);
-  for (const [name, value] of Object.entries(attrs)) el.setAttribute(name, String(value));
-  return el;
-};
 
 /** The arrow from one stage to the next: straight along a row, an elbow when the next stage is on another row. */
 function edgePath(from: Placement, to: Placement): string {
@@ -49,7 +43,7 @@ function drawDiagram(columns: number, onSelect: (stage: Stage) => void, selected
   root.style.maxWidth = `${width}px`;
 
   const defs = svg("defs");
-  const marker = svg("marker", { id: "arch-arrow", viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 8, markerHeight: 8, orient: "auto" });
+  const marker = svg("marker", { id: "arch-arrow", viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: "auto" });
   marker.append(svg("path", { d: "M 0 1 L 10 5 L 0 9 z", class: "arch-arrowhead" }));
   defs.append(marker);
   root.append(defs);
@@ -69,11 +63,11 @@ function drawDiagram(columns: number, onSelect: (stage: Stage) => void, selected
       "aria-label": `${stage.title}: ${stage.caption}. Show what it produces.`,
       "aria-pressed": String(stage.id === selectedId),
     });
-    const title = svg("text", { x: x + NODE_W / 2, y: y + 28, class: "arch-title", "text-anchor": "middle" });
+    const number = svg("text", { x: x + 22, y: y + NODE_H / 2, class: "arch-number", "dominant-baseline": "central" });
+    number.textContent = stageNumber(stage.id);
+    const title = svg("text", { x: x + 50, y: y + NODE_H / 2, class: "arch-title", "dominant-baseline": "central" });
     title.textContent = stage.title;
-    const caption = svg("text", { x: x + NODE_W / 2, y: y + 48, class: "arch-caption", "text-anchor": "middle" });
-    caption.textContent = stage.caption;
-    node.append(svg("rect", { x, y, width: NODE_W, height: NODE_H, rx: 10 }), title, caption);
+    node.append(svg("rect", { x, y, width: NODE_W, height: NODE_H, rx: NODE_H / 2 }), number, title);
 
     const choose = () => onSelect(stage);
     node.addEventListener("mouseenter", choose);
@@ -90,28 +84,30 @@ function drawDiagram(columns: number, onSelect: (stage: Stage) => void, selected
   return root;
 }
 
-/** Fills `card` with a stage: what it produces and a link to its doc (or the hint, with no stage chosen). */
+/** Fills `card`, a terminal panel, with a stage: `$ stage 03 · PostGIS domain`, what it produces as `→` lines, a caret, and its doc as a path. */
 function fillCard(card: HTMLElement, stage: Stage | null): void {
+  const make = <K extends keyof HTMLElementTagNameMap>(tag: K, className: string, text?: string): HTMLElementTagNameMap[K] =>
+    Object.assign(document.createElement(tag), { className, ...(text === undefined ? {} : { textContent: text }) });
+  const caret = () => make("span", "arch-caret");
   if (!stage) {
-    card.replaceChildren(Object.assign(document.createElement("p"), { className: "arch-hint", textContent: "Hover, focus or tap a stage to see what it produces." }));
+    const hint = make("p", "arch-hint", "hover, focus or tap a stage to see what it produces");
+    hint.prepend(make("span", "arch-prompt", "$ "));
+    hint.append(caret());
+    card.replaceChildren(hint);
     return;
   }
-  const heading = Object.assign(document.createElement("h3"), { textContent: stage.title });
-  const sub = Object.assign(document.createElement("p"), { className: "arch-sub", textContent: "Produces" });
-  const list = document.createElement("ul");
-  for (const line of stage.produces) list.append(Object.assign(document.createElement("li"), { textContent: line }));
-  const doc = Object.assign(document.createElement("a"), {
-    href: stage.docHref,
-    target: "_blank",
-    rel: "noopener",
-    textContent: `${stage.docLabel} in the docs`,
-  });
-  card.replaceChildren(heading, sub, list, doc);
+  const heading = make("h3", "arch-cmd", `stage ${stageNumber(stage.id)} · ${stage.title}`);
+  heading.prepend(make("span", "arch-prompt", "$ "));
+  const list = make("ul", "arch-out");
+  for (const line of stage.produces) list.append(make("li", "arch-line", line));
+  list.lastElementChild?.append(caret());
+  const doc = Object.assign(make("a", "arch-doc", docPath(stage)), { href: stage.docHref, target: "_blank", rel: "noopener" });
+  card.replaceChildren(heading, list, doc);
 }
 
 /**
  * Draws the interactive pipeline diagram into `root` and returns the function that removes it.
- * The diagram wraps in three columns, or stacks in one on a phone; the side card follows the stage
+ * The diagram is one line, wraps in three columns on a tablet, or stacks in one on a phone; the side card follows the stage
  * that was last hovered, focused, or tapped.
  */
 export function renderArchitecture(root: HTMLElement): () => void {
@@ -121,6 +117,7 @@ export function renderArchitecture(root: HTMLElement): () => void {
   root.replaceChildren(figure, card);
 
   const narrow = window.matchMedia("(max-width: 719px)");
+  const medium = window.matchMedia("(max-width: 1019px)");
   let selected: Stage | null = null;
 
   const select = (stage: Stage) => {
@@ -134,15 +131,17 @@ export function renderArchitecture(root: HTMLElement): () => void {
     }
   };
   const draw = () => {
-    figure.replaceChildren(drawDiagram(narrow.matches ? 1 : 3, select, selected?.id ?? null));
+    figure.replaceChildren(drawDiagram(narrow.matches ? 1 : medium.matches ? 3 : 6, select, selected?.id ?? null));
     if (selected) figure.querySelector(`[data-stage="${selected.id}"]`)?.classList.add("is-active");
   };
   narrow.addEventListener("change", draw);
+  medium.addEventListener("change", draw);
   draw();
   fillCard(card, null);
 
   return () => {
     narrow.removeEventListener("change", draw);
+    medium.removeEventListener("change", draw);
     root.replaceChildren();
   };
 }

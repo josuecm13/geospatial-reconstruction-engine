@@ -4,6 +4,7 @@ import { renderLocationCard } from "../locations/card";
 import { filterCards, sortCards, toCard, type LocationCard, type SortKey } from "../locations/cardModel";
 import { readGalleryState, withGalleryState, type GalleryState } from "../locations/galleryState";
 import { PreviewLoader } from "../locations/preview";
+import { attachSpotlight } from "../ui/spotlight";
 import type { Mount } from "./types";
 
 /** The most the API returns in one list. */
@@ -66,6 +67,7 @@ export const mount: Mount<{ page: "locations" }> = (el, ctx) => {
   let disposed = false;
   let saveTimer: number | undefined;
   const previews = new PreviewLoader(ctx.api);
+  const disposeSpotlight = attachSpotlight(root, ".location-card");
   let cards: LocationCard[] = [];
   const items = new Map<string, HTMLLIElement>();
 
@@ -172,6 +174,7 @@ export const mount: Mount<{ page: "locations" }> = (el, ctx) => {
   return () => {
     disposed = true;
     window.clearTimeout(saveTimer);
+    disposeSpotlight();
     previews.dispose();
   };
 };

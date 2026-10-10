@@ -80,7 +80,7 @@ The scene view SHALL show the open area, or its selected boundary, as a low-poly
 - **THEN** only the response for the latest selection is drawn
 
 ### Requirement: The client SHALL shade the scene by a fixed rule and draw it unlit
-The scene SHALL have no real-time lights. Each face SHALL be shaded as `shade(n) = AMBIENT + (1 - AMBIENT) * max(0, n . LIGHT_DIRECTION)`, with `n` the face's unit normal in world orientation, `LIGHT_DIRECTION` one fixed unit vector pointing toward the light, and `AMBIENT` one fixed constant (0.55). The shade SHALL be baked into a grey per-vertex `color` attribute on every vertex of the face, and every face material SHALL be unlit and multiply that shade into its color, so a face pointing at the light shows exactly its palette color. Every color of the scene (faces, background, grid, route, markers, the waiting wireframe) SHALL come from `scene/palette.ts` and nowhere else. The glTF export SHALL carry the same colors and shade: unlit materials (`KHR_materials_unlit`) and `COLOR_0` on every mesh primitive.
+The scene SHALL have no real-time lights. Each face SHALL be shaded as `shade(n) = AMBIENT + (1 - AMBIENT) * max(0, n . LIGHT_DIRECTION)`, with `n` the face's unit normal in world orientation, `LIGHT_DIRECTION` one fixed unit vector pointing toward the light, and `AMBIENT` one fixed constant (0.55). The shade SHALL be baked into a grey per-vertex `color` attribute on every vertex of the face, and every face material SHALL be unlit and multiply that shade into its color, so a face pointing at the light shows exactly its palette color. Every color of the scene (faces, background, grid, route, markers, the waiting wireframe, building edge lines) SHALL come from `scene/palette.ts` and nowhere else. The palette SHALL be dark (a near-black ground with pale buildings), each building SHALL carry a translucent pale edge-line child drawn with one shared unshaded material, and the glTF export SHALL leave those lines out. The glTF export SHALL carry the same colors and shade: unlit materials (`KHR_materials_unlit`) and `COLOR_0` on every mesh primitive.
 
 #### Scenario: Two walls facing the same way
 - **WHEN** two buildings have walls with the same orientation, at different places in the scene
@@ -234,3 +234,20 @@ The client SHALL show every import area on `/locations` as a card: a preview of 
 - **WHEN** a user scrolls the gallery, opens a card, and presses Back
 - **THEN** the gallery shows the same scroll position, filter, and sort
 
+### Requirement: The client SHALL take every interface colour from design tokens and keep text legible
+`style.css` SHALL declare the interface's colours once, as hex custom properties in `:root` (`--scene-background`, `--bg`, `--surface-1` to `--surface-3`, `--border`, `--text`, `--text-muted`, `--accent`, `--link`, `--danger`, `--ok`, `--warning`) with `color-scheme: dark`, and every other colour in the file SHALL be a token or a `color-mix()` of tokens, never a literal. Each text token SHALL have a contrast ratio of at least 4.5:1 on every surface it is drawn on, and the dark button text on every filled button colour. The 2D map's overlay colours SHALL come from `views/mapColors.ts`, derived from the scene palette where the roles match, and the basemap SHALL be a dark style.
+
+#### Scenario: A colour literal in a component rule
+- **WHEN** a rule in `style.css` outside `:root` uses a hex, `rgb()`, `hsl()`, or named colour
+- **THEN** the token test fails, naming the line
+
+#### Scenario: A text colour that stops being legible
+- **WHEN** a text token is changed so that it falls below 4.5:1 on a surface it is drawn on
+- **THEN** the token test fails, naming the pair
+
+### Requirement: The client SHALL switch its motion off when the user prefers reduced motion
+Every animation and transition in `style.css` (scroll-driven reveals, the header glass and progress bar, the animated button ring, overlay entry transitions, view-transition animations) SHALL be declared inside `@media (prefers-reduced-motion: no-preference)`, and the page host SHALL swap pages directly, without a view transition, when the user prefers reduced motion. The end state of every effect (content visible, header solid) SHALL not depend on a motion running.
+
+#### Scenario: Reduced motion
+- **WHEN** a user who prefers reduced motion scrolls the landing page and navigates from the locations page to a place
+- **THEN** sections are visible without fading in, the header is solid, the page changes with no view transition, and no animation runs

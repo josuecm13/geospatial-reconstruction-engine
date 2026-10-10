@@ -14,7 +14,8 @@
       </nav>
       <!-- Page-specific links: the explore page puts its Map/Scene toggle here. -->
       <nav class="view-tabs" id="page-tabs" aria-label="View" hidden></nav>
-      <span class="api-status" id="api-status" title="API status">API …</span>
+      <button type="button" class="api-status" id="api-status" interestfor="api-tip" aria-describedby="api-tip">API …</button>
+      <div class="api-tip" id="api-tip" popover="hint" role="tooltip">Checking whether the API answers.</div>
     </header>
     <!-- The current page (src/pages/) is mounted here. -->
     <main id="page"></main>
