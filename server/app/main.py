@@ -17,9 +17,10 @@ from app.api.routers import (
 def create_app() -> FastAPI:
     configure_logging()
     app = FastAPI(title="Geospatial Reconstruction Engine")
-    app.add_middleware(BodySizeLimitMiddleware)
-    # Added last, so outermost: it compresses the final response bytes and skips the event streams.
+    # Added first, so innermost: it sees each response whole, which `minimum_size` needs.
+    # BodySizeLimitMiddleware (a BaseHTTPMiddleware) re-sends every response as a stream.
     app.add_middleware(CompressionMiddleware)
+    app.add_middleware(BodySizeLimitMiddleware)
     register_error_handlers(app)
     app.include_router(import_areas_router)
     app.include_router(spatial_queries_router)
