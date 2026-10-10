@@ -1,7 +1,7 @@
 """Pydantic request/response models (design.md Decision 6).
 
 Pydantic validates shape and types only; range/area rules stay in the domain
-`BoundingBox`/`Coordinate`, so the 1 km² rule and coordinate ranges have
+`BoundingBox`/`Coordinate`, so the 10 km² rule and coordinate ranges have
 exactly one implementation each, surfacing as `invalid_bounding_box` /
 `invalid_coordinate` rather than the generic `invalid_request`.
 

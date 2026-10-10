@@ -75,11 +75,13 @@ def test_grid_size_gives_about_five_meters_per_sample():
 
 def test_grid_size_is_clamped():
     assert grid_size_for(_bbox(0.000001, 0.000001)) == (2, 2)
-    # A 1 km box is the largest an area can be: about 201 samples at 5 m on the long axis, so the default clamp never bites.
+    # A 1 km box needs about 201 samples at 5 m on the long axis, so the default clamp does not bite on it.
     rows, cols = grid_size_for(_bbox(0.009, 0.009))
     assert rows == 201
     assert 150 <= cols <= 156  # 1 km of latitude is about 767 m of longitude at 40 N
     assert grid_size_for(_bbox(0.009, 0.009), max_samples=40) == (40, 40)
+    # A box near the 10 km² limit is about 3.2 km on a side: 634 samples at 5 m, so the default clamp gives about 12 m.
+    assert grid_size_for(_bbox(0.0285, 0.0285)) == (256, 256)
 
 
 def test_smoothing_preserves_a_constant_grid():

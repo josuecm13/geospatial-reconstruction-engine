@@ -83,7 +83,7 @@ def within_bbox(
     composed: list[uuid.UUID] = Depends(composed_import_area_ids),
     session: Session = Depends(get_session),
 ) -> WithinBboxOut:
-    # Reuses BoundingBox's own validation (strict ordering, 1 km² cap) — the
+    # Reuses BoundingBox's own validation (strict ordering, 10 km² cap) — the
     # query box obeys the same rule as an import box (spatial-query-api spec).
     bbox = BoundingBox(
         min_corner=Coordinate(min_latitude, min_longitude), max_corner=Coordinate(max_latitude, max_longitude)

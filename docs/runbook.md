@@ -57,7 +57,7 @@ API first.
 
 ## 5. Import a real area
 
-Keep it at or under 1 km² and import it once; the public Overpass instance is shared.
+Keep it at or under 10 km² and import it once; the public Overpass instance is shared. Large areas take longer to import and load the public Overpass more, so prefer the smallest rectangle that covers what you need.
 
 **From the UI.** Open `/explore`, press **Draw rectangle**, drag on the map, press **Import from
 OpenStreetMap**. The 3D tab builds the place in stages as the server streams them. Success: the status

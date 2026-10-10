@@ -60,7 +60,18 @@ in `docs/schema.md` ("Terrain elevation (Milestone 10)"). This document covers o
 - **Tests never reach the network.** The tile source is a dependency that tests override, so CI runs
   the whole pipeline on a stub source.
 
+- **The import limit is 10 km², not 1 km² (no issue, at the owner's request).** The limit stays an
+  area, so a 10 km² rectangle can be any shape. The elevation grid's `MAX_SAMPLES` stays 256, so
+  larger areas get a coarser grid by design rather than a bigger one. The Overpass query timeout
+  rises from 60 s to 180 s, because ten times the area of a dense city can exceed 60 s on the
+  public instance.
+
 ## Risks / Trade-offs
+
+- **Ten times the area.** Overpass load, import time and memory all grow about 10x, the public
+  instance is shared, and a 10 km² dense city makes a much heavier 3D scene. → Mitigation: the
+  longer timeout, imports run in the background with streamed stages, and the runbook advises
+  importing once.
 
 - **Coarse regional sources.** Where only SRTM or GMTED covers an area, heights are metre class, so a
   building can still sit slightly off its real ground. → Mitigation: the attribution and the source
@@ -68,7 +79,9 @@ in `docs/schema.md` ("Terrain elevation (Milestone 10)"). This document covers o
 - **Tile source outage during import.** → Mitigation: the import completes flat, and re-analysis
   recovers the area later.
 - **Grid size on the largest allowed box.** A 1 km² box at about 5 m spacing is about 200 by 200
-  samples, with the map-data response carrying roughly 40 000 heights. → Mitigation: heights are
+  samples, with the map-data response carrying roughly 40 000 heights. Past about 1.6 km per side
+  (the 256-sample cap at 5 m), the grid gets coarser instead: a 10 km² box, about 3.16 km a side, is
+  sampled about every 12 m, so response size stops growing at about 65 000 heights. → Mitigation: heights are
   rounded to 0.1 m, and the grid is returned once per response, not per feature.
 - **Versioned staleness is only as good as the bump rule.** If the rule were wrong, generation could
   silently reuse old heights. → Mitigation: the spec has scenarios for both a changed and an

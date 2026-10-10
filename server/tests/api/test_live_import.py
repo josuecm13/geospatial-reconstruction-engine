@@ -101,7 +101,7 @@ def test_incomplete_live_response_is_502_and_leaves_the_area_as_it_was(client):
 
 def test_invalid_bounding_box_is_rejected_before_fetching(client):
     overpass = _use(client, RecordedOverpass(AssertionError("must not fetch")))
-    too_big = {"min_latitude": 52.50, "min_longitude": 13.40, "max_latitude": 52.52, "max_longitude": 13.42}
+    too_big = {"min_latitude": 52.50, "min_longitude": 13.40, "max_latitude": 52.54, "max_longitude": 13.44}
 
     response = client.post("/import-areas", json={"bbox": too_big})
 

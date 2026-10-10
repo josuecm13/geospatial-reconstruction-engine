@@ -46,3 +46,40 @@ The client SHALL show the terrain attribution from the map-data `elevation` obje
 #### Scenario: Scene without terrain
 - **WHEN** a user views the 3D scene of an area with `elevation: null`
 - **THEN** only the OpenStreetMap attribution is shown
+
+## RENAMED Requirements
+
+- FROM: `### Requirement: The client SHALL select a rectangle of up to 1 km² and import it live`
+- TO: `### Requirement: The client SHALL select a rectangle of up to 10 km² and import it live`
+
+## MODIFIED Requirements
+
+### Requirement: The client SHALL select a rectangle of up to 10 km² and import it live
+The map view SHALL let a user draw a rectangle by dragging and adjust it by dragging (inside to move it without changing its size, an edge to resize along one axis, a corner to resize both, by pointer events so touch works, with the cursor naming each part), SHALL show its area in km² while drawing or dragging using the same rule as the server together with its width and height, SHALL show the over-limit style before the drag is released, SHALL restore the previous rectangle when Escape cancels a drag, and SHALL disable import while the rectangle exceeds 10 km². Importing SHALL call the API without a payload, show elapsed progress, and then draw the area's map data: roads at their generated width, buildings distinguishing known from unknown heights, blocks, area features, and points of interest, each describable by clicking. Errors SHALL be shown by a sentence chosen by their code; the server's message and OpenStreetMap links appear only when the client's debug flag is on. Importing a rectangle already imported SHALL first warn that re-import reconciles and may delete data.
+
+#### Scenario: A rectangle over the limit
+- **WHEN** a user draws a rectangle the server would measure at over 10 km²
+- **THEN** the area readout marks it too large and import is disabled
+
+#### Scenario: Moving the rectangle
+- **WHEN** a user drags inside the rectangle
+- **THEN** the rectangle moves with its width and height unchanged, a label shows its size and area while dragging, and Escape before release puts it back where it was
+
+#### Scenario: Re-importing the same rectangle
+- **WHEN** a user imports a rectangle equal to one they imported before
+- **THEN** the client asks for confirmation, warning that data OpenStreetMap no longer has will be deleted
+
+### Requirement: The client SHALL open on a landing page that explains the engine
+The client SHALL serve a landing page at `/` that says what the engine takes in (an OpenStreetMap rectangle of up to 10 km²), what it produces (streets with lanes and widths, buildable blocks, buildings at their source heights where the source has them, and a routable graph), and what it is for. It SHALL draw the pipeline (Overpass, ingestion, PostGIS domain, derivation, HTTP API, this client) as an interactive diagram in which hovering, focusing, or activating a stage shows what the stage produces and links to its documentation, and every stage SHALL be reachable by keyboard. It SHALL show the most recent completed import areas from `GET /import-areas` as cards that open the area, a link to the full locations page, and a primary action to import a new place. The explanation and the diagram SHALL render when the API is unreachable, and the locations block SHALL then show the error reporter's sentence. The layout SHALL fit down to a phone width.
+
+#### Scenario: Reading a stage
+- **WHEN** a user tabs to the "Derivation" stage of the diagram
+- **THEN** the side card shows what derivation produces and a link to its documentation
+
+#### Scenario: The API is down
+- **WHEN** a user opens `/` while the API is unreachable
+- **THEN** the explanation and the diagram are shown, and the locations block shows the sentence for `network_error` or `http_error`
+
+#### Scenario: Opening a recent location
+- **WHEN** a user selects a recent location's card
+- **THEN** the client navigates, with no page load, to `/explore/<that area>`

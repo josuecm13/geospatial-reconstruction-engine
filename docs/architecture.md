@@ -2,7 +2,7 @@
 
 ## Scope and assumptions
 
-The service is limited to urban/suburban bounding boxes of up to 1 km by 1 km. It is vehicle-road routing initially, with lane counts and intersection turn permissions represented in the first routing model. Coordinates arrive in WGS 84 (EPSG:4326). PostGIS `geography` operations supply meter-based distance and area calculations, while `geometry` values in EPSG:4326 retain interoperable map shapes.
+The service is limited to urban/suburban bounding boxes of up to 10 km² (an area, not a side length). It is vehicle-road routing initially, with lane counts and intersection turn permissions represented in the first routing model. Coordinates arrive in WGS 84 (EPSG:4326). PostGIS `geography` operations supply meter-based distance and area calculations, while `geometry` values in EPSG:4326 retain interoperable map shapes.
 
 An import is identified by its provider and normalized bounding box. Source IDs are retained on imported entities and made unique per provider, so rerunning an import upserts rather than duplicates data.
 
