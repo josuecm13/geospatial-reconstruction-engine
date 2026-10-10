@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Elevation, Feature, Projection, RoadSegmentProperties } from "../api/types";
 import type { Local } from "./projection";
-import { createTerrain, drape, flatTerrain, groundMesh, maxEdgeFor, roadSurface, splitByLines, subdivideRing, subdivideTriangles } from "./terrain";
+import { clipPolygonToRect, clipRingToRect, createTerrain, drape, flatTerrain, groundMesh, maxEdgeFor, roadSurface, splitByLines, subdivideRing, subdivideTriangles } from "./terrain";
 
 // 1 degree = 100 m both ways, so local meters are easy to read: x = (lon - 10) * 100, z = -(lat - 20) * 100.
 const projection: Projection = { origin: { latitude: 20, longitude: 10 }, meters_per_degree_latitude: 100, meters_per_degree_longitude: 100 };
@@ -200,5 +200,52 @@ describe("splitByLines", () => {
   it("gives null for a missing array or a length that doesn't match", () => {
     expect(splitByLines(null, lines)).toBeNull();
     expect(splitByLines([1, 2, 3], lines)).toBeNull();
+  });
+});
+
+describe("terrain extent", () => {
+  it("is the grid in local metres, and null when flat", () => {
+    expect(terrain.extent()).toEqual({ minX: 0, maxX: 3, minZ: -2, maxZ: 0 });
+    expect(flatTerrain().extent()).toBeNull();
+  });
+});
+
+describe("clipRingToRect", () => {
+  const rect = { minX: 0, maxX: 10, minZ: 0, maxZ: 10 };
+  const box = (x0: number, z0: number, x1: number, z1: number): Local[] => [{ x: x0, z: z0 }, { x: x1, z: z0 }, { x: x1, z: z1 }, { x: x0, z: z1 }, { x: x0, z: z0 }];
+  const area = (ring: Local[]) => Math.abs(ring.slice(0, -1).reduce((sum, p, i) => sum + p.x * ring[i + 1].z - ring[i + 1].x * p.z, 0)) / 2;
+
+  it("keeps a ring that is inside, unchanged", () => {
+    expect(clipRingToRect(box(2, 2, 5, 5), rect)).toEqual(box(2, 2, 5, 5));
+  });
+
+  it("drops a ring that is outside", () => {
+    expect(clipRingToRect(box(20, 20, 30, 30), rect)).toEqual([]);
+  });
+
+  it("cuts a crossing ring at the rectangle's edges and stays closed", () => {
+    const clipped = clipRingToRect(box(5, 5, 50, 50), rect);
+    expect(clipped[0]).toEqual(clipped[clipped.length - 1]);
+    expect(area(clipped)).toBeCloseTo(25);
+    for (const p of clipped) {
+      expect(p.x).toBeGreaterThanOrEqual(0);
+      expect(p.x).toBeLessThanOrEqual(10);
+      expect(p.z).toBeLessThanOrEqual(10);
+    }
+  });
+
+  it("reduces a ring that covers the rectangle to the rectangle", () => {
+    expect(area(clipRingToRect(box(-100, -100, 100, 100), rect))).toBeCloseTo(100);
+  });
+
+  it("clips a polygon's holes, drops the ones outside, and drops a polygon whose outer ring vanishes", () => {
+    const outer = box(-5, -5, 20, 20);
+    const inside = box(2, 2, 4, 4);
+    const crossing = box(8, 8, 15, 15);
+    const far = box(40, 40, 45, 45);
+    const clipped = clipPolygonToRect([outer, inside, crossing, far], rect)!;
+    expect(clipped).toHaveLength(3);
+    expect(area(clipped[2])).toBeCloseTo(4);
+    expect(clipPolygonToRect([box(20, 20, 30, 30), inside], rect)).toBeNull();
   });
 });

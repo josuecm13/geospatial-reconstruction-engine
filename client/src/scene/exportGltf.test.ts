@@ -64,6 +64,17 @@ describe("exportWorld", () => {
     for (const mesh of json.meshes) for (const primitive of mesh.primitives) expect(primitive.attributes).toHaveProperty("COLOR_0");
   });
 
+  it("exports no texture coordinates, and the world's geometries keep theirs afterwards", async () => {
+    const world = buildWorld(data);
+    const meshes: THREE.Mesh[] = [];
+    world.traverse((o) => (o as THREE.Mesh).isMesh && meshes.push(o as THREE.Mesh));
+    expect(meshes.some((m) => m.geometry.getAttribute("uv"))).toBe(true); // there is something to take off
+    const json = jsonChunk(await exportWorld(world));
+    expect(json.meshes.length).toBeGreaterThan(0);
+    for (const mesh of json.meshes) for (const primitive of mesh.primitives) expect(primitive.attributes).not.toHaveProperty("TEXCOORD_0");
+    for (const mesh of meshes) if (mesh.geometry.getAttribute("position")) expect(mesh.geometry.getAttribute("uv")).toBeDefined();
+  });
+
   it("leaves the building edge lines out of the file, and shows them again afterwards", async () => {
     const world = buildWorld(data);
     const edges = world.getObjectByName("building:bu1")!.getObjectByName("edges")!;

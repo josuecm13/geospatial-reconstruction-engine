@@ -28,6 +28,16 @@ export interface Terrain {
   lowestUnder(ring: Local[]): number;
   /** Local x of each grid column (ascending) and local z of each grid row (ascending, north to south); null when flat. */
   gridLines(): { xs: number[]; zs: number[] } | null;
+  /** The grid's extent in local metres; null when flat. */
+  extent(): Rect | null;
+}
+
+/** An axis-aligned rectangle in the local plane. */
+export interface Rect {
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
 }
 
 /** The terrain with every height 0, for an area without elevation. */
@@ -41,6 +51,7 @@ export function flatTerrain(): Terrain {
     roadHeights: () => null,
     lowestUnder: () => 0,
     gridLines: () => null,
+    extent: () => null,
   };
 }
 
@@ -95,6 +106,7 @@ export function createTerrain(elevation: Elevation, projection: Projection): Ter
       return Number.isFinite(low) ? low : 0;
     },
     gridLines: () => ({ xs, zs }),
+    extent: () => (xs.length && zs.length ? { minX: Math.min(...xs), maxX: Math.max(...xs), minZ: Math.min(...zs), maxZ: Math.max(...zs) } : null),
   };
 }
 
@@ -253,4 +265,45 @@ export function splitByLines(values: number[] | null, lines: Local[][]): number[
   if (values.length !== lines.reduce((sum, line) => sum + line.length, 0)) return null;
   let offset = 0;
   return lines.map((line) => values.slice(offset, (offset += line.length)));
+}
+
+/**
+ * Sutherland-Hodgman: a ring clipped to an axis-aligned rectangle. A closed ring (last point equal to
+ * the first) stays closed. Returns [] when fewer than 3 vertices remain. Points on the rectangle's
+ * edges are set exactly, so nothing lies outside it by rounding.
+ */
+export function clipRingToRect(ring: Local[], rect: Rect): Local[] {
+  const closed = ring.length > 1 && ring[0].x === ring[ring.length - 1].x && ring[0].z === ring[ring.length - 1].z;
+  let points = closed ? ring.slice(0, -1) : ring;
+  const sides: { inside: (p: Local) => boolean; cut: (a: Local, b: Local) => Local }[] = [
+    { inside: (p) => p.x >= rect.minX, cut: (a, b) => ({ x: rect.minX, z: a.z + ((b.z - a.z) * (rect.minX - a.x)) / (b.x - a.x) }) },
+    { inside: (p) => p.x <= rect.maxX, cut: (a, b) => ({ x: rect.maxX, z: a.z + ((b.z - a.z) * (rect.maxX - a.x)) / (b.x - a.x) }) },
+    { inside: (p) => p.z >= rect.minZ, cut: (a, b) => ({ x: a.x + ((b.x - a.x) * (rect.minZ - a.z)) / (b.z - a.z), z: rect.minZ }) },
+    { inside: (p) => p.z <= rect.maxZ, cut: (a, b) => ({ x: a.x + ((b.x - a.x) * (rect.maxZ - a.z)) / (b.z - a.z), z: rect.maxZ }) },
+  ];
+  for (const side of sides) {
+    const out: Local[] = [];
+    for (let i = 0; i < points.length; i++) {
+      const [a, b] = [points[(i + points.length - 1) % points.length], points[i]];
+      if (side.inside(b)) {
+        if (!side.inside(a)) out.push(side.cut(a, b));
+        out.push(b);
+      } else if (side.inside(a)) out.push(side.cut(a, b));
+    }
+    points = out;
+    if (points.length < 3) return [];
+  }
+  return closed ? [...points, points[0]] : points;
+}
+
+/** True when every point of the ring lies within the rectangle. */
+export function ringInside(ring: Local[], rect: Rect): boolean {
+  return ring.every((p) => p.x >= rect.minX && p.x <= rect.maxX && p.z >= rect.minZ && p.z <= rect.maxZ);
+}
+
+/** A polygon (outer ring first) clipped to the rectangle: holes that vanish are dropped; null when the outer ring does. */
+export function clipPolygonToRect(rings: Local[][], rect: Rect): Local[][] | null {
+  const outer = clipRingToRect(rings[0], rect);
+  if (!outer.length) return null;
+  return [outer, ...rings.slice(1).map((ring) => clipRingToRect(ring, rect)).filter((ring) => ring.length)];
 }

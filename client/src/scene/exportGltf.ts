@@ -40,11 +40,19 @@ export async function exportWorld(world: THREE.Group): Promise<ArrayBuffer> {
   const original = new Map<THREE.Object3D, Record<string, unknown>>();
   const meta = metadata(world);
   const hidden: THREE.Object3D[] = [];
+  // No material uses a texture, so the UVs are dead weight in the file: taken off for the export.
+  const uvs: [THREE.BufferGeometry, THREE.BufferAttribute | THREE.InterleavedBufferAttribute][] = [];
   world.traverse((object) => {
     // Building edges are a viewer effect: left out, since `onlyVisible` skips what is hidden.
     if ((object as THREE.LineSegments).isLineSegments && object.visible) {
       object.visible = false;
       hidden.push(object);
+    }
+    const geometry = (object as THREE.Mesh).isMesh ? (object as THREE.Mesh).geometry : undefined;
+    const uv = geometry?.getAttribute("uv");
+    if (geometry && uv && !uvs.some(([g]) => g === geometry)) {
+      uvs.push([geometry, uv]);
+      geometry.deleteAttribute("uv");
     }
     original.set(object, object.userData);
     if (object === world) object.userData = meta;
@@ -60,6 +68,7 @@ export async function exportWorld(world: THREE.Group): Promise<ArrayBuffer> {
   } finally {
     original.forEach((userData, object) => (object.userData = userData));
     hidden.forEach((object) => (object.visible = true));
+    uvs.forEach(([geometry, uv]) => geometry.setAttribute("uv", uv));
   }
 }
 
