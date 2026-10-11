@@ -10,7 +10,7 @@ import type { GeneratedFeature } from "../scene/generationStream";
 import type { Terrain } from "../scene/terrain";
 import { COLORS, MATERIALS, restyle, SCENE_BACKGROUND, setActiveTheme } from "../scene/palette";
 import { createAtmosphere } from "../scene/atmosphere";
-import { DEFAULT_THEME, themeById } from "../scene/themes";
+import { themeById } from "../scene/themes";
 import type { ThemeId, TimeOfDay } from "../scene/themes/types";
 import { shadeGeometry } from "../scene/shading";
 import { createAutoRotate, ROTATE_SPEED } from "../scene/autoRotate";
@@ -27,6 +27,9 @@ import { createRoutePanel, type RoutingDeps } from "../scene/routePanel";
 import type { SceneTarget } from "../scene/sceneLoader";
 import { bboxMeters, createStagedScene, type StagedHandle } from "../scene/stagedScene";
 import { createZoneLegend } from "../scene/zoneLegend";
+import { loadThemeChoice, saveThemeChoice } from "../scene/themeChoice";
+import { createThemeControls } from "../scene/themeControls";
+import type { ApiClient } from "../api/client";
 
 export interface SceneView extends SceneTarget {
   scene: THREE.Scene;
@@ -48,18 +51,19 @@ const EMPTY_HINT = "Open an import on the Map tab";
 
 /** The low-poly world of the open area: background and (once `setWorld` is called) the imported
  * city. Before that, a placeholder ground and grid, and a hint. */
-export function createSceneView(container: HTMLElement, routing?: RoutingDeps, terrain?: TerrainDeps, generation?: GenerationDeps): SceneView {
+export function createSceneView(container: HTMLElement, routing?: RoutingDeps, terrain?: TerrainDeps, generation?: GenerationDeps, themeApi?: Pick<ApiClient, "setLandingTheme">): SceneView {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(window.devicePixelRatio);
   container.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(SCENE_BACKGROUND); // until the atmosphere sets the active sky's horizon
-  // Night clay at midday until a stored choice says otherwise.
-  let theme = DEFAULT_THEME;
+  // The stored choice (Night clay at midday when there is none), applied with no animation.
+  const stored = loadThemeChoice();
+  let theme = themeById(stored.theme);
   const atmosphere = createAtmosphere(scene, renderer);
   atmosphere.setTheme(theme);
-  atmosphere.setTime("midday", { animate: false });
+  atmosphere.setTime(stored.time, { animate: false });
 
   // The placeholder world, removed once a real one is loaded.
   const placeholder = new THREE.Group();
@@ -210,6 +214,24 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
     atmosphere.setTheme(theme);
     syncRoadOutlines();
   };
+  // Restyle what exists (the placeholder) to the stored theme, then settle its sky at the stored time.
+  applyTheme();
+  atmosphere.setTime(stored.time, { animate: false });
+
+  // The theme picker, the time buttons and "Use on landing"; a change applies and is remembered.
+  const themeControls = createThemeControls(container, {
+    initial: stored,
+    onTheme: (id) => {
+      theme = themeById(id);
+      applyTheme();
+      saveThemeChoice(themeControls.choice());
+    },
+    onTime: (time) => {
+      atmosphere.setTime(time, { animate: !prefersReducedMotion() });
+      saveThemeChoice(themeControls.choice());
+    },
+    setLandingTheme: themeApi && ((value) => themeApi.setLandingTheme(value)),
+  });
 
   /** Blueprint draws the roads' outlines: built once per world, the first time Blueprint is applied to it, and shown only there. */
   function syncRoadOutlines() {
