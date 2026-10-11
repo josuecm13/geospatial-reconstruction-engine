@@ -2,7 +2,10 @@ import * as THREE from "three";
 import type { OutlineKind } from "./blockOutline";
 import { DEFAULT_THEME } from "./themes";
 import { NIGHT_CLAY_BACKGROUND, NIGHT_CLAY_COLORS } from "./themes/nightClay";
-import { patchWindows } from "./nightWindows";
+import { composePatches, patchWindows, windowsPatch } from "./nightWindows";
+import { groundTexturePatch, texturedBuildingPatch } from "./realisticShaders";
+import { createRealisticTextures, GROUND_TILE_METRES } from "./themes/textures";
+import type { RealisticTextures } from "./themes/textures";
 import type { Theme, ThemeColors } from "./themes/types";
 
 /**
@@ -73,6 +76,12 @@ const withGrid = (material: Surface, colors: ThemeColors): Surface => {
   return material;
 };
 
+/** The multiplier that turns a texture drawn in `base` into `color` (per channel, in linear space, at most 1). */
+const tintToward = (color: string, base: string): THREE.Color => {
+  const [c, b] = [new THREE.Color(color), new THREE.Color(base)];
+  return new THREE.Color(Math.min(1, c.r / Math.max(b.r, 1e-4)), Math.min(1, c.g / Math.max(b.g, 1e-4)), Math.min(1, c.b / Math.max(b.b, 1e-4)));
+};
+
 /** Blueprint's building fills: unlit, faint, and they write depth. */
 const blueprintFill = (color: string): Surface => new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.16, depthWrite: true });
 
@@ -82,26 +91,43 @@ const buildMaterials = (theme: Theme) => {
   const surface = theme.mode === "lit" ? lit : flat;
   /** Ground-level layers write no depth: their draw order (LAYER_ORDER in buildWorld.ts) decides what shows on top. */
   const decal = (color: string, extra: Extra = {}) => surface(color, { depthWrite: false, ...extra });
-  const building = (color: string, generated: boolean) => {
+  // Realistic: one texture set per theme, built here so it is cached with the materials.
+  const textures = theme.textures ? createRealisticTextures(theme.textures.colors) : undefined;
+  /** A textured ground layer: the texture over world x and z, tinted so the layer renders as its palette colour. */
+  const ground = (color: string, texture: keyof RealisticTextures | undefined, tile: number) => {
+    if (!textures || !theme.textures || !texture) return decal(color);
+    const material = decal("#ffffff", { map: textures[texture] });
+    material.color.copy(tintToward(color, theme.textures.colors[texture]));
+    composePatches(material, groundTexturePatch(tile));
+    return material;
+  };
+  const building = (color: string, generated: boolean, kind: "measured" | "defaulted" | "generated") => {
+    if (textures && theme.textures) {
+      const material = lit(theme.textures.tints[kind], { map: textures.facade });
+      const patches = [texturedBuildingPatch(textures.roof)];
+      if (theme.windows !== "never") patches.push(windowsPatch({ generated }));
+      composePatches(material, ...patches);
+      return material;
+    }
     const material = line ? blueprintFill(color) : surface(color);
     if (theme.windows !== "never") patchWindows(material, { generated });
     return material;
   };
   return {
     ground: line ? withGrid(decal(colors.ground), colors) : decal(colors.ground),
-    green: decal(colors.green),
-    water: decal(colors.water),
-    forest: decal(colors.forest),
+    green: ground(colors.green, "grass", GROUND_TILE_METRES.grass),
+    water: ground(colors.water, "water", GROUND_TILE_METRES.water),
+    forest: ground(colors.forest, "forest", GROUND_TILE_METRES.forest),
     farmland: decal(colors.farmland),
     cemetery: decal(colors.cemetery),
     railway: decal(colors.railway),
     industrial: decal(colors.industrial),
-    roadNormal: decal(colors.roadNormal),
-    roadWide: decal(colors.roadWide),
-    roadNarrow: decal(colors.roadNarrow),
-    buildingMeasured: building(colors.buildingMeasured, false),
-    buildingDefaulted: building(colors.buildingDefaulted, false),
-    buildingGenerated: building(colors.buildingGenerated, true),
+    roadNormal: ground(colors.roadNormal, "asphalt", GROUND_TILE_METRES.asphalt),
+    roadWide: ground(colors.roadWide, "asphalt", GROUND_TILE_METRES.asphalt),
+    roadNarrow: ground(colors.roadNarrow, "asphalt", GROUND_TILE_METRES.asphalt),
+    buildingMeasured: building(colors.buildingMeasured, false, "measured"),
+    buildingDefaulted: building(colors.buildingDefaulted, false, "defaulted"),
+    buildingGenerated: building(colors.buildingGenerated, true, "generated"),
     buildable: decal(colors.buildable, { transparent: true, opacity: 0.25, side: THREE.DoubleSide }),
     zoneWater: decal(colors.zoneWater, ZONE),
     zoneSteep: decal(colors.zoneSteep, ZONE),

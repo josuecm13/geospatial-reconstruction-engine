@@ -1,3 +1,5 @@
+import type { RealisticColors } from "./textures";
+
 /** The scene's colour roles. Every theme gives each one; the names are the keys of Night clay's palette. */
 export interface ThemeColors {
   ground: string;
@@ -65,4 +67,9 @@ export interface Theme {
   windows: "always" | "night" | "never";
   /** Lit-window colours: warm for real buildings, cool for generated ones. */
   windowColors?: { warm: string; cool: string };
+  /** Realistic only: the base colours its procedural textures are drawn in, and the tint each kind of building multiplies into the facade. */
+  textures?: {
+    colors: RealisticColors;
+    tints: { measured: string; defaulted: string; generated: string };
+  };
 }

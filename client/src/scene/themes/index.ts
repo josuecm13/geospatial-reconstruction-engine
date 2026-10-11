@@ -1,9 +1,10 @@
 import { blueprint } from "./blueprint";
 import { lightClay } from "./lightClay";
 import { nightClay } from "./nightClay";
+import { realistic } from "./realistic";
 import type { Theme } from "./types";
 
-export const THEMES: readonly Theme[] = [nightClay, lightClay, blueprint];
+export const THEMES: readonly Theme[] = [nightClay, lightClay, realistic, blueprint];
 
 export const DEFAULT_THEME: Theme = nightClay;
 

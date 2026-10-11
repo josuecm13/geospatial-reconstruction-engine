@@ -90,25 +90,50 @@ const FRAGMENT_MAIN = /* glsl */ `
 outgoingLight += uWindowColor * (windowGlow() * uNight);
 `;
 
+/** A change to a built-in material's shader, with the cache key of the program it produces. Several compose onto one material (`composePatches`). */
+export interface ShaderPatch {
+  apply: (shader: THREE.WebGLProgramParametersWithUniforms) => void;
+  key: string;
+}
+
 /**
- * Makes `material` draw lit windows on its walls, in the emissive position: added to `outgoingLight` just before
+ * The patch that draws lit windows on walls, in the emissive position: added to `outgoingLight` just before
  * `opaque_fragment`, which both MeshBasicMaterial and MeshLambertMaterial run, so it shows where no light falls.
  * Real buildings use the warm colour, generated ones the cool one.
  */
-export function patchWindows(material: THREE.Material, { generated }: { generated: boolean }): void {
+export function windowsPatch({ generated }: { generated: boolean }): ShaderPatch {
   const density = generated ? DENSITY_GENERATED : DENSITY_REAL;
-  material.onBeforeCompile = (shader) => {
-    shader.uniforms.uNight = WINDOW_UNIFORMS.uNight;
-    shader.uniforms.uWindowColor = generated ? WINDOW_UNIFORMS.uCool : WINDOW_UNIFORMS.uWarm;
-    shader.vertexShader = shader.vertexShader
-      .replace(PATCH_ANCHORS.vertexCommon, `${PATCH_ANCHORS.vertexCommon}\n${VERTEX_PARS}`)
-      .replace(PATCH_ANCHORS.vertexBegin, `${PATCH_ANCHORS.vertexBegin}\n${VERTEX_MAIN}`);
-    shader.fragmentShader = shader.fragmentShader
-      .replace(PATCH_ANCHORS.fragmentCommon, `${PATCH_ANCHORS.fragmentCommon}\n${fragmentPars(density)}`)
-      .replace(PATCH_ANCHORS.fragmentEnd, `${FRAGMENT_MAIN}\n${PATCH_ANCHORS.fragmentEnd}`);
+  return {
+    apply: (shader) => {
+      shader.uniforms.uNight = WINDOW_UNIFORMS.uNight;
+      shader.uniforms.uWindowColor = generated ? WINDOW_UNIFORMS.uCool : WINDOW_UNIFORMS.uWarm;
+      shader.vertexShader = shader.vertexShader
+        .replace(PATCH_ANCHORS.vertexCommon, `${PATCH_ANCHORS.vertexCommon}\n${VERTEX_PARS}`)
+        .replace(PATCH_ANCHORS.vertexBegin, `${PATCH_ANCHORS.vertexBegin}\n${VERTEX_MAIN}`);
+      shader.fragmentShader = shader.fragmentShader
+        .replace(PATCH_ANCHORS.fragmentCommon, `${PATCH_ANCHORS.fragmentCommon}\n${fragmentPars(density)}`)
+        .replace(PATCH_ANCHORS.fragmentEnd, `${FRAGMENT_MAIN}\n${PATCH_ANCHORS.fragmentEnd}`);
+    },
+    key: `windows-${generated ? "generated" : "real"}`,
   };
-  material.customProgramCacheKey = () => `windows-${generated ? "generated" : "real"}`;
+}
+
+/**
+ * Gives `material` one `onBeforeCompile` that runs every patch in order, and a cache key that joins theirs, so two
+ * patches on one material never overwrite each other and differing combinations never share a program.
+ */
+export function composePatches(material: THREE.Material, ...patches: ShaderPatch[]): void {
+  material.onBeforeCompile = (shader) => {
+    for (const patch of patches) patch.apply(shader);
+  };
+  const key = patches.map((patch) => patch.key).join("+");
+  material.customProgramCacheKey = () => key;
   material.needsUpdate = true;
+}
+
+/** Makes `material` draw lit windows on its walls (see `windowsPatch`). */
+export function patchWindows(material: THREE.Material, options: { generated: boolean }): void {
+  composePatches(material, windowsPatch(options));
 }
 
 /** Sets the shared uniforms for a frame: how lit the windows are, and their colours. */
