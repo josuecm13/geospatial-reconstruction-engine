@@ -2,9 +2,9 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { BoundingBox, MapData } from "../api/types";
 import { prefersReducedMotion } from "../locations/flyTo";
-import { Animator, RISE_SECONDS } from "../scene/buildAnimation";
+import { Animator, RISE_SECONDS, riseDuration, staggerDelay } from "../scene/buildAnimation";
 import { buildWorld, DEFAULT_ROAD_MODE, generatedMeshes, LAYER_ORDER, setRoadMode } from "../scene/buildWorld";
-import { revealDelays } from "../scene/revealRings";
+import { revealDelays, streamBatchDelay } from "../scene/revealRings";
 import type { Terrain } from "../scene/terrain";
 import { COLORS, MATERIALS, SCENE_BACKGROUND } from "../scene/palette";
 import { shadeGeometry } from "../scene/shading";
@@ -91,7 +91,10 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
   const animator = new Animator();
   const generatedGroup = () => world?.getObjectByName("generated");
   /** Meshes under the `generated` group go; geometries are released (materials are shared). */
+  /** When the running stream started (its `generation` event clears the group), to pace its batches. */
+  let streamStart = performance.now();
   const clearGenerated = () => {
+    streamStart = performance.now();
     animator.reset(); // finishes any rise in flight, so no half-risen mesh is left
     const generated = generatedGroup();
     if (!generated) return;
@@ -102,7 +105,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
   };
   const streamSink: GenerationSink = {
     clear: clearGenerated,
-    add(features, projection) {
+    add(features, projection, blocksDone, blockCount) {
       const generated = generatedGroup();
       const terrain: Terrain | undefined = world?.userData.terrain;
       if (!generated || !terrain) return;
@@ -111,10 +114,13 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
       if (!meshes.length) return;
       generated.add(...meshes);
       generated.visible = true;
-      if (!prefersReducedMotion()) void animator.rise(meshes);
+      if (prefersReducedMotion()) return;
+      // Spread the stream over about five seconds: this batch waits for its share, or not at all if the server is slower than that.
+      const offset = streamBatchDelay(blocksDone, blockCount, (performance.now() - streamStart) / 1000, riseDuration(meshes.length));
+      void animator.riseAt(meshes, meshes.map((_, i) => offset + staggerDelay(i, meshes.length)));
     },
   };
-  /** Ticked: the buildings rise ring by ring from the centre, over about a second. Unticked: they hide at once (a fade would need its own tween for little gain). Both instant under reduced motion. */
+  /** Ticked: the buildings rise ring by ring from the centre, over about five seconds. Unticked: they hide at once (a fade would need its own tween for little gain). Both instant under reduced motion. */
   const showGenerated = (shown: boolean, animate = false) => {
     const generated = generatedGroup();
     if (!generated) return;

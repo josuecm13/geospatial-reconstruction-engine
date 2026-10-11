@@ -1,7 +1,7 @@
 /** Rings the generated buildings are grouped into when "Show generated" is ticked. */
 export const REVEAL_RINGS = 8;
 /** From the first ring starting to the last building finishing. */
-export const REVEAL_TOTAL_SECONDS = 1.3;
+export const REVEAL_TOTAL_SECONDS = 5;
 
 export interface Point {
   x: number;
@@ -28,4 +28,17 @@ export function revealDelays(points: Point[], centre: Point, riseSeconds: number
   const last = Math.max(0, ...indices);
   const span = Math.max(total - riseSeconds, 0);
   return indices.map((index) => (last === 0 ? 0 : (index / last) * span));
+}
+
+/**
+ * Seconds from now that a streamed batch should start rising, so a stream is spread over at least `total`
+ * seconds: the batch that brings `blocksDone` of `blockCount` blocks targets
+ * `blocksDone / blockCount * (total - riseSeconds)` seconds after the stream started, and waits whatever of
+ * that is left (`elapsed` seconds have gone). A stream slower than the pace gets 0: batches rise as they arrive.
+ */
+export function streamBatchDelay(blocksDone: number, blockCount: number, elapsed: number, riseSeconds: number, total: number = REVEAL_TOTAL_SECONDS): number {
+  if (!(blockCount > 0)) return 0;
+  const fraction = Math.min(Math.max(blocksDone / blockCount, 0), 1);
+  const target = fraction * Math.max(total - riseSeconds, 0);
+  return Math.max(0, target - elapsed);
 }

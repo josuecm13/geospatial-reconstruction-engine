@@ -18,8 +18,8 @@ export interface GenerationDeps {
 export interface GenerationSink {
   /** Removes every generated building on show (the previous run's, or the streamed ones). */
   clear(): void;
-  /** Adds a batch, rising; a feature already on show is skipped. */
-  add(features: GeneratedFeature[], projection: Projection): void;
+  /** Adds a batch, rising; a feature already on show is skipped. `blocksDone` of `blockCount` blocks are processed with this batch (0 when unknown), which paces the rise. */
+  add(features: GeneratedFeature[], projection: Projection, blocksDone: number, blockCount: number): void;
 }
 
 export interface GenerationControls {
@@ -94,7 +94,7 @@ export function createGenerationControls(
     const apply = (step: StreamStep, projection?: Projection) => {
       state = step.state;
       if (step.clear) sink.clear();
-      if (step.add.length && projection) sink.add(step.add, projection);
+      if (step.add.length && projection) sink.add(step.add, projection, step.state.blocksDone, step.state.blockCount ?? 0);
       if (step.clear || step.add.length) deps.streamed?.([...state.features]);
       // Streaming shows the buildings at once, whatever the box said.
       streaming = true;
