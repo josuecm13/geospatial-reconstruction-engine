@@ -18,10 +18,12 @@ export const LAYER_Y = { area_features: 0.02, blocks: 0.03, zones: 0.035, roads:
 
 /** A block's outline floats this far above the ground, so it clears the road and area surfaces under it. */
 export const OUTLINE_LIFT = 0.25;
+/** A road outline floats this far above the road surface (on top of LAYER_Y.roads), so it clears the road's own triangles. */
+const ROAD_OUTLINE_LIFT = 0.1;
 /** How far apart a draped outline's vertices are when the world has no terrain (a flat line needs none in between). */
 const FLAT_OUTLINE_STEP = 50;
 
-/** Draw order of the ground-level layers, lowest first. They write no depth (palette.ts), so this order alone decides what shows on top. */
+/** Draw order of the ground-level layers, lowest first. Only the ground writes depth (palette.ts); the layers on it write none and depth-test with a polygon offset, so this order decides which of them shows on top of which. */
 export const LAYER_ORDER = { ground: -50, green: -40, water: -39, roadNarrow: -30, roadNormal: -29, roadWide: -28, blocks: -20, zones: -19 } as const;
 
 /** The ground plane over the given local extent. Shared by buildWorld and the staged build. */
@@ -30,6 +32,7 @@ export function groundPlane(minX: number, maxX: number, minZ: number, maxZ: numb
   const ground = new THREE.Mesh(shadeGeometry(new THREE.PlaneGeometry(maxX - minX, maxZ - minZ).rotateX(-Math.PI / 2)), MATERIALS.ground);
   ground.position.set((minX + maxX) / 2, 0, (minZ + maxZ) / 2);
   ground.name = "ground:plane";
+  ground.receiveShadow = true;
   ground.renderOrder = LAYER_ORDER.ground;
   return ground;
 }
@@ -42,6 +45,7 @@ export function terrainGround(terrain: Terrain, minX: number, maxX: number, minZ
   geometry.setIndex(indices);
   const ground = new THREE.Mesh(shadeGeometry(geometry), MATERIALS.ground);
   ground.name = "ground:plane";
+  ground.receiveShadow = true;
   ground.renderOrder = LAYER_ORDER.ground;
   return ground;
 }
@@ -73,6 +77,9 @@ function entity(layer: string, feature: Feature<object>, geometry: THREE.BufferG
   const mesh = new THREE.Mesh(geometry, material);
   mesh.name = `${layer}:${feature.id}`;
   mesh.userData = { layer, id: feature.id, properties: feature.properties };
+  // Shadows (lit themes only; harmless otherwise): buildings cast and receive them, the ground layers receive.
+  mesh.castShadow = layer === "building" || layer === "generated";
+  mesh.receiveShadow = true;
   return mesh;
 }
 
@@ -84,11 +91,38 @@ function standOnGround(terrain: Terrain, mesh: THREE.Mesh, polygons: Rings[], ba
 }
 
 /** The pale outline of a building's edges: a child, so it follows the build animation's scale.y. Not pickable (routeLayer raycasts recursively) and left out of the glTF export (exportGltf.ts). */
-function withEdges(mesh: THREE.Mesh): void {
-  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry, 1), MATERIALS.edge);
+function withEdges(mesh: THREE.Mesh, generated = false): void {
+  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry, 1), generated ? MATERIALS.edgeGenerated : MATERIALS.edge);
+  if (generated) edges.computeLineDistances(); // the dashes (Blueprint) are measured along the line
   edges.name = "edges";
   edges.raycast = () => {};
   mesh.add(edges);
+}
+
+/**
+ * One line object of every road's outline (`world.userData.roadOutlines`, in local metres), densified like the block outlines
+ * and lifted onto the terrain plus the road layer plus a small lift. Named `road_outlines`, never picked. Blueprint only draws
+ * it (the scene view builds it when that theme is first applied to a world and toggles `visible`); the caller adds it under `roads`.
+ */
+export function roadOutlineLines(world: THREE.Object3D): THREE.LineSegments {
+  const terrain: Terrain | undefined = world.userData.terrain;
+  const outlines: Local[][] = world.userData.roadOutlines ?? [];
+  const step = terrain?.spacing || FLAT_OUTLINE_STEP;
+  const lift = LAYER_Y.roads + ROAD_OUTLINE_LIFT;
+  const positions: number[] = [];
+  for (const outline of outlines) {
+    const ring = densify([...outline, outline[0]], step); // a road polygon isn't closed
+    for (let i = 0; i + 1 < ring.length; i++) {
+      for (const p of [ring[i], ring[i + 1]]) positions.push(p.x, (terrain?.heightAtLocal(p.x, p.z) ?? 0) + lift, p.z);
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  const lines = new THREE.LineSegments(geometry, MATERIALS.roadOutline);
+  lines.name = "road_outlines";
+  lines.userData = { layer: "road_outline" };
+  lines.raycast = () => {};
+  return lines;
 }
 
 /**
@@ -107,7 +141,7 @@ export function generatedMeshes(features: Feature<GeneratedBuildingProperties>[]
     mesh.userData.generated = true;
     mesh.userData.height = feature.properties.height_meters;
     standOnGround(terrain, mesh, polygons, feature.properties.base_elevation_meters);
-    withEdges(mesh);
+    withEdges(mesh, true);
     meshes.push(mesh);
   }
   return meshes;

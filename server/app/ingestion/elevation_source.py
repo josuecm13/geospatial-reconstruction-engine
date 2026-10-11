@@ -13,7 +13,7 @@ import httpx
 from PIL import Image, UnidentifiedImageError
 
 from app.domain.bounding_box import BoundingBox, Coordinate
-from app.domain.elevation import ElevationGrid, grid_size_for
+from app.domain.elevation import ElevationGrid, despike, grid_size_for
 from app.ingestion.overpass import USER_AGENT
 
 logger = logging.getLogger(__name__)
@@ -163,7 +163,9 @@ class TerrainTilesSource:
             except httpx.TransportError as error:
                 raise ElevationUnavailable(f"the terrain tiles could not be reached: {error}") from error
             if response.status_code == 200:
-                return decode_terrarium(response.content)
+                # Void pixels are removed on the tile's own 30 m pixels, before bilinear sampling
+                # would smear each one across several grid cells.
+                return despike(decode_terrarium(response.content), TILE_SIZE, TILE_SIZE)
             if response.status_code == 404:
                 return _ZERO_TILE  # beyond coverage: open ocean
             if response.status_code not in RETRYABLE_STATUSES:

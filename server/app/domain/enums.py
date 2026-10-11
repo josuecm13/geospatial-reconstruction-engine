@@ -74,3 +74,17 @@ class RestrictionKind(str, enum.Enum):
     ONLY_LEFT_TURN = "only_left_turn"
     ONLY_RIGHT_TURN = "only_right_turn"
     ONLY_STRAIGHT_ON = "only_straight_on"
+
+
+class SceneTheme(str, enum.Enum):
+    NIGHT_CLAY = "night-clay"
+    LIGHT_CLAY = "light-clay"
+    BLUEPRINT = "blueprint"
+    REALISTIC = "realistic"
+
+
+class TimeOfDay(str, enum.Enum):
+    DAWN = "dawn"
+    MIDDAY = "midday"
+    GOLDEN_HOUR = "golden-hour"
+    NIGHT = "night"

@@ -190,7 +190,7 @@ export const mount: Mount<ExploreRoute> = (el, ctx) => {
       sceneView ??= import("../views/sceneView").then(({ createSceneView }) => {
         const areaId = () => selection.get().areaId;
         const reload = () => sceneLoader?.reload();
-        const created = createSceneView(pick("scene-view"), { api, areaId }, { api, areaId, reload }, { api, areaId, reload, streamed: (features) => mapLayers?.setGeneratedBuildings(features) });
+        const created = createSceneView(pick("scene-view"), { api, areaId }, { api, areaId, reload }, { api, areaId, reload, streamed: (features) => mapLayers?.setGeneratedBuildings(features) }, api);
         sceneLoader = new SceneLoader(api, selection, created, (error) => sceneErrors(error).sentence);
         return created;
       });

@@ -87,3 +87,59 @@ def test_deleting_another_area_keeps_the_setting(client):
     assert client.delete(f"/import-areas/{outer['id']}").status_code == 204
 
     assert client.get("/settings/featured-area").json() == {"import_area_id": inner["id"]}
+
+
+def test_landing_theme_unset_reads_as_null(client):
+    response = client.get("/settings/landing-theme")
+
+    assert response.status_code == 200
+    assert response.json() == {"landing_theme": None}
+
+
+def test_landing_theme_round_trips(client):
+    chosen = {"theme": "realistic", "time_of_day": "golden-hour"}
+
+    put = client.put("/settings/landing-theme", json={"landing_theme": chosen})
+
+    assert put.status_code == 200
+    assert put.json() == {"landing_theme": chosen}
+    assert client.get("/settings/landing-theme").json() == {"landing_theme": chosen}
+
+
+def test_landing_theme_null_clears_it(client):
+    client.put("/settings/landing-theme", json={"landing_theme": {"theme": "blueprint", "time_of_day": "dawn"}})
+
+    response = client.put("/settings/landing-theme", json={"landing_theme": None})
+
+    assert response.status_code == 200
+    assert response.json() == {"landing_theme": None}
+    assert client.get("/settings/landing-theme").json() == {"landing_theme": None}
+
+
+def test_an_unknown_theme_is_invalid_and_leaves_the_value(client):
+    kept = {"theme": "light-clay", "time_of_day": "midday"}
+    client.put("/settings/landing-theme", json={"landing_theme": kept})
+
+    response = client.put("/settings/landing-theme", json={"landing_theme": {"theme": "neon", "time_of_day": "midday"}})
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "invalid_request"
+    assert client.get("/settings/landing-theme").json() == {"landing_theme": kept}
+
+
+def test_an_unknown_time_of_day_is_invalid_and_leaves_the_value(client):
+    kept = {"theme": "light-clay", "time_of_day": "midday"}
+    client.put("/settings/landing-theme", json={"landing_theme": kept})
+
+    response = client.put("/settings/landing-theme", json={"landing_theme": {"theme": "blueprint", "time_of_day": "teatime"}})
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "invalid_request"
+    assert client.get("/settings/landing-theme").json() == {"landing_theme": kept}
+
+
+def test_a_landing_theme_body_without_the_field_is_invalid(client):
+    response = client.put("/settings/landing-theme", json={})
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "invalid_request"

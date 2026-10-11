@@ -15,6 +15,7 @@ import type {
   ImportArea,
   ImportStarted,
   ImportStatus,
+  LandingTheme,
   MapData,
   Route,
   RoutingStrategies,
@@ -114,6 +115,16 @@ export class ApiClient {
   /** Chooses the landing page's featured area (a completed one); null clears the choice. Returns the stored id. */
   async setFeaturedArea(areaId: string | null): Promise<string | null> {
     return (await this.request<{ import_area_id: string | null }>("PUT", "/settings/featured-area", { import_area_id: areaId })).import_area_id;
+  }
+
+  /** The theme and time of day the landing stage is drawn in, or null when none is chosen. */
+  async getLandingTheme(): Promise<LandingTheme | null> {
+    return (await this.request<{ landing_theme: LandingTheme | null }>("GET", "/settings/landing-theme")).landing_theme;
+  }
+
+  /** Chooses the landing stage's theme and time of day; null clears the choice. Returns the stored value. */
+  async setLandingTheme(value: LandingTheme | null): Promise<LandingTheme | null> {
+    return (await this.request<{ landing_theme: LandingTheme | null }>("PUT", "/settings/landing-theme", { landing_theme: value })).landing_theme;
   }
 
   /** Re-analyses an area's terrain in the background; its progress streams on `importEvents`. */

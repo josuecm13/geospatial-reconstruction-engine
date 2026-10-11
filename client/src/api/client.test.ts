@@ -122,6 +122,40 @@ describe("featured area setting", () => {
   });
 });
 
+describe("landing theme setting", () => {
+  const chosen = { theme: "blueprint", time_of_day: "dawn" } as const;
+
+  it("reads the theme, null when none", async () => {
+    const { client, calls } = recording(json(200, { landing_theme: chosen }));
+
+    await expect(client.getLandingTheme()).resolves.toEqual(chosen);
+    expect(calls[0].url).toBe("/api/settings/landing-theme");
+    expect(calls[0].init?.method).toBe("GET");
+    await expect(recording(json(200, { landing_theme: null })).client.getLandingTheme()).resolves.toBeNull();
+  });
+
+  it("puts the value, and null to clear", async () => {
+    const { client, calls } = recording(json(200, { landing_theme: chosen }));
+
+    await expect(client.setLandingTheme(chosen)).resolves.toEqual(chosen);
+    expect(calls[0].init?.method).toBe("PUT");
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ landing_theme: chosen });
+
+    const cleared = recording(json(200, { landing_theme: null }));
+    await expect(cleared.client.setLandingTheme(null)).resolves.toBeNull();
+    expect(JSON.parse(String(cleared.calls[0].init?.body))).toEqual({ landing_theme: null });
+  });
+
+  it("surfaces a rejection by its code", async () => {
+    const { client } = recording(json(422, { error: { code: "invalid_request", message: "bad", details: null } }));
+
+    const error = await client.setLandingTheme(chosen).catch((e) => e);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect([error.status, error.code]).toEqual([422, "invalid_request"]);
+  });
+});
+
 describe("listImportAreas", () => {
   it("asks for completed areas and unwraps the list", async () => {
     const calls: string[] = [];

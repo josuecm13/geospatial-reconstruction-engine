@@ -3,12 +3,15 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { BoundingBox, MapData, Projection } from "../api/types";
 import { prefersReducedMotion } from "../locations/flyTo";
 import { Animator, staggerDelay } from "../scene/buildAnimation";
-import { buildWorld, DEFAULT_ROAD_MODE, generatedMeshes, LAYER_ORDER, setRoadMode } from "../scene/buildWorld";
+import { buildWorld, DEFAULT_ROAD_MODE, generatedMeshes, LAYER_ORDER, roadOutlineLines, setRoadMode } from "../scene/buildWorld";
 import { RevealQueue } from "../scene/revealQueue";
 import { pointDelays } from "../scene/revealSchedule";
 import type { GeneratedFeature } from "../scene/generationStream";
 import type { Terrain } from "../scene/terrain";
-import { COLORS, MATERIALS, SCENE_BACKGROUND } from "../scene/palette";
+import { activeTheme, COLORS, MATERIALS, restyle, SCENE_BACKGROUND, setActiveTheme } from "../scene/palette";
+import { createAtmosphere } from "../scene/atmosphere";
+import { themeById } from "../scene/themes";
+import type { ThemeId, TimeOfDay } from "../scene/themes/types";
 import { shadeGeometry } from "../scene/shading";
 import { createAutoRotate, ROTATE_SPEED } from "../scene/autoRotate";
 import { createCameraModes } from "../scene/cameraModes";
@@ -24,12 +27,20 @@ import { createRoutePanel, type RoutingDeps } from "../scene/routePanel";
 import type { SceneTarget } from "../scene/sceneLoader";
 import { bboxMeters, createStagedScene, type StagedHandle } from "../scene/stagedScene";
 import { createZoneLegend } from "../scene/zoneLegend";
+import { loadThemeChoice, saveThemeChoice } from "../scene/themeChoice";
+import { createFpsReadout } from "../scene/fpsReadout";
+import { createThemeControls } from "../scene/themeControls";
+import type { ApiClient } from "../api/client";
 
 export interface SceneView extends SceneTarget {
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
   /** Replaces the world with an empty one in `bbox` that the returned handle builds up, stage by stage. */
   beginStaged(bbox: BoundingBox): StagedHandle;
+  /** Shows the scene in this theme (an unknown id falls back to Night clay): every layer, the sky, the lights and the fog, with no rebuild. */
+  setTheme(id: ThemeId): void;
+  /** Moves the sun and sky to a time of day, animated unless the user prefers reduced motion. Nothing changes in a theme that does not follow the sun. */
+  setTimeOfDay(time: TimeOfDay): void;
   /** Starts rendering; the loop stops while the view is hidden. */
   shown(): void;
   hidden(): void;
@@ -41,13 +52,20 @@ const EMPTY_HINT = "Open an import on the Map tab";
 
 /** The low-poly world of the open area: background and (once `setWorld` is called) the imported
  * city. Before that, a placeholder ground and grid, and a hint. */
-export function createSceneView(container: HTMLElement, routing?: RoutingDeps, terrain?: TerrainDeps, generation?: GenerationDeps): SceneView {
+export function createSceneView(container: HTMLElement, routing?: RoutingDeps, terrain?: TerrainDeps, generation?: GenerationDeps, themeApi?: Pick<ApiClient, "setLandingTheme">): SceneView {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   container.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(SCENE_BACKGROUND);
+  scene.background = new THREE.Color(SCENE_BACKGROUND); // until the atmosphere sets the active sky's horizon
+  // The stored choice (Night clay at midday when there is none), applied with no animation.
+  const stored = loadThemeChoice();
+  let theme = themeById(stored.theme);
+  let timeOfDay = stored.time; // the time on show, for the glTF export's extras
+  const atmosphere = createAtmosphere(scene, renderer);
+  atmosphere.setTheme(theme);
+  atmosphere.setTime(stored.time, { animate: false });
 
   // The placeholder world, removed once a real one is loaded.
   const placeholder = new THREE.Group();
@@ -81,7 +99,10 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
   };
   buildable.addEventListener("change", showBlocks);
   const roadMode = () => (smooth.checked ? "smoothed" : "exact");
-  smooth.addEventListener("change", () => world && setRoadMode(world, roadMode()));
+  smooth.addEventListener("change", () => {
+    if (world) setRoadMode(world, roadMode());
+    atmosphere.invalidateShadows();
+  });
   /** What the toggles and the credit show for the world on screen (`undefined`: no finished world). */
   const showTerrain = (data: MapData | undefined) => {
     smoothLabel.hidden = !data?.elevation;
@@ -140,6 +161,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
     const meshes = fresh.flatMap(({ feature, projection }) => generatedMeshes([feature], terrain, projection));
     if (!meshes.length) return;
     generated.add(...meshes);
+    atmosphere.invalidateShadows();
     generated.visible = true;
     if (instant || prefersReducedMotion()) return;
     track(animator.riseAt(meshes, meshes.map((_, i) => staggerDelay(i, meshes.length))));
@@ -186,6 +208,46 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
     });
     track(animator.riseAt(meshes, pointDelays(points, { x: centre.x, z: centre.z })));
   };
+
+  /** Makes `theme` the one meshes are built with and every mesh, the sky, the lights and the fog take its look. */
+  const applyTheme = () => {
+    setActiveTheme(theme);
+    restyle(scene);
+    atmosphere.setTheme(theme);
+    syncRoadOutlines();
+  };
+  // Restyle what exists (the placeholder) to the stored theme, then settle its sky at the stored time.
+  applyTheme();
+  atmosphere.setTime(stored.time, { animate: false });
+
+  // The theme picker, the time buttons and "Use on landing"; a change applies and is remembered.
+  const themeControls = createThemeControls(container, {
+    initial: stored,
+    onTheme: (id) => {
+      theme = themeById(id);
+      applyTheme();
+      saveThemeChoice(themeControls.choice());
+    },
+    onTime: (time) => {
+      timeOfDay = time;
+      atmosphere.setTime(time, { animate: !prefersReducedMotion() });
+      saveThemeChoice(themeControls.choice());
+    },
+    setLandingTheme: themeApi && ((value) => themeApi.setLandingTheme(value)),
+  });
+
+  /** Blueprint draws the roads' outlines: built once per world, the first time Blueprint is applied to it, and shown only there. */
+  function syncRoadOutlines() {
+    if (!world) return;
+    const roads = world.getObjectByName("roads");
+    if (!roads) return;
+    let outlines = roads.getObjectByName("road_outlines");
+    if (!outlines && theme.mode === "line" && world.userData.roadOutlines) {
+      outlines = roadOutlineLines(world);
+      roads.add(outlines);
+    }
+    if (outlines) outlines.visible = theme.mode === "line";
+  }
 
   const removeWorld = () => {
     cancelReveal(true);
@@ -257,7 +319,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
   blockSelection =
     generation && createBlockSelection(camera, renderer.domElement, container, generation.api, () => modes.mode === "fly" && renderer.domElement.style.cursor !== "crosshair");
 
-  const exporter = createExportButton(actions);
+  const exporter = createExportButton(actions, () => ({ theme: activeTheme().id, timeOfDay }));
   const terrainControls = terrain && createTerrainControls(actions, container, terrain);
   // Generate / Regenerate, its progress line, and "Show generated" beside "Smooth roads": the generated buildings are the `generated` group.
   const generationControls =
@@ -273,6 +335,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
   actions.appendChild(rotateButton);
   const staged = createStagedScene(scene, container);
 
+  const fpsReadout = createFpsReadout(container, renderer, { theme: () => theme.id, shadowRedraws: () => atmosphere.shadowRedraws() });
   let running = false;
   const resize = () => {
     const { clientWidth, clientHeight } = container;
@@ -286,6 +349,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
   const frame = () => {
     if (!running) return;
     const delta = clock.getDelta();
+    fpsReadout?.frame(delta * 1000);
     rotateButton.disabled = modes.mode !== "fly";
     const context = { fly: modes.mode === "fly", world: !!world, building };
     const turning = rotate.update(delta, context);
@@ -300,6 +364,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
     }
     modes.update(delta);
     animator.update(delta);
+    atmosphere.update(delta, camera, controls.target, { buildAnimating: building || busy() });
     if (reveal.size) playReveal(reveal.update(delta));
     staged.update(delta);
     renderer.render(scene, camera);
@@ -316,6 +381,8 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
       zoneLegend.setReasons(data.generation_zones?.features.map((zone) => zone.properties.reason) ?? []);
       showBlocks();
       scene.add(world);
+      syncRoadOutlines();
+      atmosphere.invalidateShadows();
       showTerrain(data);
       terrainControls?.setWorld(!data.elevation);
       generationControls?.setWorld(data.generation ?? null);
@@ -387,6 +454,14 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
         },
       };
     },
+    setTheme(id) {
+      theme = themeById(id);
+      applyTheme();
+    },
+    setTimeOfDay(time) {
+      timeOfDay = time;
+      atmosphere.setTime(time, { animate: !prefersReducedMotion() });
+    },
     showMessage(message: string) {
       framing.reset();
       removeWorld();
@@ -410,6 +485,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
       this.showMessage(EMPTY_HINT);
     },
     shown() {
+      applyTheme(); // the landing stage may have made another theme the active one
       resize();
       modes.setActive(true);
       pins.setActive(true);
@@ -432,6 +508,8 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
       pins.dispose();
       blockSelection?.dispose();
       observer.disconnect();
+      fpsReadout?.dispose();
+      atmosphere.dispose();
       modes.dispose();
       routes?.dispose();
       controls.dispose();

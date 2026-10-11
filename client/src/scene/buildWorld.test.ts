@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
 import type { Elevation, Feature, GeneratedBuildingProperties, MapData, Position } from "../api/types";
-import { buildWorld, generatedMeshes, groundPlane, LAYER_ORDER, LAYER_Y, OUTLINE_LIFT, setRoadMode } from "./buildWorld";
+import { buildWorld, generatedMeshes, groundPlane, LAYER_ORDER, LAYER_Y, OUTLINE_LIFT, roadOutlineLines, setRoadMode } from "./buildWorld";
 import { MATERIALS } from "./palette";
 
 const D = 0.0001; // about 11 m
@@ -112,8 +112,9 @@ describe("buildWorld", () => {
     expect(Math.max(...sequence)).toBeLessThan(0);
   });
 
-  it("gives the flat materials no depth write, and the building materials one", () => {
-    for (const key of ["ground", "green", "water", "roadNormal", "roadWide", "roadNarrow", "buildable"] as const) {
+  it("gives the ground and the building materials a depth write, and the layers on the ground none", () => {
+    expect(MATERIALS.ground.depthWrite).toBe(true);
+    for (const key of ["green", "water", "roadNormal", "roadWide", "roadNarrow", "buildable"] as const) {
       expect(MATERIALS[key].depthWrite, key).toBe(false);
     }
     expect(MATERIALS.buildingMeasured.depthWrite).toBe(true);
@@ -367,11 +368,35 @@ describe("buildWorld generated buildings", () => {
     expect(mesh.position.y).toBeCloseTo(25 - terrain.baseline, 6);
   });
 
-  it("gives each generated building pale edge lines, like the others", () => {
+  it("gives each generated building edge lines in the generated-edge material, with line distances for the dashes", () => {
     const world = buildWorld({ ...data, generated_buildings: fc([generated("g1", -84, 10.0004, null)]) });
     const edges = world.getObjectByName("generated:g1")!.getObjectByName("edges") as THREE.LineSegments;
 
-    expect(edges.material).toBe(MATERIALS.edge);
+    expect(edges.material).toBe(MATERIALS.edgeGenerated);
+    expect(edges.geometry.getAttribute("lineDistance")).toBeDefined();
+    const measured = world.getObjectByName("building:bu1")!.getObjectByName("edges") as THREE.LineSegments;
+    expect(measured.material).toBe(MATERIALS.edge);
+    expect(measured.geometry.getAttribute("lineDistance")).toBeUndefined();
+  });
+
+  it("roadOutlineLines builds one pickless object from the road outlines, at road height on a flat world", () => {
+    const world = buildWorld(data);
+    const lines = roadOutlineLines(world);
+
+    expect(lines.name).toBe("road_outlines");
+    expect(lines.material).toBe(MATERIALS.roadOutline);
+    const hits: THREE.Intersection[] = [];
+    lines.raycast(new THREE.Raycaster(new THREE.Vector3(0, 10, 0), new THREE.Vector3(0, -1, 0)), hits);
+    expect(hits).toEqual([]);
+    const position = lines.geometry.getAttribute("position");
+    const outlines = world.userData.roadOutlines as unknown[][];
+    expect(outlines.length).toBe(2); // r2, the twin of r1, is left out
+    expect(position.count % 2).toBe(0); // segment pairs
+    expect(position.count).toBeGreaterThanOrEqual(outlines.reduce((sum, outline) => sum + outline.length * 2, 0));
+    for (let i = 0; i < position.count; i++) {
+      expect(position.getY(i)).toBeGreaterThanOrEqual(LAYER_Y.roads);
+      expect(position.getY(i)).toBeLessThan(LAYER_Y.roads + 0.5);
+    }
   });
 
   it("leaves the group empty without a run", () => {

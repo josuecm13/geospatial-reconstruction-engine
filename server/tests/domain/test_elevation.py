@@ -4,6 +4,7 @@ from app.domain.bounding_box import BoundingBox, Coordinate
 from app.domain.elevation import (
     ElevationGrid,
     building_base_height,
+    despike,
     grid_size_for,
     smoothed,
     vertex_heights,
@@ -122,3 +123,53 @@ def test_vertex_heights_sample_each_vertex_in_order():
     g = grid(3, 3, lambda r, c: 2.0 * c + 10.0 * r)
 
     assert vertex_heights(g, (at(0, 0), at(1, 1), at(2, 2), Coordinate(10.0005, 20.0))) == pytest.approx((0.0, 12.0, 24.0, 5.0))
+
+
+def flat(rows, cols, value=2.0):
+    return [value] * (rows * cols)
+
+
+def test_despike_fixes_a_lone_pit_in_a_flat_grid():
+    heights = flat(5, 5)
+    heights[12] = -300.0
+    assert despike(heights, 5, 5) == tuple(flat(5, 5))
+
+
+def test_despike_fixes_a_peak():
+    heights = flat(5, 5)
+    heights[12] = 400.0
+    assert despike(heights, 5, 5) == tuple(flat(5, 5))
+
+
+def test_despike_fixes_edge_and_corner_pits():
+    for index in (0, 2, 4, 14, 24):  # corners and an edge of a 5 x 5 grid
+        heights = flat(5, 5)
+        heights[index] = -300.0
+        assert despike(heights, 5, 5) == tuple(flat(5, 5)), index
+
+
+def test_despike_fixes_a_cluster_of_two_bad_cells():
+    heights = flat(5, 5)
+    heights[11] = heights[12] = -300.0
+    assert despike(heights, 5, 5) == tuple(flat(5, 5))
+
+
+def test_despike_leaves_a_steep_ramp_alone():
+    ramp = [10.0 * c for _ in range(5) for c in range(5)]  # 10 m per cell, steeper than the threshold allows to jump
+    assert despike(ramp, 5, 5) == tuple(ramp)
+
+
+def test_despike_leaves_a_step_alone():
+    heights = [0.0 if c < 3 else 50.0 for _ in range(5) for c in range(5)]
+    assert despike(heights, 5, 5) == tuple(heights)
+
+
+def test_despike_leaves_small_bumps_alone():
+    heights = flat(5, 5)
+    heights[12] = 10.0
+    assert despike(heights, 5, 5) == tuple(heights)
+
+
+def test_despike_rejects_a_mismatched_shape():
+    with pytest.raises(ValueError):
+        despike([1.0, 2.0, 3.0], 2, 2)
