@@ -327,3 +327,12 @@ export interface StageData {
 }
 
 export type StageEvent = { [S in ImportStage]: { stage: S; data: StageData[S] } }[ImportStage];
+
+export type SceneThemeId = "night-clay" | "light-clay" | "blueprint" | "realistic";
+export type TimeOfDayPreset = "dawn" | "midday" | "golden-hour" | "night";
+
+/** The landing stage's look: `/settings/landing-theme` holds one, or null for the default. */
+export interface LandingTheme {
+  theme: SceneThemeId;
+  time_of_day: TimeOfDayPreset;
+}

@@ -1,4 +1,4 @@
-"""Site settings: which import area the landing page features."""
+"""Site settings: which import area the landing page features, and the theme it is drawn in."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_session
 from app.api.errors import ApiError
-from app.domain.enums import ImportStatus
+from app.domain.enums import ImportStatus, SceneTheme, TimeOfDay
 from app.persistence.repositories.import_area import ImportAreaRepository
 from app.persistence.repositories.site_settings import SiteSettingsRepository
 
@@ -42,3 +42,27 @@ def put_featured_area(body: FeaturedAreaBody, session: Session = Depends(get_ses
     SiteSettingsRepository(session).set_featured_area_id(body.import_area_id)
     session.commit()
     return FeaturedAreaBody(import_area_id=body.import_area_id)
+
+
+class LandingTheme(BaseModel):
+    theme: SceneTheme
+    time_of_day: TimeOfDay
+
+
+class LandingThemeBody(BaseModel):
+    # Required but nullable: null clears the setting. An unknown theme or time fails validation (422 invalid_request).
+    landing_theme: LandingTheme | None
+
+
+@router.get("/settings/landing-theme", response_model=LandingThemeBody)
+def get_landing_theme(session: Session = Depends(get_session)) -> LandingThemeBody:
+    stored = SiteSettingsRepository(session).landing_theme()
+    return LandingThemeBody(landing_theme=LandingTheme(theme=stored[0], time_of_day=stored[1]) if stored else None)
+
+
+@router.put("/settings/landing-theme", response_model=LandingThemeBody)
+def put_landing_theme(body: LandingThemeBody, session: Session = Depends(get_session)) -> LandingThemeBody:
+    chosen = body.landing_theme
+    SiteSettingsRepository(session).set_landing_theme(None if chosen is None else (chosen.theme, chosen.time_of_day))
+    session.commit()
+    return body

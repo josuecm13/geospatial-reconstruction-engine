@@ -3,9 +3,11 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.domain.enums import SceneTheme, TimeOfDay
 from app.persistence.models import SiteSettingModel
 
 FEATURED_AREA_KEY = "featured_area_id"
+LANDING_THEME_KEY = "landing_theme"
 
 
 class SiteSettingsRepository:
@@ -47,3 +49,17 @@ class SiteSettingsRepository:
         """For deleting an area: clears the setting only when it names this area."""
         if self.featured_area_id() == import_area_id:
             self.delete(FEATURED_AREA_KEY)
+
+    def landing_theme(self) -> tuple[SceneTheme, TimeOfDay] | None:
+        value = self.get(LANDING_THEME_KEY)
+        if not value:
+            return None
+        return SceneTheme(value["theme"]), TimeOfDay(value["time_of_day"])
+
+    def set_landing_theme(self, value: tuple[SceneTheme, TimeOfDay] | None) -> None:
+        """Null clears the setting."""
+        if value is None:
+            self.delete(LANDING_THEME_KEY)
+        else:
+            theme, time_of_day = value
+            self.set(LANDING_THEME_KEY, {"theme": theme.value, "time_of_day": time_of_day.value})
