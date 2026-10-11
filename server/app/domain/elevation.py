@@ -6,7 +6,7 @@ row-major from south to north and, within a row, west to east. Everything else (
 a road vertex's height) is computed from it by the pure functions here."""
 
 import math
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -16,12 +16,17 @@ from app.domain.local_projection import LocalProjection, local_projection_for
 
 SMOOTHING_METERS = 30.0
 ELEVATION_SOURCE = "aws-terrain-tiles"
-ELEVATION_ALGORITHM = "terrarium-z15-bilinear-v1"
+ELEVATION_ALGORITHM = "terrarium-z15-bilinear-despike-v2"
 TERRAIN_ATTRIBUTION = (
     "Terrain: AWS Terrain Tiles (Mapzen/Tilezen) — 3DEP, SRTM, GMTED2010 courtesy of the U.S. Geological Survey; "
     "ETOPO1 NOAA; EU-DEM produced using Copernicus data; and others "
     "(github.com/tilezen/joerd/blob/master/docs/attribution.md)"
 )
+
+# A void or bad pixel in the source model is a lone cell far from every neighbour (observed: -300 m
+# beside a coast at sea level). Real terrain sampled at 30 m rarely differs from the median of its
+# neighbours by more than this and also lies outside all of them, short of a cliff or a quarry wall.
+SPIKE_THRESHOLD_METERS = 15.0
 
 DEFAULT_SPACING_METERS = 5.0
 MIN_SAMPLES = 2
@@ -81,6 +86,40 @@ class ElevationGrid:
         south = self.height_at(row0, col0) * (1 - col_fraction) + self.height_at(row0, col0 + 1) * col_fraction
         north = self.height_at(row0 + 1, col0) * (1 - col_fraction) + self.height_at(row0 + 1, col0 + 1) * col_fraction
         return south * (1 - row_fraction) + north * row_fraction
+
+
+def despike(heights: Sequence[float], rows: int, cols: int, threshold: float = SPIKE_THRESHOLD_METERS) -> tuple[float, ...]:
+    """Replaces void pixels in a row-major lattice of heights with the median of their neighbours.
+
+    A cell is a spike when it differs from the median of its in-lattice neighbours (8, fewer on edges
+    and corners) by more than `threshold` and lies outside the range of the neighbours that are
+    themselves within `threshold` of that median. Ignoring the neighbours that deviate lets a
+    cluster of two or three bad cells be caught, where each would otherwise hide inside the range
+    set by the other. Pits and peaks are both handled. It is one pass over the original values, so
+    corrections never cascade, and a ramp, however steep, is untouched: its cells lie inside the
+    range of their neighbours."""
+    if len(heights) != rows * cols:
+        raise ValueError(f"{rows} x {cols} cells need {rows * cols} heights, got {len(heights)}")
+    result = list(heights)
+    for row in range(rows):
+        for col in range(cols):
+            neighbours = sorted(
+                heights[r * cols + c]
+                for r in range(max(row - 1, 0), min(row + 2, rows))
+                for c in range(max(col - 1, 0), min(col + 2, cols))
+                if (r, c) != (row, col)
+            )
+            if not neighbours:
+                continue
+            middle = len(neighbours) // 2
+            median = neighbours[middle] if len(neighbours) % 2 else (neighbours[middle - 1] + neighbours[middle]) / 2
+            value = heights[row * cols + col]
+            if abs(value - median) <= threshold:
+                continue
+            plausible = [n for n in neighbours if abs(n - median) <= threshold]
+            if value < min(plausible) or value > max(plausible):
+                result[row * cols + col] = median
+    return tuple(result)
 
 
 @dataclass(frozen=True)

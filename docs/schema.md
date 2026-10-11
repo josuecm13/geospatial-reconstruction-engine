@@ -272,7 +272,7 @@ erDiagram
         int cols "includes both edges"
         bytea heights "float32 little-endian, row-major south to north, west to east"
         text source "aws-terrain-tiles"
-        text algorithm "terrarium-z15-bilinear-v1"
+        text algorithm "terrarium-z15-bilinear-despike-v2"
         int version "starts at 1, bumps only when the grid changes"
         float8 smoothing_meters "30.0"
         timestamptz analysed_at

@@ -98,6 +98,9 @@ the same stored values. The decisions below are recorded for Milestone 10 (#105,
   attribution; the full list is at
   [github.com/tilezen/joerd/blob/master/docs/attribution.md](https://github.com/tilezen/joerd/blob/master/docs/attribution.md),
   and the short form ships in every elevation response as `TERRAIN_ATTRIBUTION`.
+  The tiles have void pixels near coasts (a -300 m pixel in a city at sea level), so each decoded tile
+  is despiked before sampling: a pixel more than 15 m from the median of its neighbours and outside their
+  range becomes that median (`despike` in `domain/elevation.py`).
   *Why this over Copernicus GLO-30:* GLO-30 is a surface model, with rooftops and tree canopy baked in,
   so a building's base would sit on its own roof's height. Terrarium is bare earth wherever national
   LiDAR exists, which is what a ground elevation has to be. *Why not USGS 3DEP directly:* it covers the
