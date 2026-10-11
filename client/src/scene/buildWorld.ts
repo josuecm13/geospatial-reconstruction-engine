@@ -2,7 +2,7 @@ import * as THREE from "three";
 import type { Feature, Geometry, MapData, Position, Projection } from "../api/types";
 import { buildingHeight } from "./buildingHeight";
 import { drapedGeometry, extrudeFootprints, flatGeometry, footprintShape, polygonShape } from "./extrude";
-import { densify, insetRing, outlineKind } from "./blockOutline";
+import { densify, hasBlockFill, insetRing, outlineKind } from "./blockOutline";
 import { areaFeatureMaterial, MATERIALS, outlineMaterial, roadMaterial, zoneMaterial } from "./palette";
 import { toLocal, type Local } from "./projection";
 import { dedupeTwins, roadPolygon } from "./roadGeometry";
@@ -188,6 +188,8 @@ export function buildWorld(data: MapData, roadMode: RoadMode = DEFAULT_ROAD_MODE
       line.raycast = () => {}; // never picked: selection goes through the ground (blockSelection.ts)
       groups.blocks.add(line);
     }
+    // Only an eligible block is filled; the others keep just their faint outline (selection never needed the fill).
+    if (!hasBlockFill(feature.properties)) continue;
     const polygons = polygonsOf(feature.properties.buildable_area, projection);
     if (!polygons.length) continue;
     const drawn = clipped(polygons);

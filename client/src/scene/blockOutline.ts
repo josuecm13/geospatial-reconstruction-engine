@@ -115,3 +115,8 @@ export function outlineKind(properties: { eligibility?: Eligibility | null; is_r
   if (properties.eligibility && properties.eligibility !== "eligible") return "faint";
   return properties.is_reference ? "reference" : "crisp";
 }
+
+/** Whether a block gets the buildable-area fill: only an eligible one does (a block with no eligibility is treated as eligible, as in `outlineKind`); the rest show just their faint outline. */
+export function hasBlockFill(properties: { eligibility?: Eligibility | null }): boolean {
+  return !properties.eligibility || properties.eligibility === "eligible";
+}

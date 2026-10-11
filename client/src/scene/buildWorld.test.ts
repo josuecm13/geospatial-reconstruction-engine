@@ -418,6 +418,21 @@ describe("buildWorld block outlines and zones", () => {
     expect(outline(world, "r").material).toBe(MATERIALS.blockOutlineReference);
   });
 
+  it("fills only an eligible block; the others keep their outline and stay in the selection index", () => {
+    const world = buildWorld({
+      ...data,
+      blocks: fc([block("e", 10), block("c", 10.0002, { eligibility: "clipped" }), block("m", 10.0004, { eligibility: "median" }), block("o", 10.0006, { eligibility: undefined })]),
+    });
+
+    expect(world.getObjectByName("block:e")).toBeDefined();
+    expect(world.getObjectByName("block:o")).toBeDefined(); // no eligibility: treated as eligible, as the outline is
+    for (const id of ["c", "m"]) {
+      expect(world.getObjectByName(`block:${id}`), id).toBeUndefined();
+      expect(outline(world, id), id).toBeDefined();
+    }
+    expect(world.userData.blockIndex.map((b: { id: string }) => b.id)).toEqual(["e", "c", "m", "o"]);
+  });
+
   it("outlines a block with no buildable area too, and keeps it findable for selection", () => {
     const world = buildWorld({ ...data, blocks: fc([block("n", 10, { eligibility: "no_buildable_area" }, false)]) });
 

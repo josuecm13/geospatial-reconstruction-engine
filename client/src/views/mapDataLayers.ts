@@ -3,7 +3,7 @@ import type { BlockFeedback, MapData } from "../api/types";
 import { roadWidthExpression } from "../geo/roadWidth";
 import { createBlockPanel, type BlockFeedbackApi, type BlockPanel } from "../scene/blockPanel";
 import { generatedOrigin } from "../scene/generationMessages";
-import { blockEntries, blockOutlines, blockUnder, type BlockEntry } from "./blockOutlines";
+import { BLOCK_FILL_FILTER, blockEntries, blockOutlines, blockUnder, type BlockEntry } from "./blockOutlines";
 import { MAP_COLORS } from "./mapColors";
 
 /** The engine's own representation of an imported area, drawn over the basemap: this is what was
@@ -69,6 +69,7 @@ export class MapDataLayers {
       id: "engine-blocks",
       type: "fill",
       source: sourceId("blocks"),
+      filter: BLOCK_FILL_FILTER as unknown as maplibregl.FilterSpecification,
       paint: { "fill-color": ["case", ["get", "is_median"], MAP_COLORS.blockMedian, MAP_COLORS.buildable], "fill-opacity": 0.45, "fill-outline-color": MAP_COLORS.buildableOutline },
     });
     // Each block's outline, 1.5 m inside its boundary: crisp dashes for an eligible block, a different dash for a reference block,

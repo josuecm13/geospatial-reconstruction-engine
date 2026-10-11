@@ -1,7 +1,27 @@
 import { describe, expect, it } from "vitest";
 import type { BlockProperties, Feature, MapData, Position } from "../api/types";
 import { toLocal } from "../scene/projection";
-import { blockEntries, blockOutlines, blockUnder, insetLonLat } from "./blockOutlines";
+import { BLOCK_FILL_FILTER, blockEntries, blockOutlines, blockUnder, insetLonLat } from "./blockOutlines";
+import { hasBlockFill } from "../scene/blockOutline";
+
+/** A minimal evaluator for the expression forms BLOCK_FILL_FILTER uses (any, !, has, get, ==, null and string literals). */
+function evaluate(expr: unknown, props: Record<string, unknown>): unknown {
+  if (!Array.isArray(expr)) return expr;
+  const [op, ...args] = expr;
+  if (op === "any") return args.some((a) => evaluate(a, props));
+  if (op === "!") return !evaluate(args[0], props);
+  if (op === "has") return args[0] in props;
+  if (op === "get") return props[args[0]] ?? null;
+  if (op === "==") return evaluate(args[0], props) === evaluate(args[1], props);
+  throw new Error(`unsupported ${op}`);
+}
+
+describe("BLOCK_FILL_FILTER", () => {
+  it("agrees with hasBlockFill for every eligibility, including a missing or null one", () => {
+    const cases: Record<string, unknown>[] = [{ eligibility: "eligible" }, { eligibility: "clipped" }, { eligibility: "median" }, { eligibility: "no_buildable_area" }, {}, { eligibility: null }];
+    for (const props of cases) expect(evaluate(BLOCK_FILL_FILTER, props), JSON.stringify(props)).toBe(hasBlockFill(props as never));
+  });
+});
 
 const D = 0.0001; // about 11 m
 const projection = { origin: { latitude: 10, longitude: -84 }, meters_per_degree_latitude: 110_000, meters_per_degree_longitude: 109_000 };

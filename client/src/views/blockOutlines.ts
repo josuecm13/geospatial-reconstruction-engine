@@ -35,6 +35,9 @@ export function blockOutlines(data: Pick<MapData, "blocks" | "projection">): Fea
   return { type: "FeatureCollection", features };
 }
 
+/** The 2D block fill layer's filter, the same rule as `hasBlockFill`: an eligible block, or one with no eligibility, is filled; the others get only their faint outline. */
+export const BLOCK_FILL_FILTER = ["any", ["!", ["has", "eligibility"]], ["==", ["get", "eligibility"], null], ["==", ["get", "eligibility"], "eligible"]] as const;
+
 /** A block, with its polygons as [lon, lat] points (x = lon, z = lat), for finding the one under a click. */
 export interface BlockEntry {
   id: string;

@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { densify, insetRing, outlineKind, OUTLINE_INSET, pointInRings } from "./blockOutline";
+import { densify, hasBlockFill, insetRing, outlineKind, OUTLINE_INSET, pointInRings } from "./blockOutline";
+
+describe("hasBlockFill", () => {
+  it("fills an eligible block and one with no eligibility, and nothing else", () => {
+    expect(hasBlockFill({ eligibility: "eligible" })).toBe(true);
+    expect(hasBlockFill({})).toBe(true);
+    expect(hasBlockFill({ eligibility: null })).toBe(true);
+    for (const eligibility of ["clipped", "median", "no_buildable_area"] as const) expect(hasBlockFill({ eligibility }), eligibility).toBe(false);
+  });
+});
 import type { Local } from "./projection";
 
 const rect = (x0: number, z0: number, x1: number, z1: number): Local[] => [
