@@ -1,14 +1,15 @@
 import * as THREE from "three";
 import { CELL_WIDTH, FLOOR_HEIGHT } from "./wallGrid";
+import { nightClay } from "./themes/nightClay";
 
 /** Shared by every patched material: the atmosphere drives them each frame (see `applyWindowUniforms`). */
 export const WINDOW_UNIFORMS = {
   /** 0 (windows dark) to 1 (fully lit). */
   uNight: { value: 0 },
   /** Lit-window colour of real buildings. */
-  uWarm: { value: new THREE.Color("#ffc060") },
+  uWarm: { value: new THREE.Color(nightClay.windowColors?.warm) },
   /** Lit-window colour of generated buildings. */
-  uCool: { value: new THREE.Color("#bcd6ff") },
+  uCool: { value: new THREE.Color(nightClay.windowColors?.cool) },
 };
 
 /** Share of wall cells whose window is lit. */
