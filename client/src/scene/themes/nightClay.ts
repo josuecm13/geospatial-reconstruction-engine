@@ -60,4 +60,5 @@ export const nightClay: Theme = {
   mode: "baked",
   followsSun: false,
   windows: "always",
+  windowColors: { warm: "#ffc25a", cool: "#bcd8ff" },
 };

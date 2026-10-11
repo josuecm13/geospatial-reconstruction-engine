@@ -51,4 +51,5 @@ export const lightClay: Theme = {
   mode: "lit",
   followsSun: true,
   windows: "night",
+  windowColors: { warm: "#ffc25a", cool: "#bcd8ff" },
 };

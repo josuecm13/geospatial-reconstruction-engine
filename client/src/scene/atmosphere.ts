@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { fitShadow } from "./shadowFit";
+import { applyWindowUniforms, windowNight } from "./nightWindows";
 import { createSkyMaterial } from "./themes/sky";
 import { blendLighting, blendSky, LIGHTING, type Lighting, type Vec3 } from "./themes/timeOfDay";
 import type { Sky, Theme, TimeOfDay } from "./themes/types";
@@ -96,6 +97,7 @@ export function createAtmosphere(scene: THREE.Scene, renderer: THREE.WebGLRender
     if (scene.background instanceof THREE.Color) scene.background.set(sky.horizon);
     else scene.background = new THREE.Color(sky.horizon);
     fog?.color.set(sky.horizon);
+    if (theme) applyWindowUniforms(windowNight(theme.windows, lighting.night), theme.windowColors);
   };
 
   return {

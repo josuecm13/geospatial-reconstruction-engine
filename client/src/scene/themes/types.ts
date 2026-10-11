@@ -59,4 +59,6 @@ export interface Theme {
   followsSun: boolean;
   /** When building windows glow. */
   windows: "always" | "night" | "never";
+  /** Lit-window colours: warm for real buildings, cool for generated ones. */
+  windowColors?: { warm: string; cool: string };
 }

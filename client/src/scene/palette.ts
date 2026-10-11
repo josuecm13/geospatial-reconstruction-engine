@@ -2,6 +2,7 @@ import * as THREE from "three";
 import type { OutlineKind } from "./blockOutline";
 import { DEFAULT_THEME } from "./themes";
 import { NIGHT_CLAY_BACKGROUND, NIGHT_CLAY_COLORS } from "./themes/nightClay";
+import { patchWindows } from "./nightWindows";
 import type { Theme, ThemeColors } from "./themes/types";
 
 /**
@@ -30,6 +31,11 @@ const buildMaterials = (theme: Theme) => {
   const surface = theme.mode === "lit" ? lit : flat;
   /** Ground-level layers write no depth: their draw order (LAYER_ORDER in buildWorld.ts) decides what shows on top. */
   const decal = (color: string, extra: Extra = {}) => surface(color, { depthWrite: false, ...extra });
+  const building = (color: string, generated: boolean) => {
+    const material = surface(color);
+    if (theme.windows !== "never") patchWindows(material, { generated });
+    return material;
+  };
   return {
     ground: decal(colors.ground),
     green: decal(colors.green),
@@ -42,9 +48,9 @@ const buildMaterials = (theme: Theme) => {
     roadNormal: decal(colors.roadNormal),
     roadWide: decal(colors.roadWide),
     roadNarrow: decal(colors.roadNarrow),
-    buildingMeasured: surface(colors.buildingMeasured),
-    buildingDefaulted: surface(colors.buildingDefaulted),
-    buildingGenerated: surface(colors.buildingGenerated),
+    buildingMeasured: building(colors.buildingMeasured, false),
+    buildingDefaulted: building(colors.buildingDefaulted, false),
+    buildingGenerated: building(colors.buildingGenerated, true),
     buildable: decal(colors.buildable, { transparent: true, opacity: 0.25, side: THREE.DoubleSide }),
     zoneWater: decal(colors.zoneWater, ZONE),
     zoneSteep: decal(colors.zoneSteep, ZONE),
