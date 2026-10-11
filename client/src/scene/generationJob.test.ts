@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "../api/client";
+import type { GeneratedEvent } from "../api/types";
 import type { EventStream } from "../importing/stagedImport";
 import { generateBuildings, newSeed } from "./generationJob";
 
@@ -38,7 +39,7 @@ function setup(startError?: Error) {
       return stream;
     },
   };
-  return { stream, calls, run: (seed?: number, onProgress?: (blocks: number | null) => void) => generateBuildings(api, "a1", seed, onProgress) };
+  return { stream, calls, run: (seed?: number, onProgress?: (blocks: number | null) => void, onGenerated?: (event: GeneratedEvent) => void) => generateBuildings(api, "a1", seed, onProgress, onGenerated) };
 }
 
 describe("generateBuildings", () => {
@@ -56,6 +57,23 @@ describe("generateBuildings", () => {
     await expect(done).resolves.toBeUndefined();
     expect(calls).toEqual(["start:a1:7", "events:a1"]);
     expect(stream.closed).toBe(true);
+  });
+
+  it("hands each generated batch to onGenerated and ignores a malformed one", async () => {
+    const { stream, run } = setup();
+    const batches: GeneratedEvent[] = [];
+    const done = run(undefined, undefined, (event) => batches.push(event));
+    await flush();
+
+    stream.emit("generation", { block_count: 4 });
+    stream.emit("generated", { projection: { origin: { latitude: 1, longitude: 2 } }, ring: 0, blocks_done: 2, block_count: 4, buildings: { type: "FeatureCollection", features: [{ id: "g1" }] } });
+    stream.emit("generated", { ring: 1 });
+    stream.emit("completed", {});
+    await done;
+
+    expect(batches).toHaveLength(1);
+    expect(batches[0]).toMatchObject({ ring: 0, blocks_done: 2, block_count: 4 });
+    expect(batches[0].buildings.features).toHaveLength(1);
   });
 
   it("starts without a seed when none is given", async () => {

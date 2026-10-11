@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import type { Feature, Geometry, MapData, Position, Projection } from "../api/types";
+import type { Feature, GeneratedBuildingProperties, Geometry, MapData, Position, Projection } from "../api/types";
 import { buildingHeight } from "./buildingHeight";
 import { drapedGeometry, extrudeFootprints, flatGeometry, footprintShape, polygonShape } from "./extrude";
 import { densify, hasBlockFill, insetRing, outlineKind } from "./blockOutline";
@@ -78,6 +78,41 @@ function entity(layer: string, feature: Feature<object>, geometry: THREE.BufferG
 
 const group = (name: string) => Object.assign(new THREE.Group(), { name });
 
+/** A building stands on the lowest ground under its footprint (or at its stored base height), so nothing floats. */
+function standOnGround(terrain: Terrain, mesh: THREE.Mesh, polygons: Rings[], base: number | null | undefined): void {
+  mesh.position.y = !terrain.hasGround ? 0 : base != null ? base - terrain.baseline : Math.min(...polygons.map((rings) => terrain.lowestUnder(rings[0])));
+}
+
+/** The pale outline of a building's edges: a child, so it follows the build animation's scale.y. Not pickable (routeLayer raycasts recursively) and left out of the glTF export (exportGltf.ts). */
+function withEdges(mesh: THREE.Mesh): void {
+  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry, 1), MATERIALS.edge);
+  edges.name = "edges";
+  edges.raycast = () => {};
+  mesh.add(edges);
+}
+
+/**
+ * The meshes of generated buildings, one per feature with a footprint: extruded to `height_meters` in the
+ * generated material, standing on `base_elevation_meters` (minus the terrain's baseline), edges as a child,
+ * named `generated:<id>` and tagged `userData.generated`. Shared by `buildWorld` and by the batches that
+ * stream into a world while a run is being generated, so both look the same.
+ */
+export function generatedMeshes(features: Feature<GeneratedBuildingProperties>[], terrain: Terrain, projection: Projection): THREE.Mesh[] {
+  const meshes: THREE.Mesh[] = [];
+  for (const feature of features) {
+    const polygons = polygonsOf(feature.geometry, projection);
+    if (!polygons.length) continue;
+    const shapes = polygons.map((rings) => footprintShape(rings[0]));
+    const mesh = entity("generated", feature, extrudeFootprints(shapes, feature.properties.height_meters), MATERIALS.buildingGenerated);
+    mesh.userData.generated = true;
+    mesh.userData.height = feature.properties.height_meters;
+    standOnGround(terrain, mesh, polygons, feature.properties.base_elevation_meters);
+    withEdges(mesh);
+    meshes.push(mesh);
+  }
+  return meshes;
+}
+
 /** Builds the low-poly world for a map-data response. See the World contract
  * (openspec/specs/showcase-client, and design.md of the archived change): meters from the projection origin, x east, z south, y up. */
 export function buildWorld(data: MapData, roadMode: RoadMode = DEFAULT_ROAD_MODE): THREE.Group {
@@ -100,18 +135,6 @@ export function buildWorld(data: MapData, roadMode: RoadMode = DEFAULT_ROAD_MODE
   };
   const groups = Object.fromEntries(WORLD_GROUPS.map((name) => [name, group(name)])) as Record<(typeof WORLD_GROUPS)[number], THREE.Group>;
   for (const name of WORLD_GROUPS) world.add(groups[name]);
-
-  /** A building stands on the lowest ground under its footprint (or at its stored base height), so nothing floats. */
-  const standOnGround = (mesh: THREE.Mesh, polygons: Rings[], base: number | null | undefined) => {
-    mesh.position.y = !terrain.hasGround ? 0 : base != null ? base - terrain.baseline : Math.min(...polygons.map((rings) => terrain.lowestUnder(rings[0])));
-  };
-  /** The pale outline of a building's edges: a child, so it follows the build animation's scale.y. Not pickable (routeLayer raycasts recursively) and left out of the glTF export (exportGltf.ts). */
-  const withEdges = (mesh: THREE.Mesh) => {
-    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry, 1), MATERIALS.edge);
-    edges.name = "edges";
-    edges.raycast = () => {};
-    mesh.add(edges);
-  };
 
   // Kept for walking (see collision.ts), so it doesn't re-parse meshes.
   const footprints: { id: string; ring: Local[] }[] = [];
@@ -228,24 +251,15 @@ export function buildWorld(data: MapData, roadMode: RoadMode = DEFAULT_ROAD_MODE
     mesh.userData.defaulted = defaulted;
     mesh.userData.height = height;
     // Stands on the lowest ground under the footprint, so nothing floats. Its height and extrusion are unchanged.
-    standOnGround(mesh, polygons, feature.properties.base_elevation_meters);
+    standOnGround(terrain, mesh, polygons, feature.properties.base_elevation_meters);
     withEdges(mesh);
     groups.buildings.add(mesh);
   }
 
   // Generated buildings (Milestone 11): a layer of their own, so they can be hidden, and are left out of the export while they are.
-  for (const feature of data.generated_buildings?.features ?? []) {
-    const polygons = polygonsOf(feature.geometry, projection);
-    if (!polygons.length) continue;
-    polygons.forEach((rings) => grow(rings[0]));
-    const shapes = polygons.map((rings) => footprintShape(rings[0]));
-    const mesh = entity("generated", feature, extrudeFootprints(shapes, feature.properties.height_meters), MATERIALS.buildingGenerated);
-    mesh.userData.generated = true;
-    mesh.userData.height = feature.properties.height_meters;
-    standOnGround(mesh, polygons, feature.properties.base_elevation_meters);
-    withEdges(mesh);
-    groups.generated.add(mesh);
-  }
+  const generated = data.generated_buildings?.features ?? [];
+  for (const feature of generated) polygonsOf(feature.geometry, projection).forEach((rings) => grow(rings[0]));
+  groups.generated.add(...generatedMeshes(generated, terrain, projection));
 
   // On terrain the ground is the grid (with the margin), not the union of every feature's envelope.
   const [minX, maxX, minZ, maxZ] = grid

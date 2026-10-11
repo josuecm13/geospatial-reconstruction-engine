@@ -294,6 +294,19 @@ export interface ImportStarted {
   events_url: string;
 }
 
+/**
+ * One batch of a generation job's `generated` events: the buildings of one ring of blocks (nearest the area's
+ * centre first; a ring can come as several events with the same `ring`, at most 500 buildings each), with the
+ * ids the run will store. Provisional until `completed`.
+ */
+export interface GeneratedEvent {
+  projection: Projection;
+  ring: number;
+  blocks_done: number;
+  block_count: number;
+  buildings: FeatureCollection<GeneratedBuildingProperties>;
+}
+
 /** The stages of a background import's event stream, in the order the server sends them. */
 export const IMPORT_STAGES = ["fetched", "ground", "roads", "blocks", "buildings", "elevation", "generated", "completed", "failed"] as const;
 export type ImportStage = (typeof IMPORT_STAGES)[number];
@@ -308,8 +321,7 @@ export interface StageData {
   buildings: { projection: Projection; ring: number; buildings: FeatureCollection<BuildingProperties> };
   /** `error` is "elevation_unavailable" when the source failed; the import still completes, flat. */
   elevation: { projection: Projection; elevation: Elevation | null; error: string | null };
-  /** Reserved for Milestone 11; not sent yet. */
-  generated: Record<string, unknown>;
+  generated: GeneratedEvent;
   completed: ImportArea;
   failed: { code: string; message: string; details: Record<string, unknown> | null };
 }

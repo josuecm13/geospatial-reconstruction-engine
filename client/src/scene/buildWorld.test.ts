@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
 import type { Elevation, Feature, GeneratedBuildingProperties, MapData, Position } from "../api/types";
-import { buildWorld, groundPlane, LAYER_ORDER, LAYER_Y, OUTLINE_LIFT, setRoadMode } from "./buildWorld";
+import { buildWorld, generatedMeshes, groundPlane, LAYER_ORDER, LAYER_Y, OUTLINE_LIFT, setRoadMode } from "./buildWorld";
 import { MATERIALS } from "./palette";
 
 const D = 0.0001; // about 11 m
@@ -340,6 +340,31 @@ describe("buildWorld generated buildings", () => {
     mesh.geometry.computeBoundingBox();
     expect(mesh.geometry.boundingBox!.max.y).toBeCloseTo(9.6, 3);
     expect(world.getObjectByName("buildings")!.children.map((child) => child.name)).toEqual(["building:bu1", "building:bu2"]);
+  });
+
+  it("generatedMeshes builds the same meshes without a world: named, tagged, extruded and edged from the features", () => {
+    const terrain = buildWorld(data).userData.terrain;
+    const meshes = generatedMeshes([generated("g1", -84, 10.0004, null, 8), generated("g2", -84, 10.0006, null, 12)], terrain, data.projection);
+
+    expect(meshes.map((mesh) => mesh.name)).toEqual(["generated:g1", "generated:g2"]);
+    expect(meshes.every((mesh) => mesh.userData.generated === true && mesh.material === MATERIALS.buildingGenerated)).toBe(true);
+    expect(meshes.map((mesh) => mesh.userData.height)).toEqual([8, 12]);
+    expect(meshes.map((mesh) => mesh.getObjectByName("edges") !== undefined)).toEqual([true, true]);
+    meshes[1].geometry.computeBoundingBox();
+    expect(meshes[1].geometry.boundingBox!.max.y).toBeCloseTo(12, 3);
+    expect(meshes.map((mesh) => mesh.position.y)).toEqual([0, 0]); // no terrain: on the ground
+  });
+
+  it("generatedMeshes stands a building on its stored base elevation minus the baseline, and skips a feature with no footprint", () => {
+    const elevated = buildWorld({ ...data, elevation });
+    const terrain = elevated.userData.terrain;
+    const [mesh, ...rest] = generatedMeshes(
+      [generated("g1", -84, 10.0004, 25), { ...generated("g2", -84, 10.0006, null), geometry: null } as never],
+      terrain,
+      data.projection,
+    );
+    expect(rest).toEqual([]);
+    expect(mesh.position.y).toBeCloseTo(25 - terrain.baseline, 6);
   });
 
   it("gives each generated building pale edge lines, like the others", () => {

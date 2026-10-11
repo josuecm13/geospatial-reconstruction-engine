@@ -1,5 +1,5 @@
 import * as maplibregl from "maplibre-gl";
-import type { BlockFeedback, MapData } from "../api/types";
+import type { BlockFeedback, Feature, GeneratedBuildingProperties, MapData } from "../api/types";
 import { roadWidthExpression } from "../geo/roadWidth";
 import { createBlockPanel, type BlockFeedbackApi, type BlockPanel } from "../scene/blockPanel";
 import { generatedOrigin } from "../scene/generationMessages";
@@ -27,6 +27,7 @@ export class MapDataLayers {
   private readonly popup = new maplibregl.Popup({ closeButton: true, maxWidth: "320px" });
   private popupsEnabled = true;
   private blocks: BlockEntry[] = [];
+  private storedGenerated: unknown = { type: "FeatureCollection", features: [] };
   private selected: string | null = null;
   private readonly panel: BlockPanel | undefined;
   private readonly onKeyDown = (event: KeyboardEvent) => {
@@ -177,7 +178,18 @@ export class MapDataLayers {
     if (block) block.properties = { ...block.properties, feedback };
   }
 
+  /**
+   * The generated layer while a generation job streams: these buildings (every one streamed so far) replace the
+   * stored ones, which come back with `null` (the job failed). Left as they are when the job completes: they are
+   * the stored run's, and `show` redraws the layer from map-data the next time the area is shown.
+   */
+  setGeneratedBuildings(features: Feature<GeneratedBuildingProperties>[] | null): void {
+    const data = features ? { type: "FeatureCollection", features } : this.storedGenerated;
+    (this.map.getSource(sourceId("generated_buildings")) as maplibregl.GeoJSONSource).setData(data as never);
+  }
+
   show(data: MapData): void {
+    this.storedGenerated = data.generated_buildings ?? { type: "FeatureCollection", features: [] };
     this.blocks = blockEntries(data);
     (this.map.getSource(OUTLINES) as maplibregl.GeoJSONSource).setData(blockOutlines(data) as never);
     if (this.selected) this.select(null); // a new area, or the same one reloaded: the old selection's properties are stale

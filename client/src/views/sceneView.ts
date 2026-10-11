@@ -2,7 +2,10 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { BoundingBox, MapData } from "../api/types";
 import { prefersReducedMotion } from "../locations/flyTo";
-import { buildWorld, DEFAULT_ROAD_MODE, LAYER_ORDER, setRoadMode } from "../scene/buildWorld";
+import { Animator, RISE_SECONDS } from "../scene/buildAnimation";
+import { buildWorld, DEFAULT_ROAD_MODE, generatedMeshes, LAYER_ORDER, setRoadMode } from "../scene/buildWorld";
+import { revealDelays } from "../scene/revealRings";
+import type { Terrain } from "../scene/terrain";
 import { COLORS, MATERIALS, SCENE_BACKGROUND } from "../scene/palette";
 import { shadeGeometry } from "../scene/shading";
 import { createAutoRotate, ROTATE_SPEED } from "../scene/autoRotate";
@@ -13,7 +16,7 @@ import { createPinLayer } from "../scene/pinLayer";
 import { createFlyIntent, createTargetEase, type Vec3 } from "../scene/pinPoint";
 import { createToolGroup } from "../scene/toolGroup";
 import { createBlockSelection } from "../scene/blockSelection";
-import { createGenerationControls, type GenerationDeps } from "../scene/generationControls";
+import { createGenerationControls, type GenerationDeps, type GenerationSink } from "../scene/generationControls";
 import { createTerrainControls, type TerrainDeps } from "../scene/terrainControls";
 import { createRoutePanel, type RoutingDeps } from "../scene/routePanel";
 import type { SceneTarget } from "../scene/sceneLoader";
@@ -84,7 +87,47 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
     credit.textContent = data?.elevation ? `${data.attribution} · ${data.elevation.attribution}` : "";
   };
 
+  // The generated buildings rise: as a job streams them in, and ring by ring from the centre when "Show generated" is ticked.
+  const animator = new Animator();
+  const generatedGroup = () => world?.getObjectByName("generated");
+  /** Meshes under the `generated` group go; geometries are released (materials are shared). */
+  const clearGenerated = () => {
+    animator.reset(); // finishes any rise in flight, so no half-risen mesh is left
+    const generated = generatedGroup();
+    if (!generated) return;
+    for (const child of [...generated.children]) {
+      generated.remove(child);
+      child.traverse((object) => (object as THREE.Mesh).geometry?.dispose());
+    }
+  };
+  const streamSink: GenerationSink = {
+    clear: clearGenerated,
+    add(features, projection) {
+      const generated = generatedGroup();
+      const terrain: Terrain | undefined = world?.userData.terrain;
+      if (!generated || !terrain) return;
+      const present = new Set(generated.children.map((child) => child.name));
+      const meshes = generatedMeshes(features.filter((feature) => !present.has(`generated:${feature.id}`)), terrain, projection);
+      if (!meshes.length) return;
+      generated.add(...meshes);
+      generated.visible = true;
+      if (!prefersReducedMotion()) void animator.rise(meshes);
+    },
+  };
+  /** Ticked: the buildings rise ring by ring from the centre, over about a second. Unticked: they hide at once (a fade would need its own tween for little gain). Both instant under reduced motion. */
+  const showGenerated = (shown: boolean, animate = false) => {
+    const generated = generatedGroup();
+    if (!generated) return;
+    animator.reset(); // a rise in flight is finished first, so re-ticking restarts cleanly
+    generated.visible = shown;
+    if (!shown || !animate || prefersReducedMotion()) return;
+    const meshes = generated.children.filter((child): child is THREE.Mesh => (child as THREE.Mesh).isMesh);
+    const delays = revealDelays(meshes.map((mesh) => mesh.position), { x: centre.x, z: centre.z }, RISE_SECONDS);
+    void animator.riseAt(meshes, delays);
+  };
+
   const removeWorld = () => {
+    animator.reset();
     if (!world) return;
     scene.remove(world);
     // Materials are shared across worlds, so only geometries are released.
@@ -158,10 +201,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
   // Generate / Regenerate, its progress line, and "Show generated" beside "Smooth roads": the generated buildings are the `generated` group.
   const generationControls =
     generation &&
-    createGenerationControls(actions, container, toggle, generation, (shown) => {
-      const generated = world?.getObjectByName("generated");
-      if (generated) generated.visible = shown;
-    });
+    createGenerationControls(actions, container, toggle, generation, showGenerated, streamSink);
   const rotateButton = Object.assign(document.createElement("button"), { className: "scene-rotate", type: "button", textContent: "Rotate", hidden: true });
   const showRotate = () => rotateButton.setAttribute("aria-pressed", String(rotate.enabled));
   showRotate();
@@ -198,6 +238,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
       controls.update(delta);
     }
     modes.update(delta);
+    animator.update(delta);
     staged.update(delta);
     renderer.render(scene, camera);
     requestAnimationFrame(frame);

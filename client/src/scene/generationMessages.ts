@@ -38,6 +38,9 @@ export function generateButtonState(run: GenerationRun | null): { label: string;
 export const generationProgressText = (blockCount: number | null): string =>
   blockCount == null ? "Generating buildings…" : `Generating buildings on ${blockCount} eligible ${blockCount === 1 ? "block" : "blocks"}…`;
 
+/** The status line as blocks are done: "Generating… 3 of 40 blocks". */
+export const generationStreamText = (done: number, total: number): string => `Generating… ${done} of ${total} blocks`;
+
 const short = (id: string) => id.slice(0, 8);
 
 /** What a generated building's popup says about where it came from. */

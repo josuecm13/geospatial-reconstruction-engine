@@ -88,16 +88,20 @@ export class Animator {
 
   /** Raises each mesh from nothing to full height (`scale.y` 0 to 1), one after another. */
   rise(meshes: THREE.Mesh[]): Promise<void> {
+    return this.riseAt(meshes, meshes.map((_, i) => staggerDelay(i, meshes.length)));
+  }
+
+  /** Like `rise`, but each mesh starts after its own delay in seconds (`delays[i]` for `meshes[i]`). */
+  riseAt(meshes: THREE.Mesh[], delays: number[]): Promise<void> {
     if (this.instant || !meshes.length) return Promise.resolve();
-    const count = meshes.length;
     const set = (mesh: THREE.Mesh, amount: number) => {
       mesh.scale.y = amount;
       mesh.visible = amount > 0;
     };
     meshes.forEach((mesh) => set(mesh, 0));
     return this.start({
-      duration: riseDuration(count),
-      apply: (elapsed) => meshes.forEach((mesh, i) => set(mesh, easeOutCubic(progress(elapsed, staggerDelay(i, count), RISE_SECONDS)))),
+      duration: RISE_SECONDS + Math.max(0, ...delays),
+      apply: (elapsed) => meshes.forEach((mesh, i) => set(mesh, easeOutCubic(progress(elapsed, delays[i] ?? 0, RISE_SECONDS)))),
       finish: () => meshes.forEach((mesh) => set(mesh, 1)),
     });
   }

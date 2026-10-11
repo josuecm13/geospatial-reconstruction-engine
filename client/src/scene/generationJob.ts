@@ -1,5 +1,5 @@
 import { ApiError } from "../api/client";
-import type { ImportStarted } from "../api/types";
+import type { GeneratedEvent, ImportStarted } from "../api/types";
 import type { EventStream } from "../importing/stagedImport";
 
 /** What generating an area's buildings needs of the API. */
@@ -16,12 +16,13 @@ export const newSeed = (random: () => number = Math.random): number => Math.floo
 
 /**
  * Asks the server to generate an area's buildings in the background and follows its event stream: one
- * `generation` event (reported through `onProgress` with its block count), then `completed` (resolves)
+ * `generation` event (reported through `onProgress` with its block count), any `generated` events (each
+ * batch of buildings, provisional until the run completes, through `onGenerated`), then `completed` (resolves)
  * or `failed` (rejects with an `ApiError` carrying the event's code). A refusal to start (409
  * `import_in_progress` and the like) rejects before any stream is opened; so does a lost stream, with
  * `network_error`. Without a `seed` the server reuses the current run's (or 1).
  */
-export async function generateBuildings(api: GenerationApi, areaId: string, seed?: number, onProgress: (blockCount: number | null) => void = () => undefined): Promise<void> {
+export async function generateBuildings(api: GenerationApi, areaId: string, seed?: number, onProgress: (blockCount: number | null) => void = () => undefined, onGenerated: (event: GeneratedEvent) => void = () => undefined): Promise<void> {
   const started = await api.startGeneration(areaId, seed);
   const stream = api.importEvents(started.import_area_id);
   return new Promise<void>((resolve, reject) => {
@@ -43,6 +44,11 @@ export async function generateBuildings(api: GenerationApi, areaId: string, seed
     stream.addEventListener("generation", (message) => {
       const { block_count } = parse(message);
       onProgress(typeof block_count === "number" ? block_count : null);
+    });
+    stream.addEventListener("generated", (message) => {
+      const event = parse(message) as Partial<GeneratedEvent>;
+      if (!Array.isArray(event.buildings?.features)) return;
+      onGenerated({ projection: event.projection!, ring: event.ring ?? 0, blocks_done: event.blocks_done ?? 0, block_count: event.block_count ?? 0, buildings: event.buildings! });
     });
     stream.addEventListener("completed", () => settle(resolve));
     stream.addEventListener("failed", (message) => {

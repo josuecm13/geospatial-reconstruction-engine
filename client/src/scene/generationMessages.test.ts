@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "../api/client";
 import type { GenerationRun } from "../api/types";
-import { generatedOrigin, generateButtonState, generationFailureMessage, generationProgressText } from "./generationMessages";
+import { generatedOrigin, generateButtonState, generationFailureMessage, generationProgressText, generationStreamText } from "./generationMessages";
 
 const fail = (status: number, code: string) => new ApiError(status, code, "x");
 const run = (extra: Partial<GenerationRun> = {}): GenerationRun => ({
@@ -63,6 +63,13 @@ describe("generationProgressText", () => {
     expect(generationProgressText(57)).toBe("Generating buildings on 57 eligible blocks…");
     expect(generationProgressText(1)).toBe("Generating buildings on 1 eligible block…");
     expect(generationProgressText(null)).toBe("Generating buildings…");
+  });
+});
+
+describe("generationStreamText", () => {
+  it("counts the blocks done", () => {
+    expect(generationStreamText(3, 40)).toBe("Generating… 3 of 40 blocks");
+    expect(generationStreamText(0, 1)).toBe("Generating… 0 of 1 blocks");
   });
 });
 
