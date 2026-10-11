@@ -9,7 +9,9 @@ import { pointDelays } from "../scene/revealSchedule";
 import type { GeneratedFeature } from "../scene/generationStream";
 import type { Terrain } from "../scene/terrain";
 import { COLORS, MATERIALS, restyle, SCENE_BACKGROUND, setActiveTheme } from "../scene/palette";
-import { DEFAULT_THEME } from "../scene/themes";
+import { createAtmosphere } from "../scene/atmosphere";
+import { DEFAULT_THEME, themeById } from "../scene/themes";
+import type { ThemeId, TimeOfDay } from "../scene/themes/types";
 import { shadeGeometry } from "../scene/shading";
 import { createAutoRotate, ROTATE_SPEED } from "../scene/autoRotate";
 import { createCameraModes } from "../scene/cameraModes";
@@ -31,6 +33,10 @@ export interface SceneView extends SceneTarget {
   camera: THREE.PerspectiveCamera;
   /** Replaces the world with an empty one in `bbox` that the returned handle builds up, stage by stage. */
   beginStaged(bbox: BoundingBox): StagedHandle;
+  /** Shows the scene in this theme (an unknown id falls back to Night clay): every layer, the sky, the lights and the fog, with no rebuild. */
+  setTheme(id: ThemeId): void;
+  /** Moves the sun and sky to a time of day, animated unless the user prefers reduced motion. Nothing changes in a theme that does not follow the sun. */
+  setTimeOfDay(time: TimeOfDay): void;
   /** Starts rendering; the loop stops while the view is hidden. */
   shown(): void;
   hidden(): void;
@@ -48,7 +54,12 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
   container.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(SCENE_BACKGROUND);
+  scene.background = new THREE.Color(SCENE_BACKGROUND); // until the atmosphere sets the active sky's horizon
+  // Night clay at midday until a stored choice says otherwise.
+  let theme = DEFAULT_THEME;
+  const atmosphere = createAtmosphere(scene, renderer);
+  atmosphere.setTheme(theme);
+  atmosphere.setTime("midday", { animate: false });
 
   // The placeholder world, removed once a real one is loaded.
   const placeholder = new THREE.Group();
@@ -82,7 +93,10 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
   };
   buildable.addEventListener("change", showBlocks);
   const roadMode = () => (smooth.checked ? "smoothed" : "exact");
-  smooth.addEventListener("change", () => world && setRoadMode(world, roadMode()));
+  smooth.addEventListener("change", () => {
+    if (world) setRoadMode(world, roadMode());
+    atmosphere.invalidateShadows();
+  });
   /** What the toggles and the credit show for the world on screen (`undefined`: no finished world). */
   const showTerrain = (data: MapData | undefined) => {
     smoothLabel.hidden = !data?.elevation;
@@ -141,6 +155,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
     const meshes = fresh.flatMap(({ feature, projection }) => generatedMeshes([feature], terrain, projection));
     if (!meshes.length) return;
     generated.add(...meshes);
+    atmosphere.invalidateShadows();
     generated.visible = true;
     if (instant || prefersReducedMotion()) return;
     track(animator.riseAt(meshes, meshes.map((_, i) => staggerDelay(i, meshes.length))));
@@ -186,6 +201,13 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
       return { block: String((mesh.userData.properties as { block_id?: string } | undefined)?.block_id ?? mesh.name), x: at.x, z: at.z };
     });
     track(animator.riseAt(meshes, pointDelays(points, { x: centre.x, z: centre.z })));
+  };
+
+  /** Makes `theme` the one meshes are built with and every mesh, the sky, the lights and the fog take its look. */
+  const applyTheme = () => {
+    setActiveTheme(theme);
+    restyle(scene);
+    atmosphere.setTheme(theme);
   };
 
   const removeWorld = () => {
@@ -301,6 +323,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
     }
     modes.update(delta);
     animator.update(delta);
+    atmosphere.update(delta, camera, controls.target, { buildAnimating: building || busy() });
     if (reveal.size) playReveal(reveal.update(delta));
     staged.update(delta);
     renderer.render(scene, camera);
@@ -317,6 +340,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
       zoneLegend.setReasons(data.generation_zones?.features.map((zone) => zone.properties.reason) ?? []);
       showBlocks();
       scene.add(world);
+      atmosphere.invalidateShadows();
       showTerrain(data);
       terrainControls?.setWorld(!data.elevation);
       generationControls?.setWorld(data.generation ?? null);
@@ -388,6 +412,13 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
         },
       };
     },
+    setTheme(id) {
+      theme = themeById(id);
+      applyTheme();
+    },
+    setTimeOfDay(time) {
+      atmosphere.setTime(time, { animate: !prefersReducedMotion() });
+    },
     showMessage(message: string) {
       framing.reset();
       removeWorld();
@@ -411,8 +442,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
       this.showMessage(EMPTY_HINT);
     },
     shown() {
-      setActiveTheme(DEFAULT_THEME); // the stored choice replaces the default in a later change
-      restyle(scene);
+      applyTheme(); // the landing stage may have made another theme the active one
       resize();
       modes.setActive(true);
       pins.setActive(true);
@@ -435,6 +465,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
       pins.dispose();
       blockSelection?.dispose();
       observer.disconnect();
+      atmosphere.dispose();
       modes.dispose();
       routes?.dispose();
       controls.dispose();

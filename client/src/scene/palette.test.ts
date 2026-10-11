@@ -5,6 +5,7 @@ import * as THREE from "three";
 import { activeTheme, areaFeatureMaterial, COLORS, MATERIALS, materialsFor, restyle, SCENE_BACKGROUND, setActiveTheme, zoneColor, zoneMaterial } from "./palette";
 import { shade } from "./shading";
 import { DEFAULT_THEME, THEMES, themeById } from "./themes";
+import { lightClay } from "./themes/lightClay";
 import { nightClay } from "./themes/nightClay";
 import type { Theme } from "./themes/types";
 
@@ -155,7 +156,7 @@ describe("the night clay palette is its own character", () => {
 describe("themes and restyle", () => {
   afterEach(() => setActiveTheme(DEFAULT_THEME));
 
-  const stub: Theme = { ...nightClay, id: "light-clay", label: "Stub", colors: { ...nightClay.colors, buildingMeasured: "#ffffff", pin: "#00ff00", zoneWater: "#112233" } };
+  const stub: Theme = { ...nightClay, id: "realistic", label: "Stub", colors: { ...nightClay.colors, buildingMeasured: "#ffffff", pin: "#00ff00", zoneWater: "#112233" } };
 
   it("falls back to Night clay for an unknown, missing or null theme id", () => {
     expect(themeById("night-clay")).toBe(nightClay);
@@ -199,5 +200,59 @@ describe("themes and restyle", () => {
     expect(zoneColor("water")).toBe(nightClay.colors.zoneWater);
     setActiveTheme(stub);
     expect(zoneColor("water")).toBe("#112233");
+  });
+});
+
+describe("material modes", () => {
+  const BUILDINGS = ["buildingMeasured", "buildingDefaulted", "buildingGenerated"] as const;
+  const GROUND_LAYERS = ["ground", "green", "water", "forest", "farmland", "cemetery", "railway", "industrial", "roadNormal", "roadWide", "roadNarrow", "buildable", "zoneWater"] as const;
+  const UNLIT = ["route", "origin", "destination", "pin", "pinRing"] as const;
+
+  it("lists Light clay, which follows the sun in the lit mode and has a sky for every time", () => {
+    expect(THEMES).toContain(lightClay);
+    expect(themeById("light-clay")).toBe(lightClay);
+    expect(lightClay).toMatchObject({ mode: "lit", followsSun: true, windows: "night" });
+    expect(Object.keys(lightClay.skies ?? {}).sort()).toEqual(["dawn", "golden-hour", "midday", "night"]);
+  });
+
+  it("gives Light clay Lambert buildings and ground layers, flat shaded, without the baked vertex colours", () => {
+    const set = materialsFor(lightClay);
+    for (const key of [...BUILDINGS, ...GROUND_LAYERS]) {
+      const material = set[key] as THREE.MeshLambertMaterial;
+      expect(material.isMeshLambertMaterial, key).toBe(true);
+      expect(material.flatShading, key).toBe(true);
+      expect(material.vertexColors, key).toBe(false);
+    }
+  });
+
+  it("keeps each lit material's transparency, depthWrite and side from the baked one", () => {
+    const lit = materialsFor(lightClay);
+    const baked = materialsFor(nightClay);
+    for (const key of [...BUILDINGS, ...GROUND_LAYERS]) {
+      expect([lit[key].transparent, lit[key].opacity, lit[key].depthWrite, lit[key].side], key).toEqual([baked[key].transparent, baked[key].opacity, baked[key].depthWrite, baked[key].side]);
+    }
+    expect(lit.ground.depthWrite).toBe(false);
+    expect(lit.buildingMeasured.depthWrite).toBe(true);
+    expect(lit.zoneWater.transparent).toBe(true);
+  });
+
+  it("leaves the route, markers, pin, waiting wireframe and lines unlit in Light clay", () => {
+    const set = materialsFor(lightClay);
+    for (const key of UNLIT) {
+      expect((set[key] as THREE.MeshBasicMaterial).isMeshBasicMaterial, key).toBe(true);
+      expect((set[key] as THREE.MeshBasicMaterial).vertexColors, key).toBe(true);
+    }
+    expect(set.waiting.wireframe).toBe(true);
+    for (const key of ["blockOutline", "blockOutlineSelected", "edge"] as const) expect(set[key].isLineBasicMaterial, key).toBe(true);
+  });
+
+  it("leaves Night clay's materials baked: basic, with vertex colours", () => {
+    const set = materialsFor(nightClay);
+    for (const key of [...BUILDINGS, ...GROUND_LAYERS, ...UNLIT]) {
+      const material = set[key] as THREE.MeshBasicMaterial;
+      expect(material.isMeshBasicMaterial, key).toBe(true);
+      expect(material.vertexColors, key).toBe(true);
+    }
+    expect(set.waiting.wireframe).toBe(true);
   });
 });

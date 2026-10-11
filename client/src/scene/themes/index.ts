@@ -1,7 +1,8 @@
+import { lightClay } from "./lightClay";
 import { nightClay } from "./nightClay";
 import type { Theme } from "./types";
 
-export const THEMES: readonly Theme[] = [nightClay];
+export const THEMES: readonly Theme[] = [nightClay, lightClay];
 
 export const DEFAULT_THEME: Theme = nightClay;
 

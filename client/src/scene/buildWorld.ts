@@ -30,6 +30,7 @@ export function groundPlane(minX: number, maxX: number, minZ: number, maxZ: numb
   const ground = new THREE.Mesh(shadeGeometry(new THREE.PlaneGeometry(maxX - minX, maxZ - minZ).rotateX(-Math.PI / 2)), MATERIALS.ground);
   ground.position.set((minX + maxX) / 2, 0, (minZ + maxZ) / 2);
   ground.name = "ground:plane";
+  ground.receiveShadow = true;
   ground.renderOrder = LAYER_ORDER.ground;
   return ground;
 }
@@ -42,6 +43,7 @@ export function terrainGround(terrain: Terrain, minX: number, maxX: number, minZ
   geometry.setIndex(indices);
   const ground = new THREE.Mesh(shadeGeometry(geometry), MATERIALS.ground);
   ground.name = "ground:plane";
+  ground.receiveShadow = true;
   ground.renderOrder = LAYER_ORDER.ground;
   return ground;
 }
@@ -73,6 +75,9 @@ function entity(layer: string, feature: Feature<object>, geometry: THREE.BufferG
   const mesh = new THREE.Mesh(geometry, material);
   mesh.name = `${layer}:${feature.id}`;
   mesh.userData = { layer, id: feature.id, properties: feature.properties };
+  // Shadows (lit themes only; harmless otherwise): buildings cast and receive them, the ground layers receive.
+  mesh.castShadow = layer === "building" || layer === "generated";
+  mesh.receiveShadow = true;
   return mesh;
 }
 

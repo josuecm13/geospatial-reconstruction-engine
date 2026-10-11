@@ -35,6 +35,13 @@ export interface ThemeColors {
 export const TIMES_OF_DAY = ["dawn", "midday", "golden-hour", "night"] as const;
 export type TimeOfDay = (typeof TIMES_OF_DAY)[number];
 
+/** A sky gradient: straight up, at the horizon, and below it. */
+export interface Sky {
+  zenith: string;
+  horizon: string;
+  below: string;
+}
+
 export type ThemeId = "night-clay" | "light-clay" | "blueprint" | "realistic";
 
 export interface Theme {
@@ -42,7 +49,10 @@ export interface Theme {
   label: string;
   colors: ThemeColors;
   /** The sky gradient: straight up, at the horizon, and below it. */
-  sky: { zenith: string; horizon: string; below: string };
+  sky: Sky;
+  /** For a theme that follows the sun: its sky at each time of day. Without it, `sky` serves every time. */
+  skies?: Record<TimeOfDay, Sky>;
+  /** Distance fog. The atmosphere colours it as the sky's horizon, so `color` only matters for the first frame; near and far are metres. */
   fog: { color: string; near: number; far: number } | null;
   /** How materials are drawn: shade baked into vertex colours, lit by lights, or line work. */
   mode: "baked" | "lit" | "line";

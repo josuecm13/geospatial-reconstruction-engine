@@ -13,50 +13,60 @@ export const COLORS: Readonly<ThemeColors> = NIGHT_CLAY_COLORS;
 /** The scene's background in Night clay: the ground colour as it renders on an upward face. `--scene-background` in style.css must equal it. */
 export const SCENE_BACKGROUND = NIGHT_CLAY_BACKGROUND;
 
-/** Unlit: the shade is baked into the geometry's vertex colors (shading.ts), and the material multiplies it into the palette color. */
-const flat = (color: string, extra: THREE.MeshBasicMaterialParameters = {}) => new THREE.MeshBasicMaterial({ color, vertexColors: true, ...extra });
+type Extra = THREE.MeshBasicMaterialParameters & THREE.MeshLambertMaterialParameters;
+type Surface = THREE.MeshBasicMaterial | THREE.MeshLambertMaterial;
 
-/** Ground-level layers write no depth: their draw order (LAYER_ORDER in buildWorld.ts) decides what shows on top. */
-const decal = (color: string, extra: THREE.MeshBasicMaterialParameters = {}) => flat(color, { depthWrite: false, ...extra });
+/** Unlit: the shade is baked into the geometry's vertex colors (shading.ts), and the material multiplies it into the palette color. */
+const flat = (color: string, extra: Extra = {}): Surface => new THREE.MeshBasicMaterial({ color, vertexColors: true, ...extra });
+
+/** Lit: three.js lights shade it, flat per face from the geometry's face normals. The baked shade is off, or it would darken twice. */
+const lit = (color: string, extra: Extra = {}): Surface => new THREE.MeshLambertMaterial({ color, flatShading: true, vertexColors: false, ...extra });
 
 /** Zones tint the ground under them, at low opacity so what they cover shows through. */
-const ZONE: THREE.MeshBasicMaterialParameters = { transparent: true, opacity: 0.3, side: THREE.DoubleSide };
+const ZONE: Extra = { transparent: true, opacity: 0.3, side: THREE.DoubleSide };
 
-const buildMaterials = (colors: ThemeColors) => ({
-  ground: decal(colors.ground),
-  green: decal(colors.green),
-  water: decal(colors.water),
-  forest: decal(colors.forest),
-  farmland: decal(colors.farmland),
-  cemetery: decal(colors.cemetery),
-  railway: decal(colors.railway),
-  industrial: decal(colors.industrial),
-  roadNormal: decal(colors.roadNormal),
-  roadWide: decal(colors.roadWide),
-  roadNarrow: decal(colors.roadNarrow),
-  buildingMeasured: flat(colors.buildingMeasured),
-  buildingDefaulted: flat(colors.buildingDefaulted),
-  buildingGenerated: flat(colors.buildingGenerated),
-  buildable: decal(colors.buildable, { transparent: true, opacity: 0.25, side: THREE.DoubleSide }),
-  zoneWater: decal(colors.zoneWater, ZONE),
-  zoneSteep: decal(colors.zoneSteep, ZONE),
-  zoneLanduse: decal(colors.zoneLanduse, ZONE),
-  zoneSetback: decal(colors.zoneSetback, ZONE),
-  // Block outlines are lines, so no shade. Dashes are in metres (the scene's unit); `computeLineDistances()` on each line makes them show.
-  blockOutline: new THREE.LineDashedMaterial({ color: colors.blockOutline, dashSize: 4, gapSize: 2 }),
-  blockOutlineFaint: new THREE.LineDashedMaterial({ color: colors.blockOutline, dashSize: 0.6, gapSize: 2.4, transparent: true, opacity: 0.45 }),
-  blockOutlineReference: new THREE.LineDashedMaterial({ color: colors.blockReference, dashSize: 10, gapSize: 2 }),
-  blockOutlineSelected: new THREE.LineBasicMaterial({ color: colors.blockSelected }),
-  route: flat(colors.route, { side: THREE.DoubleSide }),
-  origin: flat(colors.origin),
-  destination: flat(colors.destination),
-  pin: flat(colors.pin),
-  pinRing: decal(colors.pin, { side: THREE.DoubleSide, transparent: true, opacity: 0.8 }),
-  // A wireframe, not faces: no shade.
-  waiting: new THREE.MeshBasicMaterial({ color: colors.waiting, wireframe: true }),
-  // Building edge lines, shared by every building: lines, so no shade.
-  edge: new THREE.LineBasicMaterial({ color: colors.edge, transparent: true, opacity: 0.35 }),
-});
+const buildMaterials = (theme: Theme) => {
+  const { colors } = theme;
+  const surface = theme.mode === "lit" ? lit : flat;
+  /** Ground-level layers write no depth: their draw order (LAYER_ORDER in buildWorld.ts) decides what shows on top. */
+  const decal = (color: string, extra: Extra = {}) => surface(color, { depthWrite: false, ...extra });
+  return {
+    ground: decal(colors.ground),
+    green: decal(colors.green),
+    water: decal(colors.water),
+    forest: decal(colors.forest),
+    farmland: decal(colors.farmland),
+    cemetery: decal(colors.cemetery),
+    railway: decal(colors.railway),
+    industrial: decal(colors.industrial),
+    roadNormal: decal(colors.roadNormal),
+    roadWide: decal(colors.roadWide),
+    roadNarrow: decal(colors.roadNarrow),
+    buildingMeasured: surface(colors.buildingMeasured),
+    buildingDefaulted: surface(colors.buildingDefaulted),
+    buildingGenerated: surface(colors.buildingGenerated),
+    buildable: decal(colors.buildable, { transparent: true, opacity: 0.25, side: THREE.DoubleSide }),
+    zoneWater: decal(colors.zoneWater, ZONE),
+    zoneSteep: decal(colors.zoneSteep, ZONE),
+    zoneLanduse: decal(colors.zoneLanduse, ZONE),
+    zoneSetback: decal(colors.zoneSetback, ZONE),
+    // Block outlines are lines, so no shade. Dashes are in metres (the scene's unit); `computeLineDistances()` on each line makes them show.
+    blockOutline: new THREE.LineDashedMaterial({ color: colors.blockOutline, dashSize: 4, gapSize: 2 }),
+    blockOutlineFaint: new THREE.LineDashedMaterial({ color: colors.blockOutline, dashSize: 0.6, gapSize: 2.4, transparent: true, opacity: 0.45 }),
+    blockOutlineReference: new THREE.LineDashedMaterial({ color: colors.blockReference, dashSize: 10, gapSize: 2 }),
+    blockOutlineSelected: new THREE.LineBasicMaterial({ color: colors.blockSelected }),
+    // The route, the markers and the pin stay unlit in every theme.
+    route: flat(colors.route, { side: THREE.DoubleSide }),
+    origin: flat(colors.origin),
+    destination: flat(colors.destination),
+    pin: flat(colors.pin),
+    pinRing: flat(colors.pin, { depthWrite: false, side: THREE.DoubleSide, transparent: true, opacity: 0.8 }),
+    // A wireframe, not faces: no shade.
+    waiting: new THREE.MeshBasicMaterial({ color: colors.waiting, wireframe: true }),
+    // Building edge lines, shared by every building: lines, so no shade.
+    edge: new THREE.LineBasicMaterial({ color: colors.edge, transparent: true, opacity: 0.35 }),
+  };
+};
 
 export type MaterialSet = ReturnType<typeof buildMaterials>;
 export type MaterialKey = keyof MaterialSet;
@@ -67,7 +77,7 @@ const cache = new Map<string, MaterialSet>();
 export function materialsFor(theme: Theme): MaterialSet {
   let set = cache.get(theme.id);
   if (!set) {
-    set = buildMaterials(theme.colors);
+    set = buildMaterials(theme);
     for (const key of Object.keys(set) as MaterialKey[]) set[key].userData.key = key;
     cache.set(theme.id, set);
   }
