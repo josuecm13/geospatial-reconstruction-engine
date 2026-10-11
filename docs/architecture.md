@@ -192,6 +192,68 @@ the archived change's `design.md` (`openspec/changes/archive/2026-10-11-add-gene
   `roads_changed`) or the area's elevation grid version differs (`terrain_changed`). Staleness is
   computed on read, never stored.
 
+## Scene themes and time of day
+
+The 3D scene has four themes and four times of day. A theme is one typed `Theme` object
+(`client/src/scene/themes/types.ts`): an id and label, a colour for every scene role, the sky and fog,
+the material mode, whether it follows the sun, when its windows glow, and Realistic's texture colours.
+Each theme is one file under `scene/themes/`, listed in `themes/index.ts`.
+
+- **Night clay**: the reference look. Baked shading, dark ground, pale buildings, no sun, windows always lit.
+- **Light clay**: pale clay lit by the sun, warm off-white buildings on a soft grey ground.
+- **Blueprint**: navy ground with a metric grid, cyan edges over faint fills, dashed generated edges, no sun.
+- **Realistic**: lit by the sun, with procedural textures for facades, roofs, asphalt, grass, forest and water.
+
+The 2D map, the location previews and the page chrome do not follow the theme. They read Night clay's
+colours: `COLORS`, `SCENE_BACKGROUND` and `--scene-background` are exported from `scene/palette.ts`.
+
+- **Materials by key.** `palette.ts` is the only place a scene material is built. `materialsFor(theme)`
+  builds a theme's set once and keeps it. Each material records its key in `userData.key`, and every mesh
+  and line takes its material from that key. Switching theme or time calls `setActiveTheme` and then
+  `restyle`, which reassigns materials in place, so the geometry is never rebuilt.
+- **Material modes.** `baked` (Night clay) uses basic materials with the shade from `shading.ts` in vertex
+  colours. `lit` (Light clay, Realistic) uses Lambert materials with flat shading and no vertex colours, lit by
+  the sun and the sky light. `line` (Blueprint) uses line materials and faint translucent fills, with the
+  ground grid drawn in the ground shader. The route, markers, pin and waiting wireframe are unlit in every theme.
+
+### Time of day and the atmosphere
+
+- **Presets.** `scene/themes/timeOfDay.ts` defines dawn, midday, golden-hour and night. Each sets the sun's
+  direction, colour and intensity, the hemisphere (sky) light, and a `night` value from 0 to 1.
+- **Atmosphere.** `scene/atmosphere.ts` draws a sky dome that follows the camera (a gradient, with the sun's
+  disc or the moon), a directional sun, a hemisphere light and fog in the horizon colour. A change of time
+  blends over 1.5 s; under reduced motion, and on a change of theme, it is instant.
+- **Fixed light.** Only themes that follow the sun use the lights and the time. In the others the lights are
+  off, the dome shows the theme's fixed sky, and the time buttons are disabled with a "Fixed light" note.
+- **Shadows** (sun-following themes only). A 2048² shadow map is fitted to the view (`scene/shadowFit.ts`).
+  Its box is centred on the orbit target and sized to 0.8 of the camera's distance, clamped to 150 to 1500 m
+  and stepped by 1.25×. The centre snaps to whole texels so edges don't shimmer. The map redraws only when the
+  sun, the centre or the size changes, or while buildings are rising.
+
+### Night windows and Realistic's textures
+
+- **Night windows** (`scene/nightWindows.ts`, `scene/wallGrid.ts`) are drawn in the building shader, with no
+  geometry or textures. A wall cell is 3.5 m by 3.2 m; a hash lights about 25% of real buildings' windows
+  and 15% of generated ones, warm or cool. Cells under a pixel show their average glow, so a distant city
+  reads as a soft speckle. Roofs get none.
+- **Realistic textures** (`scene/themes/textures.ts`) are 64 × 64 byte arrays drawn in TypeScript, with no
+  canvas and no downloaded files. A seeded generator makes every run draw the same pixels. They use nearest
+  filtering, and the set is capped at 1 MB (a test checks it). `scene/realisticShaders.ts` maps them from
+  world coordinates, so no geometry carries UVs.
+
+### Persistence and the landing theme
+
+- **Per browser.** The scene's choice is kept in `localStorage` under `gre.sceneTheme` as `{ theme, time }`,
+  read field by field, with Night clay at midday as the fallback (`scene/themeChoice.ts`).
+- **Use on landing.** The theme control's button sends the current choice to `PUT /settings/landing-theme`,
+  which stores it in the `landing_theme` site setting (`{ landing_theme: { theme, time_of_day } | null }`;
+  null clears it, and an unknown value is a 422). The landing stage reads it through `GET` and falls back to
+  Night clay at midday on any failure (`landing/landingLook.ts`).
+- **Frame time.** `?fps` adds a readout to the scene (`scene/fpsReadout.ts`) with the frame rate, p95, draw
+  calls and triangles, the theme, and whether the shadow map redrew.
+- **Export.** The glTF export does not yet record the active theme or time of day; see the showcase-client
+  spec for its contract.
+
 ## OSM translation
 
 The adapter fetches only streets/roads, building footprints, POIs, relevant areas, and the OSM tags needed for lane and turn semantics. It maps OSM values into constrained application categories: e.g. `highway=*` becomes a `RoadClassification`, `lanes`/`lanes:forward`/`lanes:backward` become a lane profile, and turn-restriction relations become `TurnMovement` records. Building tags become a `BuildingCategory`, while amenity/shop/leisure tags become `PoiCategory` or `AreaFeatureKind`. Unknown tags are either omitted or captured as narrowly scoped source metadata, rather than leaked as application behavior.

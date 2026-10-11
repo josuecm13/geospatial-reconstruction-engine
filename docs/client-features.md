@@ -222,6 +222,9 @@ Ideas, not commitments. Once one is chosen, it becomes an issue in the milestone
   to `PUT /settings/landing-theme` and reports "Saved" or the error code. The choice persists in
   `localStorage` (`gre.sceneTheme`) and is applied without animation when the scene is created
   (`scene/themeChoice.ts`, `scene/themeControls.ts`).
+- **Frame-time readout** (`?fps`, #141): add `?fps` to the page's URL to show the 3D scene's fps, p95, draw
+  calls, triangles, texture count, theme, and whether the shadow map redrew, for checking the 10 km² budget
+  in every theme (`scene/fpsReadout.ts`). Without the parameter nothing is drawn.
 - **Export panel**: pick the scope, mode (filter / clip), and layers, and download GeoJSON with
   the projection metadata.
 
