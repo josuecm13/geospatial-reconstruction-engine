@@ -3,7 +3,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { BoundingBox, MapData, Projection } from "../api/types";
 import { prefersReducedMotion } from "../locations/flyTo";
 import { Animator, staggerDelay } from "../scene/buildAnimation";
-import { buildWorld, DEFAULT_ROAD_MODE, generatedMeshes, LAYER_ORDER, setRoadMode } from "../scene/buildWorld";
+import { buildWorld, DEFAULT_ROAD_MODE, generatedMeshes, LAYER_ORDER, roadOutlineLines, setRoadMode } from "../scene/buildWorld";
 import { RevealQueue } from "../scene/revealQueue";
 import { pointDelays } from "../scene/revealSchedule";
 import type { GeneratedFeature } from "../scene/generationStream";
@@ -208,7 +208,21 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
     setActiveTheme(theme);
     restyle(scene);
     atmosphere.setTheme(theme);
+    syncRoadOutlines();
   };
+
+  /** Blueprint draws the roads' outlines: built once per world, the first time Blueprint is applied to it, and shown only there. */
+  function syncRoadOutlines() {
+    if (!world) return;
+    const roads = world.getObjectByName("roads");
+    if (!roads) return;
+    let outlines = roads.getObjectByName("road_outlines");
+    if (!outlines && theme.mode === "line" && world.userData.roadOutlines) {
+      outlines = roadOutlineLines(world);
+      roads.add(outlines);
+    }
+    if (outlines) outlines.visible = theme.mode === "line";
+  }
 
   const removeWorld = () => {
     cancelReveal(true);
@@ -340,6 +354,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
       zoneLegend.setReasons(data.generation_zones?.features.map((zone) => zone.properties.reason) ?? []);
       showBlocks();
       scene.add(world);
+      syncRoadOutlines();
       atmosphere.invalidateShadows();
       showTerrain(data);
       terrainControls?.setWorld(!data.elevation);

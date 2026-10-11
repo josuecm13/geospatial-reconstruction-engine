@@ -26,18 +26,69 @@ const lit = (color: string, extra: Extra = {}): Surface => new THREE.MeshLambert
 /** Zones tint the ground under them, at low opacity so what they cover shows through. */
 const ZONE: Extra = { transparent: true, opacity: 0.3, side: THREE.DoubleSide };
 
+const GRID_VERTEX = /* glsl */ `
+varying vec2 vGridPos;`;
+
+/** A grid line of cell size `cell` metres at world position `p`: 1 where a line runs, antialiased with `fwidth`. Also gives how many cells a pixel spans, to fade lines that get too dense. */
+const GRID_FRAGMENT = /* glsl */ `
+varying vec2 vGridPos;
+uniform vec3 gridMinor;
+uniform vec3 gridMajor;
+float gridLine(vec2 p, float cell, out float density) {
+  vec2 c = p / cell;
+  vec2 w = max(fwidth(c), vec2(1e-6));
+  density = max(w.x, w.y);
+  vec2 d = abs(fract(c - 0.5) - 0.5) / w;
+  return 1.0 - min(min(d.x, d.y), 1.0);
+}`;
+
+/**
+ * Blueprint's ground: the ground material with thin lines every 10 m and a stronger one every 100 m, from the world x and z.
+ * The vertex shader takes the world position through `modelMatrix` (the ground mesh is positioned, so its local position isn't it).
+ * The 10 m lines fade out once they are closer than about 4 px.
+ */
+const withGrid = (material: Surface, colors: ThemeColors): Surface => {
+  const minor = new THREE.Color(colors.gridMinor ?? colors.gridLine);
+  const major = new THREE.Color(colors.gridMajor ?? colors.gridCenter);
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.gridMinor = { value: minor };
+    shader.uniforms.gridMajor = { value: major };
+    shader.vertexShader = shader.vertexShader
+      .replace("void main() {", `${GRID_VERTEX}\nvoid main() {`)
+      .replace("#include <project_vertex>", "#include <project_vertex>\n  vGridPos = (modelMatrix * vec4(transformed, 1.0)).xz;");
+    shader.fragmentShader = shader.fragmentShader
+      .replace("void main() {", `${GRID_FRAGMENT}\nvoid main() {`)
+      .replace(
+        "#include <color_fragment>",
+        `#include <color_fragment>
+  float minorDensity;
+  float majorDensity;
+  float minorLine = gridLine(vGridPos, 10.0, minorDensity) * (1.0 - smoothstep(0.125, 0.25, minorDensity));
+  float majorLine = gridLine(vGridPos, 100.0, majorDensity);
+  diffuseColor.rgb = mix(diffuseColor.rgb, gridMinor, minorLine);
+  diffuseColor.rgb = mix(diffuseColor.rgb, gridMajor, majorLine);`,
+      );
+  };
+  material.customProgramCacheKey = () => "blueprint-grid";
+  return material;
+};
+
+/** Blueprint's building fills: unlit, faint, and they write depth. */
+const blueprintFill = (color: string): Surface => new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.16, depthWrite: true });
+
 const buildMaterials = (theme: Theme) => {
   const { colors } = theme;
+  const line = theme.mode === "line";
   const surface = theme.mode === "lit" ? lit : flat;
   /** Ground-level layers write no depth: their draw order (LAYER_ORDER in buildWorld.ts) decides what shows on top. */
   const decal = (color: string, extra: Extra = {}) => surface(color, { depthWrite: false, ...extra });
   const building = (color: string, generated: boolean) => {
-    const material = surface(color);
+    const material = line ? blueprintFill(color) : surface(color);
     if (theme.windows !== "never") patchWindows(material, { generated });
     return material;
   };
   return {
-    ground: decal(colors.ground),
+    ground: line ? withGrid(decal(colors.ground), colors) : decal(colors.ground),
     green: decal(colors.green),
     water: decal(colors.water),
     forest: decal(colors.forest),
@@ -70,7 +121,14 @@ const buildMaterials = (theme: Theme) => {
     // A wireframe, not faces: no shade.
     waiting: new THREE.MeshBasicMaterial({ color: colors.waiting, wireframe: true }),
     // Building edge lines, shared by every building: lines, so no shade.
-    edge: new THREE.LineBasicMaterial({ color: colors.edge, transparent: true, opacity: 0.35 }),
+    // In Blueprint they are bright and opaque.
+    edge: line ? new THREE.LineBasicMaterial({ color: colors.edge }) : new THREE.LineBasicMaterial({ color: colors.edge, transparent: true, opacity: 0.35 }),
+    // The edges of generated buildings: dashed in Blueprint (`computeLineDistances()` on each edge object makes them show), a twin of `edge` elsewhere (its own object, so restyle keeps the two apart).
+    edgeGenerated: line
+      ? new THREE.LineDashedMaterial({ color: colors.buildingGenerated, dashSize: 1.5, gapSize: 1 })
+      : new THREE.LineBasicMaterial({ color: colors.edge, transparent: true, opacity: 0.35 }),
+    // The outlines of the roads: drawn in Blueprint only (`roadOutlineLines` in buildWorld.ts), a line of the edge colour elsewhere.
+    roadOutline: new THREE.LineBasicMaterial({ color: colors.roadOutline ?? colors.edge }),
   };
 };
 

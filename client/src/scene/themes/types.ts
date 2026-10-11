@@ -30,6 +30,10 @@ export interface ThemeColors {
   pin: string;
   waiting: string;
   edge: string;
+  /** Blueprint only: the ground grid's 10 m and 100 m lines, and the road outlines. */
+  gridMinor?: string;
+  gridMajor?: string;
+  roadOutline?: string;
 }
 
 export const TIMES_OF_DAY = ["dawn", "midday", "golden-hour", "night"] as const;

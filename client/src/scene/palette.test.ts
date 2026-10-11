@@ -5,6 +5,7 @@ import * as THREE from "three";
 import { activeTheme, areaFeatureMaterial, COLORS, MATERIALS, materialsFor, restyle, SCENE_BACKGROUND, setActiveTheme, zoneColor, zoneMaterial } from "./palette";
 import { shade } from "./shading";
 import { DEFAULT_THEME, THEMES, themeById } from "./themes";
+import { blueprint } from "./themes/blueprint";
 import { lightClay } from "./themes/lightClay";
 import { nightClay } from "./themes/nightClay";
 import type { Theme } from "./themes/types";
@@ -254,5 +255,57 @@ describe("material modes", () => {
       expect(material.vertexColors, key).toBe(true);
     }
     expect(set.waiting.wireframe).toBe(true);
+  });
+});
+
+describe("the Blueprint theme", () => {
+  const set = materialsFor(blueprint);
+  const BUILDINGS = ["buildingMeasured", "buildingDefaulted", "buildingGenerated"] as const;
+
+  it("is a line theme with no sun and no windows, on a flat navy sky and no fog", () => {
+    expect(THEMES).toContain(blueprint);
+    expect(themeById("blueprint")).toBe(blueprint);
+    expect(blueprint).toMatchObject({ mode: "line", followsSun: false, windows: "never", fog: null });
+    expect(blueprint.sky.zenith).toBe(blueprint.colors.ground);
+    expect(blueprint.sky.horizon).toBe(blueprint.colors.ground);
+    expect(blueprint.skies).toBeUndefined();
+  });
+
+  it("draws building fills unlit, faint and transparent, writing depth", () => {
+    for (const key of BUILDINGS) {
+      const material = set[key] as THREE.MeshBasicMaterial;
+      expect(material.isMeshBasicMaterial, key).toBe(true);
+      expect(material.transparent, key).toBe(true);
+      expect(material.opacity, key).toBeGreaterThanOrEqual(0.12);
+      expect(material.opacity, key).toBeLessThanOrEqual(0.2);
+      expect(material.depthWrite, key).toBe(true);
+    }
+  });
+
+  it("draws edges opaque, generated edges dashed, and has a line material for road outlines", () => {
+    expect(set.edge.isLineBasicMaterial).toBe(true);
+    expect(set.edge.transparent).toBe(false);
+    expect((set.edgeGenerated as THREE.LineDashedMaterial).isLineDashedMaterial).toBe(true);
+    expect(set.roadOutline.isLineBasicMaterial).toBe(true);
+    expect(set.roadOutline.userData.key).toBe("roadOutline");
+    expect(set.edgeGenerated.userData.key).toBe("edgeGenerated");
+  });
+
+  it("gives only Blueprint's ground the grid patch", () => {
+    const patched = (material: THREE.Material) => material.onBeforeCompile.toString().includes("gridMinor");
+    expect(patched(set.ground)).toBe(true);
+    expect(patched(materialsFor(nightClay).ground)).toBe(false);
+    expect(patched(materialsFor(lightClay).ground)).toBe(false);
+  });
+
+  it("leaves a generated-edge and a road-outline material in every other theme, the first a twin of the plain edge", () => {
+    for (const theme of [nightClay, lightClay]) {
+      const other = materialsFor(theme);
+      expect(other.edgeGenerated.isLineBasicMaterial, theme.id).toBe(true);
+      expect((other.edgeGenerated as unknown as { isLineDashedMaterial?: boolean }).isLineDashedMaterial, theme.id).toBeUndefined();
+      expect(other.edgeGenerated, theme.id).not.toBe(other.edge); // its own object, so restyle keeps the two apart
+      expect(other.edgeGenerated.opacity, theme.id).toBe(other.edge.opacity);
+      expect(other.roadOutline.isLineBasicMaterial, theme.id).toBe(true);
+    }
   });
 });
