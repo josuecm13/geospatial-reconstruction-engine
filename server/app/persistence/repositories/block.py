@@ -1,12 +1,21 @@
 import uuid
 from collections import defaultdict
 
-from sqlalchemy import exists, func, or_, select
+from geoalchemy2 import Geography
+from sqlalchemy import cast, exists, func, or_, select
 from sqlalchemy.orm import Session, aliased
 
 from app.domain.block import Block
-from app.persistence.geometry import geom_to_multipolygon, geom_to_polygon, polygon_to_geom
-from app.persistence.models import BlockBoundarySegmentModel, BlockModel, ImportAreaModel
+from app.domain.bounding_box import Coordinate
+from app.domain.enums import ImportStatus, RoadClassification
+from app.persistence.geometry import geom_to_multipolygon, geom_to_polygon, point_to_geom, polygon_to_geom
+from app.persistence.models import (
+    BlockBoundarySegmentModel,
+    BlockModel,
+    ImportAreaModel,
+    RoadModel,
+    RoadSegmentModel,
+)
 
 
 class BlockRepository:
@@ -36,6 +45,14 @@ class BlockRepository:
 
     def list_for_import_area(self, import_area_id: uuid.UUID) -> list[Block]:
         return self._list(select(BlockModel).where(BlockModel.import_area_id == import_area_id))
+
+    def ids_for_import_area(self, import_area_id: uuid.UUID) -> list[uuid.UUID]:
+        """Just the ids of the area's own blocks, for the road-graph hash of a generation run."""
+        return list(self.session.scalars(select(BlockModel.id).where(BlockModel.import_area_id == import_area_id)))
+
+    def get_import_area_id(self, block_id: uuid.UUID) -> uuid.UUID | None:
+        """The area a block belongs to, or None when there is no such block."""
+        return self.session.scalar(select(BlockModel.import_area_id).where(BlockModel.id == block_id))
 
     def list_composable(self, inner_area_ids: list[uuid.UUID], outer_area_id: uuid.UUID) -> list[Block]:
         """The inner areas' whole blocks that the outer area does not hold itself.
@@ -103,6 +120,42 @@ class BlockRepository:
             .order_by(BlockBoundarySegmentModel.sequence_order)
         ).scalars().all()
         return tuple(rows)
+
+    def blocks_within(
+        self, point: Coordinate, meters: float, exclude_area_id: uuid.UUID | None = None
+    ) -> list[tuple[Block, float]]:
+        """Blocks of any completed import area whose boundary centroid is within `meters` of
+        `point` (distance on the geography), nearest first with the distance in metres. Blocks of
+        `exclude_area_id` are left out. Matching a block to a reference uses it to find exemplars
+        in other areas."""
+        centroid = cast(func.ST_Centroid(BlockModel.boundary), Geography)
+        target = cast(point_to_geom(point), Geography)
+        distance = func.ST_Distance(centroid, target)
+        query = (
+            select(BlockModel, distance)
+            .join(ImportAreaModel, ImportAreaModel.id == BlockModel.import_area_id)
+            .where(ImportAreaModel.status == ImportStatus.COMPLETED, func.ST_DWithin(centroid, target, meters))
+            .order_by(distance, BlockModel.id)
+        )
+        if exclude_area_id is not None:
+            query = query.where(BlockModel.import_area_id != exclude_area_id)
+        rows = self.session.execute(query).all()
+        if not rows:
+            return []
+        blocks ={block.id: block for block in self._list(select(BlockModel).where(BlockModel.id.in_([row[0].id for row in rows])))}
+        return [(blocks[model.id], float(meters_away)) for model, meters_away in rows]
+
+    def bounding_road_classes(self, block_id: uuid.UUID) -> tuple[RoadClassification, ...]:
+        """The distinct classifications of the roads whose segments bound the block, for choosing
+        its default fingerprint (the strongest wins: see `strongest_road_group`)."""
+        rows = self.session.execute(
+            select(RoadModel.classification)
+            .join(RoadSegmentModel, RoadSegmentModel.road_id == RoadModel.id)
+            .join(BlockBoundarySegmentModel, BlockBoundarySegmentModel.road_segment_id == RoadSegmentModel.id)
+            .where(BlockBoundarySegmentModel.block_id == block_id)
+            .distinct()
+        ).scalars().all()
+        return tuple(RoadClassification(row) for row in rows)
 
     @staticmethod
     def _to_domain(model: BlockModel, bounding_segment_ids: tuple[uuid.UUID, ...]) -> Block:

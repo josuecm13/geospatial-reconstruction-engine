@@ -20,6 +20,8 @@ from app.api.mappers import (
     building_feature,
     elevation_out,
     feature_collection,
+    generated_building_feature,
+    generation_run_out,
     import_area_out,
     poi_feature,
     projection_out,
@@ -30,6 +32,7 @@ from app.domain.bounding_box import BoundingBox
 from app.domain.cross_section import cross_sections_by_segment
 from app.domain.import_area import ImportArea
 from app.domain.local_projection import local_projection_for
+from app.generation.run import GenerationService, stale_reasons
 from app.ingestion.elevation_analysis import ElevationAnalysis, ElevationResult
 from app.ingestion.elevation_source import ElevationUnavailable, TerrainTilesSource
 from app.ingestion.jobs import ImportJob
@@ -148,6 +151,64 @@ def elevation_work(
                 _, code, message, details = describe_error(exc)
                 if code == "internal_error":
                     logger.exception("elevation analysis of area %s failed unexpectedly", area.id)
+                job.emit("failed", {"code": code, "message": message, "details": details})
+
+    return work
+
+
+MAX_BUILDINGS_PER_EVENT = 500
+
+
+def chunks(items: list, size: int = MAX_BUILDINGS_PER_EVENT) -> list[list]:
+    """`items` in slices of at most `size`; an empty list is one empty slice, so a ring with no
+    buildings still announces itself."""
+    return [items[start : start + size] for start in range(0, len(items), size)] or [[]]
+
+
+def generation_work(area: ImportArea, seed: int, session_scope: SessionScope) -> Callable[[ImportJob], None]:
+    """The job body of a generation: it reads the observed data and replaces the area's run in one
+    transaction. Emits `generation` with the number of eligible blocks, then a `generated` event per
+    ring of blocks (nearest the area's centre first; a ring of more than 500 buildings is split over
+    several events with the same `ring`) carrying the buildings generated so far in that ring and
+    `blocks_done`, then `completed` with the new run, or `failed` with the error's code.
+
+    The streamed buildings are provisional: nothing is stored until the run is, at the end. On
+    `failed` the transaction rolls back, the previous run stays, and a client must discard what it
+    streamed. On `completed` the streamed ids are the stored ids, so they agree with map data."""
+
+    def work(job: ImportJob) -> None:
+        with session_scope() as session:
+            try:
+                projection = projection_out(local_projection_for(area.bbox.ring())).model_dump(mode="json")
+
+                def on_ring(ring: int, blocks_done: int, block_count: int, buildings: list) -> None:
+                    for batch in chunks(buildings):
+                        collection = feature_collection([generated_building_feature(b) for b in batch])
+                        job.emit(
+                            "generated",
+                            {
+                                "projection": projection,
+                                "ring": ring,
+                                "blocks_done": blocks_done,
+                                "block_count": block_count,
+                                "buildings": _dump(collection),
+                            },
+                        )
+
+                run = GenerationService(session).generate(
+                    area,
+                    seed,
+                    progress=lambda block_count: job.emit("generation", {"block_count": block_count}),
+                    on_ring=on_ring,
+                )
+                session.commit()
+                run_out = generation_run_out(run, stale_reasons(session, area, run))
+                job.emit("completed", {"run": _dump(run_out)})
+            except Exception as exc:
+                session.rollback()
+                _, code, message, details = describe_error(exc)
+                if code == "internal_error":
+                    logger.exception("generation for area %s failed unexpectedly", area.id)
                 job.emit("failed", {"code": code, "message": message, "details": details})
 
     return work

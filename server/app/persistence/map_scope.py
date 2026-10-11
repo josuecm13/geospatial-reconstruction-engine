@@ -13,6 +13,9 @@ from app.persistence.models import (
     AreaFeatureModel,
     BlockModel,
     BuildingModel,
+    GeneratedBuildingModel,
+    GenerationRunModel,
+    GenerationZoneModel,
     ImportAreaModel,
     NavigableNodeModel,
     PointOfInterestModel,
@@ -32,6 +35,8 @@ class ScopedIds:
     buildings: frozenset[uuid.UUID]
     pois: frozenset[uuid.UUID]
     area_features: frozenset[uuid.UUID]
+    generated_buildings: frozenset[uuid.UUID]
+    generation_zones: frozenset[uuid.UUID]
 
 
 def ids_intersecting_boundary(
@@ -65,6 +70,15 @@ def ids_intersecting_boundary(
             .where(RoadModel.import_area_id == import_area_id, func.ST_Intersects(RoadSegmentModel.geom, boundary_geom))
         ).all()
     )
+    def generated(model, geom_column, owners):
+        return frozenset(
+            session.scalars(
+                select(model.id)
+                .join(GenerationRunModel, GenerationRunModel.id == model.run_id)
+                .where(GenerationRunModel.import_area_id.in_(owners), func.ST_Intersects(geom_column, boundary_geom))
+            ).all()
+        )
+
     return ScopedIds(
         road_segments=segment_ids,
         navigable_nodes=ids(NavigableNodeModel, NavigableNodeModel.geom),
@@ -72,6 +86,8 @@ def ids_intersecting_boundary(
         buildings=ids(BuildingModel, BuildingModel.geom, feature_owners),
         pois=ids(PointOfInterestModel, PointOfInterestModel.geom, feature_owners),
         area_features=ids(AreaFeatureModel, AreaFeatureModel.geom, feature_owners),
+        generated_buildings=generated(GeneratedBuildingModel, GeneratedBuildingModel.geom, feature_owners),
+        generation_zones=generated(GenerationZoneModel, GenerationZoneModel.geom, (import_area_id,)),
     )
 
 
@@ -93,6 +109,8 @@ class ClippedGeometries:
     buildings: dict[uuid.UUID, dict[str, Any]]
     pois: dict[uuid.UUID, dict[str, Any]]
     area_features: dict[uuid.UUID, dict[str, Any]]
+    generated_buildings: dict[uuid.UUID, dict[str, Any]]
+    generation_zones: dict[uuid.UUID, dict[str, Any]]
 
 
 def clip_to_scope(
@@ -139,6 +157,16 @@ def clip_to_scope(
         buildings=clip(BuildingModel, BuildingModel.geom, _POLYGONS, owners=feature_owners),
         pois=clip(PointOfInterestModel, PointOfInterestModel.geom, _POINTS, owners=feature_owners),
         area_features=clip(AreaFeatureModel, AreaFeatureModel.geom, _POLYGONS, owners=feature_owners),
+        generated_buildings=clip(
+            GeneratedBuildingModel, GeneratedBuildingModel.geom, _POLYGONS,
+            (GenerationRunModel, GeneratedBuildingModel.run_id == GenerationRunModel.id),
+            owner=GenerationRunModel.import_area_id, owners=feature_owners,
+        ),
+        generation_zones=clip(
+            GenerationZoneModel, GenerationZoneModel.geom, _POLYGONS,
+            (GenerationRunModel, GenerationZoneModel.run_id == GenerationRunModel.id),
+            owner=GenerationRunModel.import_area_id,
+        ),
     )
 
 

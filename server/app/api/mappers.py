@@ -9,12 +9,15 @@ from __future__ import annotations
 from typing import Any
 
 from app.api.schemas import (
+    BlockFeedbackEntryOut,
+    BlockFeedbackOut,
     BoundingBoxIn,
     CoordinateIn,
     ElevationGridOut,
     ElevationOut,
     Feature,
     FeatureCollection,
+    GenerationRunOut,
     ImportAreaOut,
     ProjectionOut,
     RouteOut,
@@ -25,6 +28,14 @@ from app.domain.bounding_box import BoundingBox, Coordinate
 from app.domain.building import Building
 from app.domain.cross_section import SegmentCrossSection
 from app.domain.elevation import TERRAIN_ATTRIBUTION, StoredGrid
+from app.domain.generation import (
+    BlockFeedback,
+    GeneratedBuilding,
+    GenerationRun,
+    GenerationZone,
+    StaleReason,
+    StoredBlockFeedback,
+)
 from app.domain.geometry import LineString, MultiPolygon, Polygon
 from app.domain.import_area import ImportArea
 from app.domain.local_projection import LocalProjection
@@ -154,7 +165,9 @@ def area_feature_feature(feature: AreaFeature) -> Feature:
     )
 
 
-def block_feature(block: Block) -> Feature:
+def block_feature(block: Block, generation_properties: dict[str, Any] | None = None) -> Feature:
+    """`generation_properties` are map-data's extra generation properties (see
+    `block_generation_properties`); callers that don't pass them get the block as before."""
     return Feature(
         id=block.id,
         geometry=polygon_geometry(block.boundary),
@@ -165,8 +178,93 @@ def block_feature(block: Block) -> Feature:
             "is_median": block.is_median,
             "is_clipped": block.is_clipped,
             "import_area_id": block.import_area_id,
+            **(generation_properties or {}),
         },
     )
+
+
+def block_generation_properties(
+    *,
+    eligibility: str,
+    real_building_count: int,
+    generated_building_count: int,
+    is_reference: bool,
+    reference_block_id,
+    style: str | None,
+    feedback: BlockFeedback | None,
+) -> dict[str, Any]:
+    """The properties map-data adds to a block: whether generation may build on it, how many real
+    and generated buildings it holds, whether it was a reference and which block it learned from,
+    its style, and the feedback a person gave."""
+    return {
+        "eligibility": eligibility,
+        "real_building_count": real_building_count,
+        "generated_building_count": generated_building_count,
+        "is_reference": is_reference,
+        "reference_block_id": reference_block_id,
+        "style": style,
+        "feedback": (
+            {"building_count": feedback.building_count, "no_buildings": feedback.no_buildings, "updated_at": feedback.updated_at}
+            if feedback is not None
+            else None
+        ),
+    }
+
+
+def generation_run_out(run: GenerationRun, reasons: list[StaleReason]) -> GenerationRunOut:
+    return GenerationRunOut(
+        run_id=run.id,
+        seed=run.seed,
+        algorithm_version=run.algorithm_version,
+        created_at=run.created_at,
+        building_count=run.building_count,
+        block_count=run.block_count,
+        eligible_block_count=run.eligible_block_count,
+        stale=bool(reasons),
+        stale_reasons=[reason.value for reason in reasons],
+        feedback_shortfall_block_ids=run.feedback_shortfall_block_ids,
+        calibration_ratio=run.calibration_ratio,
+    )
+
+
+def generated_building_feature(building: GeneratedBuilding) -> Feature:
+    return Feature(
+        id=building.id,
+        geometry=polygon_geometry(building.geom),
+        properties={
+            "block_id": building.block_id,
+            "style": building.style.value,
+            "levels": building.levels,
+            "height_meters": building.height_meters,
+            "base_elevation_meters": building.base_elevation_meters,
+            "reference_block_id": building.reference_block_id,
+            "count_source": building.count_source.value,
+            "generated": True,
+            "import_area_id": building.import_area_id,
+        },
+    )
+
+
+def generation_zone_feature(zone: GenerationZone) -> Feature:
+    return Feature(
+        id=zone.id,
+        geometry=multipolygon_geometry(zone.geom),
+        properties={"block_id": zone.block_id, "reason": zone.reason.value},
+    )
+
+
+def block_feedback_out(feedback: BlockFeedback) -> BlockFeedbackOut:
+    return BlockFeedbackOut(
+        block_id=feedback.block_id,
+        import_area_id=feedback.import_area_id,
+        building_count=feedback.building_count,
+        no_buildings=feedback.no_buildings,
+        updated_at=feedback.updated_at,
+    )
+
+
+def block_feedback_entry_out(entry: StoredBlockFeedback) -> BlockFeedbackEntryOut:
+    return BlockFeedbackEntryOut(**block_feedback_out(entry.feedback).model_dump(), orphaned=entry.orphaned)
 
 
 def segment_feature(

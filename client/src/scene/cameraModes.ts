@@ -2,6 +2,7 @@ import * as THREE from "three";
 import type { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { PointerLockControls } from "three/examples/jsm/controls/PointerLockControls.js";
 import { buildFootprintIndex, nearestRoadStart, resolveMove, type FootprintIndex, type Point } from "./collision";
+import { walkStart, type Vec3 } from "./pinPoint";
 import type { Terrain } from "./terrain";
 
 export type CameraMode = "fly" | "walk";
@@ -29,6 +30,8 @@ export interface CameraModes {
   update(delta: number): void;
   /** Called when a world is loaded (or cleared with `undefined`); a walk in the old world ends. */
   setWorld(world: THREE.Object3D | undefined): void;
+  /** The Set point pin (or `null`): walk mode starts there, and a walk in progress moves there. */
+  setPin(pin: Vec3 | null): void;
   /** Keyboard shortcuts only act while the scene is the visible tab. */
   setActive(active: boolean): void;
   /** Removes the `window` and `document` listeners; call when the page is left. */
@@ -44,6 +47,8 @@ export function createCameraModes(
   canvas: HTMLElement,
   container: HTMLElement,
   toolbar: HTMLElement = container,
+  /** Called when the user switches from walk back to fly (not when a world change ends a walk), after the camera is restored. */
+  onEnterFly: () => void = () => {},
 ): CameraModes {
   const look = new PointerLockControls(camera, canvas);
   const button = Object.assign(document.createElement("button"), { className: "scene-mode", type: "button", textContent: "Walk", hidden: true });
@@ -56,25 +61,37 @@ export function createCameraModes(
   let index: FootprintIndex | undefined;
   let terrain: Terrain | undefined;
   let active = false;
+  let pin: Vec3 | null = null;
   const saved = { position: new THREE.Vector3(), target: new THREE.Vector3() };
   const held = new Set<string>();
+
+  /** Stands at the pin (or the nearest open ground), at eye height, facing `direction`'s horizontal part. */
+  const placeAt = (at: Vec3, direction: THREE.Vector3) => {
+    const start = walkStart({ x: at.x, z: at.z }, direction, index, (x, z) => eyeY(terrain, x, z));
+    camera.position.set(start.position.x, start.position.y, start.position.z);
+    camera.lookAt(start.lookAt.x, start.lookAt.y, start.lookAt.z);
+  };
 
   const enterWalk = () => {
     if (!world) return;
     saved.position.copy(camera.position);
     saved.target.copy(orbit.target);
-    const center = new THREE.Box3().setFromObject(world).getCenter(new THREE.Vector3());
-    const start = nearestRoadStart(world.userData.roadOutlines ?? [], { x: center.x, z: center.z });
+    const direction = camera.getWorldDirection(new THREE.Vector3());
     mode = "walk";
     orbit.enabled = false;
-    const eye = eyeY(terrain, start.x, start.z);
-    camera.position.set(start.x, eye, start.z);
-    camera.lookAt(start.x, eye, start.z - 1); // north is -z
+    if (pin) placeAt(pin, direction);
+    else {
+      const center = new THREE.Box3().setFromObject(world).getCenter(new THREE.Vector3());
+      const start = nearestRoadStart(world.userData.roadOutlines ?? [], { x: center.x, z: center.z });
+      const eye = eyeY(terrain, start.x, start.z);
+      camera.position.set(start.x, eye, start.z);
+      camera.lookAt(start.x, eye, start.z - 1); // north is -z
+    }
     button.textContent = "Fly";
     help.hidden = false;
   };
 
-  const enterFly = () => {
+  const enterFly = (notify = false) => {
     mode = "fly";
     held.clear();
     if (look.isLocked) look.unlock();
@@ -84,9 +101,10 @@ export function createCameraModes(
     orbit.update();
     button.textContent = "Walk";
     help.hidden = true;
+    if (notify) onEnterFly();
   };
 
-  const toggle = () => (mode === "fly" ? enterWalk() : enterFly());
+  const toggle = () => (mode === "fly" ? enterWalk() : enterFly(true));
   button.addEventListener("click", toggle);
   canvas.addEventListener("click", () => {
     if (mode === "walk" && !look.isLocked) look.lock();
@@ -134,7 +152,12 @@ export function createCameraModes(
       }
       camera.position.y = eyeY(terrain, camera.position.x, camera.position.z); // up and down the slope with the ground
     },
+    setPin(next) {
+      pin = next;
+      if (mode === "walk" && next) placeAt(next, camera.getWorldDirection(new THREE.Vector3()));
+    },
     setWorld(next) {
+      pin = null;
       if (mode === "walk") enterFly();
       world = next;
       terrain = next?.userData.terrain;

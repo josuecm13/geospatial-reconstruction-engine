@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
 import type { ImportArea } from "../api/types";
-import { renderLocationCard } from "./card";
+import { renderLocationCard, setCardFeatured } from "./card";
 import { toCard } from "./cardModel";
 import { consumeFlyTo } from "./flyTo";
 import type { PreviewLoader } from "./preview";
@@ -76,5 +76,55 @@ describe("renderLocationCard place name", () => {
     expect(card.querySelector(".location-open")!.textContent).toBe("Mitte");
     expect(card.querySelector(".location-context")!.textContent).toBe("Berlin, Germany");
     expect(card.querySelector(".location-meta .location-coords")!.textContent).toBe("52.5300° N, 13.4000° E");
+  });
+});
+
+describe("renderLocationCard featured place", () => {
+  const renderWith = (over: Partial<ImportArea>, featured: boolean | undefined, onFeature?: () => void) =>
+    renderLocationCard(toCard(area(over), new Date("2026-10-02T12:00:00Z")), { previews, featured, onFeature });
+  const button = (card: HTMLElement) => card.querySelector<HTMLButtonElement>("button.location-feature");
+  const badge = (card: HTMLElement) => card.querySelector<HTMLElement>(".location-featured");
+
+  it("shows no featuring controls without onFeature, or on a card that did not complete", () => {
+    expect(button(renderWith({}, false))).toBeNull();
+    expect(button(renderWith({ status: "failed", imported_at: null }, false, () => {}))).toBeNull();
+  });
+
+  it("offers Show on landing on a completed card, with no badge", () => {
+    const card = renderWith({}, false, () => {});
+
+    expect(button(card)!.textContent).toBe("Show on landing");
+    expect(badge(card)!.hidden).toBe(true);
+  });
+
+  it("badges the featured card and offers Remove from landing", () => {
+    const card = renderWith({}, true, () => {});
+
+    expect(badge(card)!.hidden).toBe(false);
+    expect(badge(card)!.textContent).toBe("Featured");
+    expect(button(card)!.textContent).toBe("Remove from landing");
+  });
+
+  it("asks to feature on a click, or to unfeature when it already is, without opening the card", () => {
+    const onFeature = vi.fn();
+    const card = renderWith({}, false, onFeature);
+    const reached = vi.fn();
+    card.addEventListener("click", reached);
+
+    button(card)!.click();
+    setCardFeatured(card, true);
+    button(card)!.click();
+
+    expect(onFeature.mock.calls.map(([, featured]) => featured)).toEqual([true, false]);
+    expect(reached).not.toHaveBeenCalled();
+  });
+
+  it("flips in place when told which card is featured", () => {
+    const card = renderWith({}, false, () => {});
+
+    setCardFeatured(card, true);
+    expect([badge(card)!.hidden, button(card)!.textContent]).toEqual([false, "Remove from landing"]);
+    setCardFeatured(card, false);
+    expect([badge(card)!.hidden, button(card)!.textContent]).toEqual([true, "Show on landing"]);
   });
 });

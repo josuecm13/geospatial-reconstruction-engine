@@ -28,13 +28,16 @@ const inner: MapData = {
       type: "Feature",
       id: "b1",
       geometry: { type: "Polygon", coordinates: square(-84, 10) },
-      properties: { area_square_meters: 100, buildable_area: { type: "Polygon", coordinates: square(-84, 10) }, buildable_area_square_meters: 90, is_median: false, is_clipped: false, import_area_id: "inner-1" },
+      properties: { area_square_meters: 100, buildable_area: { type: "Polygon", coordinates: square(-84, 10) }, buildable_area_square_meters: 90, is_median: false, is_clipped: false, import_area_id: "inner-1", eligibility: "eligible", real_building_count: 0, generated_building_count: 0, is_reference: false, reference_block_id: null, style: null, feedback: null },
     },
   ]),
   buildings: fc([
     { type: "Feature", id: "bu1", geometry: { type: "Polygon", coordinates: square(-84, 10.0002) }, properties: { category: "house", block_id: null, height_meters: null, levels: null, import_area_id: "inner-1", base_elevation_meters: null } },
   ]),
   pois: fc([]),
+  generation: null,
+  generated_buildings: fc([]),
+  generation_zones: fc([]),
   area_features: fc([]),
   elevation: null,
 };
@@ -47,7 +50,7 @@ describe("an inner area in a staged build", () => {
     handle.addBuilt(inner);
     expect(world.getObjectByName("roads")!.children).toHaveLength(0);
     expect(world.getObjectByName("buildings")!.children.map((c) => c.name)).toEqual(["building:bu1"]);
-    expect(world.getObjectByName("blocks")!.children.map((c) => c.name)).toEqual(["block:b1"]);
+    expect(world.getObjectByName("blocks")!.children.map((c) => c.name)).toEqual(["block_outline:b1", "block:b1"]);
   });
 });
 

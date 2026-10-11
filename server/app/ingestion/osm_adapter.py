@@ -559,4 +559,15 @@ def _area_kind(tags: dict[str, Any]) -> AreaFeatureKind | None:
         return AreaFeatureKind.WATER
     if tags.get("landuse") in {"grass", "recreation_ground"}:
         return AreaFeatureKind.GREEN_SPACE
+    landuse = tags.get("landuse")
+    if landuse == "forest" or tags.get("natural") == "wood":
+        return AreaFeatureKind.FOREST
+    if landuse in {"farmland", "meadow", "orchard", "vineyard", "farmyard"}:
+        return AreaFeatureKind.FARMLAND
+    if landuse == "cemetery" or tags.get("amenity") == "grave_yard":
+        return AreaFeatureKind.CEMETERY
+    if landuse == "railway":
+        return AreaFeatureKind.RAILWAY
+    if landuse == "industrial":
+        return AreaFeatureKind.INDUSTRIAL
     return None

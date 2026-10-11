@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
-import type { Elevation, Feature, MapData, Position } from "../api/types";
-import { buildWorld, groundPlane, LAYER_ORDER, LAYER_Y, setRoadMode } from "./buildWorld";
+import type { Elevation, Feature, GeneratedBuildingProperties, MapData, Position } from "../api/types";
+import { buildWorld, generatedMeshes, groundPlane, LAYER_ORDER, LAYER_Y, OUTLINE_LIFT, setRoadMode } from "./buildWorld";
 import { MATERIALS } from "./palette";
 
 const D = 0.0001; // about 11 m
@@ -27,7 +27,7 @@ const data: MapData = {
       type: "Feature",
       id: "b1",
       geometry: { type: "Polygon", coordinates: square(-84, 10) },
-      properties: { area_square_meters: 100, buildable_area: { type: "Polygon", coordinates: square(-84, 10) }, buildable_area_square_meters: 90, is_median: false, is_clipped: false, import_area_id: "area-1" },
+      properties: { area_square_meters: 100, buildable_area: { type: "Polygon", coordinates: square(-84, 10) }, buildable_area_square_meters: 90, is_median: false, is_clipped: false, import_area_id: "area-1", eligibility: "eligible", real_building_count: 0, generated_building_count: 0, is_reference: false, reference_block_id: null, style: null, feedback: null },
     },
   ]),
   buildings: fc([
@@ -35,6 +35,9 @@ const data: MapData = {
     { type: "Feature", id: "bu2", geometry: { type: "Polygon", coordinates: square(-84, 10.0004) }, properties: { category: "house", block_id: null, height_meters: 12, levels: null, import_area_id: "area-1", base_elevation_meters: null } },
   ]),
   pois: fc([]),
+  generation: null,
+  generated_buildings: fc([]),
+  generation_zones: fc([]),
   area_features: fc([{ type: "Feature", id: "a1", geometry: { type: "Polygon", coordinates: square(-84, 9.9998) }, properties: { kind: "water", import_area_id: "area-1" } },
     { type: "Feature", id: "a2", geometry: { type: "Polygon", coordinates: square(-84, 9.9996) }, properties: { kind: "park", import_area_id: "area-1" } },
   ]),
@@ -51,10 +54,27 @@ describe("buildWorld", () => {
     expect(world.userData).toMatchObject({ scope: data.scope, projection: data.projection, attribution: data.attribution });
   });
 
+  it("draws each land-use kind in its own material, and an unknown kind as green", () => {
+    const kinds = ["water", "forest", "farmland", "cemetery", "railway", "industrial", "park", "quarry"];
+    const landuse = buildWorld({
+      ...data,
+      area_features: fc(kinds.map((kind, i) => ({ type: "Feature" as const, id: kind, geometry: { type: "Polygon" as const, coordinates: square(-84, 9.999 - i * 0.0003) }, properties: { kind, import_area_id: "area-1" } }))),
+    });
+    const material = (kind: string) => (landuse.getObjectByName(`area_feature:${kind}`) as THREE.Mesh).material;
+    expect(material("forest")).toBe(MATERIALS.forest);
+    expect(material("farmland")).toBe(MATERIALS.farmland);
+    expect(material("cemetery")).toBe(MATERIALS.cemetery);
+    expect(material("railway")).toBe(MATERIALS.railway);
+    expect(material("industrial")).toBe(MATERIALS.industrial);
+    expect(material("water")).toBe(MATERIALS.water);
+    expect(material("park")).toBe(MATERIALS.green);
+    expect(material("quarry")).toBe(MATERIALS.green);
+  });
+
   it("names entity meshes <layer>:<id> and records their properties", () => {
     expect(names("buildings")).toEqual(["building:bu1", "building:bu2"]);
     expect(names("area_features")).toEqual(["area_feature:a1", "area_feature:a2"]);
-    expect(names("blocks")).toEqual(["block:b1"]);
+    expect(names("blocks")).toEqual(["block_outline:b1", "block:b1"]);
     expect(world.getObjectByName("building:bu2")!.userData).toMatchObject({ layer: "building", id: "bu2", properties: { height_meters: 12 } });
   });
 
@@ -297,5 +317,193 @@ describe("buildWorld on terrain with features far larger than the grid", () => {
   it("draws nothing for a feature wholly outside the grid", () => {
     const outside = buildWorld({ ...terrainData, area_features: fc([{ type: "Feature", id: "far", geometry: { type: "Polygon", coordinates: square(-83, 11) }, properties: { kind: "water", import_area_id: "area-1" } }]) });
     expect(outside.getObjectByName("area_feature:far")).toBeUndefined();
+  });
+});
+
+describe("buildWorld generated buildings", () => {
+  const generated = (id: string, lon: number, lat: number, base: number | null, height = 6.4) =>
+    ({
+      type: "Feature",
+      id,
+      geometry: { type: "Polygon", coordinates: square(lon, lat) },
+      properties: { block_id: "b1", style: "regular", levels: 2, height_meters: height, base_elevation_meters: base, reference_block_id: null, count_source: "default", generated: true },
+    }) as Feature<GeneratedBuildingProperties>;
+
+  it("fills the generated group, extruded to height_meters in the generated material, tagged as generated", () => {
+    const world = buildWorld({ ...data, generated_buildings: fc([generated("g1", -84, 10.0004, null), generated("g2", -84, 10.0006, null, 9.6)]) });
+    const group = world.getObjectByName("generated")!;
+
+    expect(group.children.map((child) => child.name)).toEqual(["generated:g1", "generated:g2"]);
+    const mesh = group.children[1] as THREE.Mesh;
+    expect(mesh.material).toBe(MATERIALS.buildingGenerated);
+    expect(mesh.userData).toMatchObject({ layer: "generated", id: "g2", generated: true, height: 9.6 });
+    mesh.geometry.computeBoundingBox();
+    expect(mesh.geometry.boundingBox!.max.y).toBeCloseTo(9.6, 3);
+    expect(world.getObjectByName("buildings")!.children.map((child) => child.name)).toEqual(["building:bu1", "building:bu2"]);
+  });
+
+  it("generatedMeshes builds the same meshes without a world: named, tagged, extruded and edged from the features", () => {
+    const terrain = buildWorld(data).userData.terrain;
+    const meshes = generatedMeshes([generated("g1", -84, 10.0004, null, 8), generated("g2", -84, 10.0006, null, 12)], terrain, data.projection);
+
+    expect(meshes.map((mesh) => mesh.name)).toEqual(["generated:g1", "generated:g2"]);
+    expect(meshes.every((mesh) => mesh.userData.generated === true && mesh.material === MATERIALS.buildingGenerated)).toBe(true);
+    expect(meshes.map((mesh) => mesh.userData.height)).toEqual([8, 12]);
+    expect(meshes.map((mesh) => mesh.getObjectByName("edges") !== undefined)).toEqual([true, true]);
+    meshes[1].geometry.computeBoundingBox();
+    expect(meshes[1].geometry.boundingBox!.max.y).toBeCloseTo(12, 3);
+    expect(meshes.map((mesh) => mesh.position.y)).toEqual([0, 0]); // no terrain: on the ground
+  });
+
+  it("generatedMeshes stands a building on its stored base elevation minus the baseline, and skips a feature with no footprint", () => {
+    const elevated = buildWorld({ ...data, elevation });
+    const terrain = elevated.userData.terrain;
+    const [mesh, ...rest] = generatedMeshes(
+      [generated("g1", -84, 10.0004, 25), { ...generated("g2", -84, 10.0006, null), geometry: null } as never],
+      terrain,
+      data.projection,
+    );
+    expect(rest).toEqual([]);
+    expect(mesh.position.y).toBeCloseTo(25 - terrain.baseline, 6);
+  });
+
+  it("gives each generated building pale edge lines, like the others", () => {
+    const world = buildWorld({ ...data, generated_buildings: fc([generated("g1", -84, 10.0004, null)]) });
+    const edges = world.getObjectByName("generated:g1")!.getObjectByName("edges") as THREE.LineSegments;
+
+    expect(edges.material).toBe(MATERIALS.edge);
+  });
+
+  it("leaves the group empty without a run", () => {
+    expect(buildWorld(data).getObjectByName("generated")!.children).toEqual([]);
+  });
+
+  it("stands on its stored base height minus the baseline, or the lowest ground under it, on terrain", () => {
+    const world = buildWorld({ ...terrainData, generated_buildings: fc([generated("g1", -84, 10.0004, 57), generated("g2", -83.9995, 10.0004, null)]) });
+
+    expect(world.getObjectByName("generated:g1")!.position.y).toBeCloseTo(7); // 57 m, 7 above the 50 m baseline: as a real building
+    expect(world.getObjectByName("generated:g2")!.position.y).toBeCloseTo(10, 3);
+    expect(world.getObjectByName("generated:g1")!.userData.height).toBe(6.4); // the extrusion is unchanged
+  });
+});
+
+describe("buildWorld block outlines and zones", () => {
+  const block = (id: string, lat: number, extra: Partial<MapData["blocks"]["features"][number]["properties"]> = {}, buildable = true) =>
+    ({
+      type: "Feature",
+      id,
+      geometry: { type: "Polygon", coordinates: square(-84, lat) },
+      properties: {
+        area_square_meters: 100,
+        buildable_area: buildable ? { type: "Polygon", coordinates: square(-84, lat) } : null,
+        buildable_area_square_meters: buildable ? 90 : 0,
+        is_median: false,
+        is_clipped: false,
+        import_area_id: "area-1",
+        eligibility: "eligible",
+        real_building_count: 0,
+        generated_building_count: 0,
+        is_reference: false,
+        reference_block_id: null,
+        style: null,
+        feedback: null,
+        ...extra,
+      },
+    }) as MapData["blocks"]["features"][number];
+  const outline = (world: THREE.Object3D, id: string) => world.getObjectByName(`block_outline:${id}`) as THREE.Line;
+  const xz = (line: THREE.Line) => {
+    const position = line.geometry.getAttribute("position");
+    return Array.from({ length: position.count }, (_, i) => ({ x: position.getX(i), y: position.getY(i), z: position.getZ(i) }));
+  };
+
+  it("draws each block's outline 1.5 m inside its boundary, dashed, inside the hidden blocks group", () => {
+    const world = buildWorld({ ...data, blocks: fc([block("b1", 10)]) });
+    const line = outline(world, "b1");
+    const points = xz(line);
+    const [width, depth] = [Math.max(...points.map((p) => p.x)) - Math.min(...points.map((p) => p.x)), Math.max(...points.map((p) => p.z)) - Math.min(...points.map((p) => p.z))];
+
+    expect(line.isLine).toBe(true);
+    expect(line.parent!.name).toBe("blocks");
+    expect(line.material).toBe(MATERIALS.blockOutline);
+    expect(line.userData).toMatchObject({ layer: "block_outline", id: "b1", kind: "crisp" });
+    expect(line.geometry.getAttribute("lineDistance")).toBeDefined(); // computeLineDistances ran, so the dashes show
+    expect(width).toBeCloseTo(D * 109_000 - 3, 3);
+    expect(depth).toBeCloseTo(D * 110_000 - 3, 3);
+    expect(points[0]).toEqual(points[points.length - 1]); // closed
+  });
+
+  it("draws a faint dotted outline for a block that isn't eligible, and a reference block apart", () => {
+    const world = buildWorld({
+      ...data,
+      blocks: fc([block("a", 10), block("c", 10.0002, { eligibility: "clipped" }), block("m", 10.0004, { eligibility: "median" }), block("n", 10.0006, { eligibility: "no_buildable_area" }, false), block("r", 10.0008, { is_reference: true })]),
+    });
+
+    expect(outline(world, "a").material).toBe(MATERIALS.blockOutline);
+    for (const id of ["c", "m", "n"]) expect(outline(world, id).material, id).toBe(MATERIALS.blockOutlineFaint);
+    expect(outline(world, "r").material).toBe(MATERIALS.blockOutlineReference);
+  });
+
+  it("fills only an eligible block; the others keep their outline and stay in the selection index", () => {
+    const world = buildWorld({
+      ...data,
+      blocks: fc([block("e", 10), block("c", 10.0002, { eligibility: "clipped" }), block("m", 10.0004, { eligibility: "median" }), block("o", 10.0006, { eligibility: undefined })]),
+    });
+
+    expect(world.getObjectByName("block:e")).toBeDefined();
+    expect(world.getObjectByName("block:o")).toBeDefined(); // no eligibility: treated as eligible, as the outline is
+    for (const id of ["c", "m"]) {
+      expect(world.getObjectByName(`block:${id}`), id).toBeUndefined();
+      expect(outline(world, id), id).toBeDefined();
+    }
+    expect(world.userData.blockIndex.map((b: { id: string }) => b.id)).toEqual(["e", "c", "m", "o"]);
+  });
+
+  it("outlines a block with no buildable area too, and keeps it findable for selection", () => {
+    const world = buildWorld({ ...data, blocks: fc([block("n", 10, { eligibility: "no_buildable_area" }, false)]) });
+
+    expect(outline(world, "n")).toBeDefined();
+    expect(world.getObjectByName("block:n")).toBeUndefined(); // no fill without a buildable area
+    expect(world.userData.blockIndex).toHaveLength(1);
+    expect(world.userData.blockIndex[0]).toMatchObject({ id: "n", properties: { eligibility: "no_buildable_area" } });
+  });
+
+  it("drapes an outline on the terrain, a little above the ground at every vertex", () => {
+    const world = buildWorld({ ...terrainData, blocks: fc([block("b1", 10.0008)]) });
+    const terrain = world.userData.terrain;
+    const points = xz(outline(world, "b1"));
+
+    expect(points.length).toBeGreaterThanOrEqual(5);
+    for (const p of points) expect(p.y).toBeCloseTo(terrain.heightAtLocal(p.x, p.z) + OUTLINE_LIFT, 4);
+    expect(Math.max(...points.map((p) => p.y)) - Math.min(...points.map((p) => p.y))).toBeGreaterThan(1); // it climbs the slope
+  });
+
+  it("adds vertices along a long edge on terrain, at most one grid cell apart", () => {
+    const long = { ...block("l", 10.0008), geometry: { type: "Polygon" as const, coordinates: [[[-84, 10.0008], [-83.9985, 10.0008], [-83.9985, 10.001], [-84, 10.001], [-84, 10.0008]]] as Position[][] } };
+    const world = buildWorld({ ...terrainData, blocks: fc([long]) });
+    const spacing = world.userData.terrain.spacing;
+    const points = xz(outline(world, "l"));
+
+    for (let i = 1; i < points.length; i++) expect(Math.hypot(points[i].x - points[i - 1].x, points[i].z - points[i - 1].z)).toBeLessThanOrEqual(spacing + 1e-6);
+    expect(points.length).toBeGreaterThan(5);
+  });
+
+  it("draws the generation zones in the blocks group, each reason in its own material", () => {
+    const zone = (id: string, reason: "water" | "steep" | "landuse" | "setback", lat: number) =>
+      ({ type: "Feature", id, geometry: { type: "Polygon", coordinates: square(-84, lat) }, properties: { block_id: "b1", reason } }) as MapData["generation_zones"]["features"][number];
+    const world = buildWorld({ ...data, generation_zones: fc([zone("z1", "water", 10), zone("z2", "steep", 10.0002), zone("z3", "landuse", 10.0004), zone("z4", "setback", 10.0006)]) });
+    const mesh = (id: string) => world.getObjectByName(`zone:${id}`) as THREE.Mesh;
+
+    expect(mesh("z1").parent!.name).toBe("blocks");
+    expect(mesh("z1").material).toBe(MATERIALS.zoneWater);
+    expect(mesh("z2").material).toBe(MATERIALS.zoneSteep);
+    expect(mesh("z3").material).toBe(MATERIALS.zoneLanduse);
+    expect(mesh("z4").material).toBe(MATERIALS.zoneSetback);
+    expect(mesh("z1").renderOrder).toBe(LAYER_ORDER.zones);
+    expect(mesh("z1").position.y).toBe(LAYER_Y.zones);
+    expect(world.getObjectByName("blocks")!.visible).toBe(false); // shown with the outlines, by "Show blocks"
+  });
+
+  it("draws no zones without a run", () => {
+    expect(buildWorld(data).getObjectByName("blocks")!.children.some((child) => child.name.startsWith("zone:"))).toBe(false);
   });
 });

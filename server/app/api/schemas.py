@@ -18,7 +18,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class CoordinateIn(BaseModel):
@@ -160,6 +160,67 @@ class ElevationOut(BaseModel):
     grid: ElevationGridOut
 
 
+class GenerationRunOut(BaseModel):
+    """The area's current generation run. `stale` is computed when it is read: a re-import changed
+    the blocks (`roads_changed`) or the ground changed (`terrain_changed`)."""
+
+    run_id: uuid.UUID
+    seed: int
+    algorithm_version: str
+    created_at: datetime
+    building_count: int
+    # Blocks the run generated at least one building on.
+    block_count: int
+    eligible_block_count: int
+    stale: bool
+    stale_reasons: list[str]
+    # Blocks whose feedback asked for more buildings than fit.
+    feedback_shortfall_block_ids: list[uuid.UUID]
+    calibration_ratio: float | None
+
+
+class GenerationRequest(BaseModel):
+    """Optional body of `POST /import-areas/{id}/generation`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    seed: int | None = None
+
+
+class BlockFeedbackIn(BaseModel):
+    """Exactly one of `building_count` (0 or more) or `no_buildings: true`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    building_count: int | None = Field(default=None, ge=0)
+    no_buildings: bool | None = None
+
+    @model_validator(mode="after")
+    def _exactly_one(self) -> "BlockFeedbackIn":
+        has_count = self.building_count is not None
+        says_none = self.no_buildings is True
+        if has_count == says_none:
+            raise ValueError("set exactly one of building_count or no_buildings: true")
+        return self
+
+
+class BlockFeedbackOut(BaseModel):
+    block_id: uuid.UUID
+    import_area_id: uuid.UUID
+    building_count: int | None
+    no_buildings: bool
+    updated_at: datetime | None
+
+
+class BlockFeedbackEntryOut(BlockFeedbackOut):
+    # True when the block no longer exists (a re-import swept it); the feedback is kept so it can be seen.
+    orphaned: bool
+
+
+class BlockFeedbackListOut(BaseModel):
+    feedback: list[BlockFeedbackEntryOut]
+
+
 class MapDataOut(BaseModel):
     attribution: str = OSM_ATTRIBUTION
     scope: ScopeOut
@@ -171,6 +232,10 @@ class MapDataOut(BaseModel):
     buildings: FeatureCollection
     pois: FeatureCollection
     area_features: FeatureCollection
+    # The area's current generation run, and what it produced (empty collections without one).
+    generation: GenerationRunOut | None = None
+    generated_buildings: FeatureCollection
+    generation_zones: FeatureCollection
     # Null until the area has been analysed (or when the terrain source was unavailable).
     elevation: ElevationOut | None = None
 

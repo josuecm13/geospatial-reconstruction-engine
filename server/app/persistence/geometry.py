@@ -1,6 +1,7 @@
 from geoalchemy2.elements import WKBElement
 from geoalchemy2.shape import from_shape, to_shape
 from shapely.geometry import LineString as ShapelyLineString
+from shapely.geometry import MultiPolygon as ShapelyMultiPolygon
 from shapely.geometry import Point as ShapelyPoint
 from shapely.geometry import Polygon as ShapelyPolygon
 
@@ -58,3 +59,9 @@ def bbox_to_geom(bbox: BoundingBox) -> WKBElement:
         ]
     )
     return from_shape(ring, srid=SRID)
+
+
+def multipolygon_to_geom(polygons: MultiPolygon) -> WKBElement:
+    return from_shape(
+        ShapelyMultiPolygon([ShapelyPolygon([(p.longitude, p.latitude) for p in ring]) for ring in polygons]), srid=SRID
+    )

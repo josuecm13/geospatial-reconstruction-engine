@@ -29,13 +29,16 @@ const data: MapData = {
       type: "Feature",
       id: "b1",
       geometry: { type: "Polygon", coordinates: square(-84, 10) },
-      properties: { area_square_meters: 100, buildable_area: { type: "Polygon", coordinates: square(-84, 10) }, buildable_area_square_meters: 90, is_median: false, is_clipped: false, import_area_id: "area-1" },
+      properties: { area_square_meters: 100, buildable_area: { type: "Polygon", coordinates: square(-84, 10) }, buildable_area_square_meters: 90, is_median: false, is_clipped: false, import_area_id: "area-1", eligibility: "eligible", real_building_count: 0, generated_building_count: 0, is_reference: false, reference_block_id: null, style: null, feedback: null },
     },
   ]),
   buildings: fc([
     { type: "Feature", id: "bu1", geometry: { type: "Polygon", coordinates: square(-84, 10.0002) }, properties: { category: "house", block_id: null, height_meters: 12, levels: null, import_area_id: "area-1", base_elevation_meters: null } },
   ]),
   pois: fc([]),
+  generation: null,
+  generated_buildings: fc([]),
+  generation_zones: fc([]),
   area_features: fc([]),
   elevation: null,
 };
@@ -101,6 +104,56 @@ describe("exportWorld", () => {
     const names = json.nodes.map((n: { name?: string }) => n.name);
     expect(names).toEqual(expect.arrayContaining(["world", "roads", "buildings", "building:bu1", "road:r1", "ground:plane"]));
     expect(names).not.toContain("block:b1");
+  });
+
+  it("leaves the dashed block outlines out of the file even while the blocks are shown, and keeps them visible afterwards", async () => {
+    const world = buildWorld(data);
+    world.getObjectByName("blocks")!.visible = true;
+    const outline = world.getObjectByName("block_outline:b1")!;
+    expect(outline).toBeDefined();
+
+    const json = jsonChunk(await exportWorld(world));
+
+    const names = json.nodes.map((n: { name?: string }) => n.name);
+    expect(names).toContain("block:b1"); // the fill is a mesh, shown with the blocks
+    expect(names).not.toContain("block_outline:b1");
+    for (const mesh of json.meshes) for (const primitive of mesh.primitives) expect([1, 2, 3]).not.toContain(primitive.mode); // no line primitives
+    expect(outline.visible).toBe(true);
+  });
+
+  describe("generated buildings", () => {
+    const withGenerated: MapData = {
+      ...data,
+      generated_buildings: fc([
+        {
+          type: "Feature",
+          id: "g1",
+          geometry: { type: "Polygon", coordinates: square(-84, 10.0004) },
+          properties: { block_id: "b1", style: "regular", levels: 2, height_meters: 6.4, base_elevation_meters: null, reference_block_id: null, count_source: "default", generated: true },
+        },
+      ]),
+    };
+    const names = async (world: THREE.Group) => jsonChunk(await exportWorld(world)).nodes.map((n: { name?: string }) => n.name);
+
+    it("includes them while the generated layer is shown, as nodes of their own layer", async () => {
+      const json = jsonChunk(await exportWorld(buildWorld(withGenerated)));
+
+      expect(json.nodes.map((n: { name?: string }) => n.name)).toContain("generated:g1");
+      expect(json.nodes.find((n: { name?: string }) => n.name === "generated:g1").extras).toEqual({ layer: "generated", id: "g1" });
+    });
+
+    it("leaves them out while the layer is hidden, and puts nothing back out of place", async () => {
+      const world = buildWorld(withGenerated);
+      world.getObjectByName("generated")!.visible = false;
+
+      const hidden = await names(world);
+
+      expect(hidden).not.toContain("generated:g1");
+      expect(hidden).toContain("building:bu1"); // the real buildings are untouched
+      expect(world.getObjectByName("generated")!.visible).toBe(false);
+      world.getObjectByName("generated")!.visible = true;
+      expect(await names(world)).toContain("generated:g1");
+    });
   });
 
   it("puts the scope, projection origin, and attribution on the root node and the asset", async () => {

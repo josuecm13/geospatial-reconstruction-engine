@@ -81,6 +81,19 @@ export interface BuildingProperties {
   base_elevation_meters: number | null;
 }
 
+/** Why a block can or can't be generated on (contract section 1); the first matching reason wins. */
+export type Eligibility = "eligible" | "clipped" | "median" | "no_buildable_area";
+
+/** The settlement style of a block's generated buildings. */
+export type BlockStyle = "regular" | "informal" | "sparse";
+
+/** A block's feedback: a count of buildings the owner says belong there, or "none". */
+export interface BlockFeedback {
+  building_count: number | null;
+  no_buildings: boolean;
+  updated_at: string;
+}
+
 export interface BlockProperties {
   area_square_meters: number;
   buildable_area: Geometry | null;
@@ -88,6 +101,70 @@ export interface BlockProperties {
   is_median: boolean;
   is_clipped: boolean;
   import_area_id: string;
+  eligibility: Eligibility;
+  real_building_count: number;
+  /** 0 without a run. */
+  generated_building_count: number;
+  /** True when the block was an exemplar in the current run. */
+  is_reference: boolean;
+  /** The block it learned from; null for defaults (and without a run). */
+  reference_block_id: string | null;
+  /** Null without a run. */
+  style: BlockStyle | null;
+  feedback: BlockFeedback | null;
+}
+
+export type CountSource = "reference" | "default" | "feedback";
+
+export interface GeneratedBuildingProperties {
+  block_id: string;
+  style: BlockStyle;
+  levels: number | null;
+  height_meters: number;
+  base_elevation_meters: number | null;
+  reference_block_id: string | null;
+  count_source: CountSource;
+  generated: true;
+}
+
+export type ZoneReason = "water" | "steep" | "landuse" | "setback";
+
+export interface GenerationZoneProperties {
+  block_id: string;
+  reason: ZoneReason;
+}
+
+export type StaleReason = "roads_changed" | "terrain_changed";
+
+/** The area's current generation run (`GET /import-areas/{id}/generation`). */
+export interface GenerationRun {
+  run_id: string;
+  seed: number;
+  algorithm_version: string;
+  created_at: string;
+  building_count: number;
+  /** Blocks that got at least one building: can be lower than `eligible_block_count`. */
+  block_count: number;
+  eligible_block_count: number;
+  stale: boolean;
+  stale_reasons: StaleReason[];
+  feedback_shortfall_block_ids: string[];
+  calibration_ratio: number | null;
+}
+
+/** The body of `PUT /blocks/{id}/feedback`: exactly one of the two. */
+export type BlockFeedbackBody = { building_count: number } | { no_buildings: true };
+
+/** What `PUT /blocks/{id}/feedback` returns: the stored feedback and whose it is. */
+export interface StoredFeedback extends BlockFeedback {
+  block_id: string;
+  import_area_id: string;
+}
+
+/** An entry of `GET /import-areas/{id}/feedback`. */
+export interface AreaFeedbackEntry extends StoredFeedback {
+  /** True when its block no longer exists. */
+  orphaned: boolean;
 }
 
 export interface PoiProperties {
@@ -96,8 +173,11 @@ export interface PoiProperties {
   import_area_id: string;
 }
 
+/** The kinds the engine draws; the API may add more, which draw as green. */
+export type AreaFeatureKind = "water" | "park" | "forest" | "farmland" | "cemetery" | "railway" | "industrial";
+
 export interface AreaFeatureProperties {
-  kind: string;
+  kind: AreaFeatureKind | string;
   import_area_id: string;
 }
 
@@ -140,6 +220,12 @@ export interface MapData {
   buildings: FeatureCollection<BuildingProperties>;
   pois: FeatureCollection<PoiProperties>;
   area_features: FeatureCollection<AreaFeatureProperties>;
+  /** The area's current generation run; null when it has none. */
+  generation: GenerationRun | null;
+  /** Composed from the owner areas, like `buildings`. */
+  generated_buildings: FeatureCollection<GeneratedBuildingProperties>;
+  /** From the area's own run, shaded by reason. */
+  generation_zones: FeatureCollection<GenerationZoneProperties>;
   /** Null when the area has no terrain yet (not analysed, or the source was unavailable). */
   elevation: Elevation | null;
 }
@@ -182,6 +268,9 @@ export type ErrorCode =
   | "import_conflict"
   | "import_in_progress"
   | "elevation_unavailable"
+  | "generation_not_found"
+  | "block_not_found"
+  | "feedback_not_found"
   | "import_job_not_found"
   | "building_not_found"
   | "invalid_boundary"
@@ -199,10 +288,23 @@ export type ErrorCode =
   | "configuration_error"
   | "internal_error";
 
-/** The 202 answer to `POST /import-areas` with `background: true`, and to `POST /import-areas/{id}/elevation`. */
+/** The 202 answer to `POST /import-areas` with `background: true`, and to `POST /import-areas/{id}/elevation` and `/generation`. */
 export interface ImportStarted {
   import_area_id: string;
   events_url: string;
+}
+
+/**
+ * One batch of a generation job's `generated` events: the buildings of one ring of blocks (nearest the area's
+ * centre first; a ring can come as several events with the same `ring`, at most 500 buildings each), with the
+ * ids the run will store. Provisional until `completed`.
+ */
+export interface GeneratedEvent {
+  projection: Projection;
+  ring: number;
+  blocks_done: number;
+  block_count: number;
+  buildings: FeatureCollection<GeneratedBuildingProperties>;
 }
 
 /** The stages of a background import's event stream, in the order the server sends them. */
@@ -219,8 +321,7 @@ export interface StageData {
   buildings: { projection: Projection; ring: number; buildings: FeatureCollection<BuildingProperties> };
   /** `error` is "elevation_unavailable" when the source failed; the import still completes, flat. */
   elevation: { projection: Projection; elevation: Elevation | null; error: string | null };
-  /** Reserved for Milestone 11; not sent yet. */
-  generated: Record<string, unknown>;
+  generated: GeneratedEvent;
   completed: ImportArea;
   failed: { code: string; message: string; details: Record<string, unknown> | null };
 }

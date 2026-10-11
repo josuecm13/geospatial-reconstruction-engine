@@ -90,6 +90,38 @@ describe("deleteImportArea", () => {
   });
 });
 
+describe("featured area setting", () => {
+  it("reads the featured id, null when none", async () => {
+    const { client, calls } = recording(json(200, { import_area_id: "a1" }));
+
+    await expect(client.featuredArea()).resolves.toBe("a1");
+    expect(calls[0].url).toBe("/api/settings/featured-area");
+    expect(calls[0].init?.method).toBe("GET");
+    await expect(recording(json(200, { import_area_id: null })).client.featuredArea()).resolves.toBeNull();
+  });
+
+  it("puts the id, and null to clear", async () => {
+    const { client, calls } = recording(json(200, { import_area_id: "a1" }));
+
+    await expect(client.setFeaturedArea("a1")).resolves.toBe("a1");
+    expect(calls[0].init?.method).toBe("PUT");
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ import_area_id: "a1" });
+
+    const cleared = recording(json(200, { import_area_id: null }));
+    await expect(cleared.client.setFeaturedArea(null)).resolves.toBeNull();
+    expect(JSON.parse(String(cleared.calls[0].init?.body))).toEqual({ import_area_id: null });
+  });
+
+  it("surfaces a refusal by its code", async () => {
+    const { client } = recording(json(409, { error: { code: "import_area_not_ready", message: "not ready", details: null } }));
+
+    const error = await client.setFeaturedArea("a1").catch((e) => e);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect([error.status, error.code]).toEqual([409, "import_area_not_ready"]);
+  });
+});
+
 describe("listImportAreas", () => {
   it("asks for completed areas and unwraps the list", async () => {
     const calls: string[] = [];
@@ -153,5 +185,81 @@ describe("analyseElevation", () => {
     const { client } = recording(json(409, { error: { code: "import_in_progress", message: "running", details: null } }));
 
     await expect(client.analyseElevation("a1")).rejects.toMatchObject({ status: 409, code: "import_in_progress" });
+  });
+});
+
+describe("generation", () => {
+  it("starts a run with a seed in the body, and without a body when none is given", async () => {
+    const { client, calls } = recording(json(202, { import_area_id: "a 1", events_url: "/import-areas/a%201/events" }));
+
+    await expect(client.startGeneration("a 1", 42)).resolves.toEqual({ import_area_id: "a 1", events_url: "/import-areas/a%201/events" });
+    expect(calls[0].url).toBe("/api/import-areas/a%201/generation");
+    expect(calls[0].init?.method).toBe("POST");
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ seed: 42 });
+
+    await client.startGeneration("a 1");
+    expect(calls[1].init?.body).toBeUndefined();
+  });
+
+  it("surfaces a refusal by its code", async () => {
+    const { client } = recording(json(409, { error: { code: "import_in_progress", message: "running", details: null } }));
+
+    await expect(client.startGeneration("a1")).rejects.toMatchObject({ status: 409, code: "import_in_progress" });
+  });
+
+  it("reads the run, and surfaces generation_not_found", async () => {
+    const run = { run_id: "r1", seed: 1 };
+    const { client, calls } = recording(json(200, run));
+
+    await expect(client.generation("a1")).resolves.toEqual(run);
+    expect(calls[0].url).toBe("/api/import-areas/a1/generation");
+    const missing = recording(json(404, { error: { code: "generation_not_found", message: "none", details: null } }));
+    await expect(missing.client.generation("a1")).rejects.toMatchObject({ status: 404, code: "generation_not_found" });
+  });
+
+  it("surfaces import_in_progress when deleting a run while a job runs", async () => {
+    const { client } = recording(json(409, { error: { code: "import_in_progress", message: "running", details: null } }));
+
+    await expect(client.deleteGeneration("a1")).rejects.toMatchObject({ status: 409, code: "import_in_progress" });
+  });
+
+  it("deletes the run and returns nothing for a 204", async () => {
+    const { client, calls } = recording(new Response(null, { status: 204 }));
+
+    await expect(client.deleteGeneration("a1")).resolves.toBeUndefined();
+    expect(calls[0].url).toBe("/api/import-areas/a1/generation");
+    expect(calls[0].init?.method).toBe("DELETE");
+  });
+});
+
+describe("block feedback", () => {
+  it("puts a count, or no_buildings, on the block", async () => {
+    const stored = { building_count: 4, no_buildings: false, updated_at: "t" };
+    const { client, calls } = recording(json(200, stored));
+
+    await expect(client.putBlockFeedback("b 1", { building_count: 4 })).resolves.toEqual(stored);
+    expect(calls[0].url).toBe("/api/blocks/b%201/feedback");
+    expect(calls[0].init?.method).toBe("PUT");
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ building_count: 4 });
+    await client.putBlockFeedback("b 1", { no_buildings: true });
+    expect(JSON.parse(String(calls[1].init?.body))).toEqual({ no_buildings: true });
+  });
+
+  it("deletes a block's feedback and surfaces feedback_not_found", async () => {
+    const { client, calls } = recording(new Response(null, { status: 204 }));
+
+    await expect(client.deleteBlockFeedback("b1")).resolves.toBeUndefined();
+    expect(calls[0].url).toBe("/api/blocks/b1/feedback");
+    expect(calls[0].init?.method).toBe("DELETE");
+    const missing = recording(json(404, { error: { code: "feedback_not_found", message: "none", details: null } }));
+    await expect(missing.client.deleteBlockFeedback("b1")).rejects.toMatchObject({ status: 404, code: "feedback_not_found" });
+  });
+
+  it("lists an area's feedback from the wrapping object", async () => {
+    const entry = { block_id: "b1", import_area_id: "a1", building_count: null, no_buildings: true, updated_at: "t", orphaned: false };
+    const { client, calls } = recording(json(200, { feedback: [entry] }));
+
+    await expect(client.areaFeedback("a1")).resolves.toEqual([entry]);
+    expect(calls[0].url).toBe("/api/import-areas/a1/feedback");
   });
 });

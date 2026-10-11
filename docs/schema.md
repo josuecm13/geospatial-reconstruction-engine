@@ -14,7 +14,7 @@ CREATE TYPE import_status AS ENUM ('pending', 'importing', 'completed', 'failed'
 CREATE TYPE road_classification AS ENUM ('motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'residential', 'service', 'unclassified');
 CREATE TYPE building_category AS ENUM ('residential', 'commercial', 'industrial', 'civic', 'unspecified');
 CREATE TYPE poi_category AS ENUM ('food_and_drink', 'shopping', 'health', 'education', 'transit', 'other');
-CREATE TYPE area_feature_kind AS ENUM ('park', 'water', 'green_space');
+CREATE TYPE area_feature_kind AS ENUM ('park', 'water', 'green_space', 'forest', 'farmland', 'cemetery', 'railway', 'industrial');
 CREATE TYPE movement_kind AS ENUM ('left', 'right', 'straight', 'u_turn');
 CREATE TYPE restriction_kind AS ENUM ('none', 'no_left_turn', 'no_right_turn', 'no_straight_on', 'no_u_turn', 'only_left_turn', 'only_right_turn', 'only_straight_on');
 ```
@@ -309,6 +309,82 @@ Key decisions:
 
 - **Checks on the grid.** `area_elevation_grids` has `CHECK (rows >= 2 AND cols >= 2)` and
   `CHECK (octet_length(heights) = rows * cols * 4)`, so a stored grid always matches its declared size.
+
+## Generated block content (Milestone 11)
+
+```mermaid
+erDiagram
+    IMPORT_AREAS ||--o| GENERATION_RUNS : "current run"
+    IMPORT_AREAS ||--o{ BLOCK_FEEDBACK : "feedback in"
+    GENERATION_RUNS ||--o{ GENERATED_BUILDINGS : produced
+    GENERATION_RUNS ||--o{ GENERATION_ZONES : produced
+    GENERATION_RUNS ||--o{ BLOCK_FINGERPRINTS : used
+    BLOCKS ||--o{ GENERATED_BUILDINGS : "built on"
+    BLOCKS ||--o{ GENERATION_ZONES : "kept clear on"
+
+    GENERATION_RUNS {
+        uuid id PK
+        uuid import_area_id FK "import_areas, ON DELETE CASCADE, UNIQUE: one current run per area"
+        bigint seed
+        text algorithm_version "frontage-lots-v1"
+        jsonb parameters "thresholds, eligible_block_count, calibration_ratio, shortfalls, per-block assignments"
+        int elevation_version "null without a grid"
+        text road_graph_hash "sha256 of the area's sorted own block ids"
+        int building_count
+        int block_count "blocks with at least one generated building"
+        timestamptz created_at
+    }
+    GENERATED_BUILDINGS {
+        uuid id PK
+        uuid run_id FK "generation_runs, ON DELETE CASCADE"
+        uuid block_id FK "blocks, ON DELETE CASCADE"
+        polygon geom "POLYGON 4326"
+        float8 height_meters "greater than 0"
+        int levels
+        float8 base_elevation_meters "null without a grid"
+        text style "regular | sparse | informal"
+        uuid reference_block_id "no FK: may be another area's block"
+        text count_source "reference | default | feedback"
+    }
+    GENERATION_ZONES {
+        uuid id PK
+        uuid run_id FK "generation_runs, ON DELETE CASCADE"
+        uuid block_id FK "blocks, ON DELETE CASCADE"
+        text reason "water | steep | landuse | setback"
+        multipolygon geom "MULTIPOLYGON 4326"
+    }
+    BLOCK_FINGERPRINTS {
+        uuid run_id PK "FK generation_runs, ON DELETE CASCADE"
+        uuid block_id PK "no FK: an exemplar may be another area's block"
+        jsonb fingerprint
+    }
+    BLOCK_FEEDBACK {
+        uuid block_id PK "no FK: feedback outlives a swept block"
+        uuid import_area_id FK "import_areas, ON DELETE CASCADE"
+        int building_count "null when no_buildings"
+        bool no_buildings
+        timestamptz updated_at
+    }
+```
+
+Key decisions:
+
+- **Generation never writes to an observed table.** Everything above is its own table; the rest of the
+  schema is read, not written (`docs/architecture.md`, "Generated block content").
+- **One current run per area.** `UNIQUE (import_area_id)` makes a regenerate a replace: the old run is
+  deleted and its buildings, zones and fingerprints go with it through the cascades, then the new run is
+  inserted, in one transaction.
+- **Cascades keep deletes working unchanged.** `generated_buildings` and `generation_zones` cascade from
+  their block, so a re-import that sweeps a block removes what was generated on it (the run is then
+  stale, since its block ids no longer match). `ImportAreaRepository.delete` removes blocks and then the
+  area, and the cascades remove runs, generated rows and feedback with them, so it needed no change.
+- **Feedback has no foreign key to blocks.** It must survive a re-import that removes its block, so it
+  can be listed as `orphaned` instead of vanishing. It cascades from its area. `CHECK` constraints make
+  exactly one of `building_count` or `no_buildings` true, and `building_count >= 0`.
+- **`reference_block_id` and fingerprint `block_id` have no foreign key.** The exemplar a block learned
+  from can be in another completed area, and that area's re-import must not fail on this one's rows.
+- **Staleness is computed on read.** A run is stale when the area's current block-id hash or elevation
+  grid version differs from the one the run stored (`roads_changed`, `terrain_changed`).
 
 ## Constraints and indexes
 

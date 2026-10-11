@@ -382,6 +382,32 @@ def test_multipolygon_members_resolve_from_way_elements_without_inline_geometry(
     assert [(a.source_id, a.category) for a in OSMFixtureAdapter().parse(payload).areas] == [("relation/7", AreaFeatureKind.WATER)]
 
 
+@pytest.mark.parametrize(
+    ("tags", "kind"),
+    [
+        ({"leisure": "park"}, AreaFeatureKind.PARK),
+        ({"natural": "water"}, AreaFeatureKind.WATER),
+        ({"landuse": "grass"}, AreaFeatureKind.GREEN_SPACE),
+        ({"landuse": "recreation_ground"}, AreaFeatureKind.GREEN_SPACE),
+        ({"landuse": "forest"}, AreaFeatureKind.FOREST),
+        ({"natural": "wood"}, AreaFeatureKind.FOREST),
+        ({"landuse": "farmland"}, AreaFeatureKind.FARMLAND),
+        ({"landuse": "meadow"}, AreaFeatureKind.FARMLAND),
+        ({"landuse": "orchard"}, AreaFeatureKind.FARMLAND),
+        ({"landuse": "vineyard"}, AreaFeatureKind.FARMLAND),
+        ({"landuse": "farmyard"}, AreaFeatureKind.FARMLAND),
+        ({"landuse": "cemetery"}, AreaFeatureKind.CEMETERY),
+        ({"amenity": "grave_yard"}, AreaFeatureKind.CEMETERY),
+        ({"landuse": "railway"}, AreaFeatureKind.RAILWAY),
+        ({"landuse": "industrial"}, AreaFeatureKind.INDUSTRIAL),
+    ],
+)
+def test_land_use_tags_map_to_area_feature_kinds(tags, kind):
+    records = OSMFixtureAdapter().parse(_multipolygon(tags, [_member("outer", A, B, C, A)]))
+
+    assert [a.category for a in records.areas] == [kind]
+
+
 def test_multipolygon_without_supported_tags_is_ignored():
     assert OSMFixtureAdapter().parse(_multipolygon({"landuse": "residential"}, [_member("outer", A, B, C, A)])).areas == ()
 

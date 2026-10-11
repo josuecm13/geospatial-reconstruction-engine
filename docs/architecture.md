@@ -131,6 +131,67 @@ the same stored values. The decisions below are recorded for Milestone 10 (#105,
   `completed`. The source is configured by `ELEVATION_URL`; `off` or an empty value disables it, as
   `GEOCODER_URL` does. Tests replace the source, so CI never reaches the network.
 
+## Generated block content
+
+Milestone 11 (#23) fills blocks with generated buildings. The generated buildings are a third layer, apart
+from the observed one and from terrain: they live in their own tables (`generated_buildings` and
+friends, see `docs/schema.md`), and generation reads the observed tables but never writes to one. The
+thresholds below are the contract's (`docs/plans/milestone-11/00-decisions-and-contract.md`, until it is
+deleted at close-out; the numbers are named constants in `app/domain/generation.py`).
+
+- **Layering.** `app/domain/generation.py` is pure: eligibility, fingerprint maths, matching, seeded
+  sampling, and the stored value types. `app/generation/` does the geometry in local metres with
+  shapely (`suitability.py`, `fingerprint.py`, `generator.py`) and `run.py` ties it to the database.
+  `GenerationService.generate(area, seed)` does not commit; the caller (a background job) does.
+- **Streaming.** `generate` takes an optional `on_ring` callback and generates eligible blocks in rings
+  of 150 m around the area's bbox centre, nearest first (`app/domain/rings.py`), calling it after each
+  ring. Each block has its own `random.Random(f"{seed}:{block_id}")` and calibration is computed before
+  the loop, so the order changes no footprint. Each building's id is assigned at generation time as
+  `uuid5(run_id, f"{block_id}:{index}")` (the run id is chosen up front) and stored under it. The job
+  emits `generation`, then `generated` events `{projection, ring, blocks_done, block_count, buildings}`
+  (`buildings` mapped like map-data's `generated_buildings`; a ring over 500 buildings is split over
+  several events with the same `ring`), then `completed` or `failed`. Streamed buildings are provisional:
+  they are stored only when the run is, in one transaction at the end, and on `failed` the previous run
+  stays and the client discards what it streamed.
+- **Eligibility.** A block is built on only when it is whole and has room: not clipped, not a median,
+  and a buildable area of at least 30 m², checked in that order. Only an area's own blocks are
+  generated on; composed inner areas' blocks belong to their own areas' runs.
+- **Suitability.** Within an eligible block's buildable area, water (buffered 20 m), ground steeper than
+  30% (from the stored grid; skipped without one), and non-residential land use (forest, farmland,
+  cemetery, railway, industrial, park) are subtracted, and each leaves a zone for display. The front
+  setback is added per block once its reference is known. The block's **style** is `informal` near low
+  water (within 150 m and under 2 m above it, never without a grid), `sparse` when the road length within
+  500 m of the block centroid (clipped to the circle, and to the area of context) is under 6 km per km² of
+  land, water excluded (no land counts as density 0), and `regular` otherwise. Roads, not buildings, decide
+  it: OSM maps roads far more completely than buildings, so building coverage would call an under-mapped
+  town rural.
+- **References.** A block that is at least 70% built along its frontage, with three or more real
+  buildings, is an **exemplar**, and its **fingerprint** (median and spread of width, depth, front
+  setback and side gap, median levels) is measured from those buildings. Every other eligible block
+  takes the fingerprint of the best exemplar within 500 m, in this area or another completed one
+  (distance, road class, size and style decide), or the defaults for its strongest bounding road class.
+  An exemplar references itself and only fills the gaps in its frontage. Fingerprints used are stored
+  with the run, so a run can be explained later.
+- **The generator.** For each block, in sorted id order, with `random.Random(f"{seed}:{block_id}")`:
+  the frontage is inset by the setback, each frontage edge is walked from its start, and lots are
+  laid with width, gap and depth drawn from a normal distribution around the fingerprint (clamped to
+  half and one and a half times the median). A footprint is kept only if it lies in the suitable
+  ground, clears the real buildings and the ones already kept, and covers at least 15 m². Levels
+  come from the fingerprint, height is 3 m a level, and the base is the lowest ground under the
+  footprint (the same function as real buildings). The same seed over the same data gives the same
+  buildings.
+- **Feedback and calibration.** A person can say how many buildings a block really has, or that it has
+  none (`block_feedback`). The next generation builds that many (an evenly spaced subset of the lots
+  that fit, or fewer, reported as a shortfall) and marks them `feedback`. Feedback blocks also
+  calibrate their neighbours: where two or more feedback blocks of the same style lie within 500 m
+  and were generated in the previous run, a block's lot width is divided by the ratio of reported to
+  generated buildings (clamped to 0.5 to 2). Feedback is keyed by block id with no foreign key, so a
+  re-import that removes a block leaves it behind, reported as `orphaned`.
+- **One run per area, and staleness.** An area has one current run, replaced in one transaction. A run
+  is stale when its blocks changed (the sha256 of the area's sorted own block ids differs:
+  `roads_changed`) or the area's elevation grid version differs (`terrain_changed`). Staleness is
+  computed on read, never stored.
+
 ## OSM translation
 
 The adapter fetches only streets/roads, building footprints, POIs, relevant areas, and the OSM tags needed for lane and turn semantics. It maps OSM values into constrained application categories: e.g. `highway=*` becomes a `RoadClassification`, `lanes`/`lanes:forward`/`lanes:backward` become a lane profile, and turn-restriction relations become `TurnMovement` records. Building tags become a `BuildingCategory`, while amenity/shop/leisure tags become `PoiCategory` or `AreaFeatureKind`. Unknown tags are either omitted or captured as narrowly scoped source metadata, rather than leaked as application behavior.

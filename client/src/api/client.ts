@@ -1,5 +1,8 @@
 import { API_PREFIX } from "../../devServer";
 import type {
+  AreaFeedbackEntry,
+  BlockFeedbackBody,
+  StoredFeedback,
   BoundaryProperties,
   BoundingBox,
   Coordinate,
@@ -7,6 +10,7 @@ import type {
   ExportMode,
   Feature,
   FeatureCollection,
+  GenerationRun,
   Geometry,
   ImportArea,
   ImportStarted,
@@ -102,9 +106,48 @@ export class ApiClient {
     return this.request("DELETE", `/import-areas/${encodeURIComponent(areaId)}`);
   }
 
+  /** The id of the import area the landing page features, or null when none is chosen. */
+  async featuredArea(): Promise<string | null> {
+    return (await this.request<{ import_area_id: string | null }>("GET", "/settings/featured-area")).import_area_id;
+  }
+
+  /** Chooses the landing page's featured area (a completed one); null clears the choice. Returns the stored id. */
+  async setFeaturedArea(areaId: string | null): Promise<string | null> {
+    return (await this.request<{ import_area_id: string | null }>("PUT", "/settings/featured-area", { import_area_id: areaId })).import_area_id;
+  }
+
   /** Re-analyses an area's terrain in the background; its progress streams on `importEvents`. */
   analyseElevation(areaId: string): Promise<ImportStarted> {
     return this.request("POST", `/import-areas/${encodeURIComponent(areaId)}/elevation`);
+  }
+
+  /** Generates the area's buildings in the background, replacing its run; progress streams on `importEvents`. Without a seed the server reuses the current run's. */
+  startGeneration(areaId: string, seed?: number): Promise<ImportStarted> {
+    return this.request("POST", `/import-areas/${encodeURIComponent(areaId)}/generation`, seed === undefined ? undefined : { seed });
+  }
+
+  /** The area's current run; 404 `generation_not_found` when it has none. */
+  generation(areaId: string): Promise<GenerationRun> {
+    return this.request("GET", `/import-areas/${encodeURIComponent(areaId)}/generation`);
+  }
+
+  /** 404 `generation_not_found`; 409 `import_in_progress` while a job for the area runs. */
+  deleteGeneration(areaId: string): Promise<void> {
+    return this.request("DELETE", `/import-areas/${encodeURIComponent(areaId)}/generation`);
+  }
+
+  /** Records how many buildings a block should have (or that it has none); applies on the next generation. */
+  putBlockFeedback(blockId: string, body: BlockFeedbackBody): Promise<StoredFeedback> {
+    return this.request("PUT", `/blocks/${encodeURIComponent(blockId)}/feedback`, body);
+  }
+
+  deleteBlockFeedback(blockId: string): Promise<void> {
+    return this.request("DELETE", `/blocks/${encodeURIComponent(blockId)}/feedback`);
+  }
+
+  /** The area's feedback (`{feedback: [...]}` on the wire); an entry whose block is gone is `orphaned`. */
+  async areaFeedback(areaId: string): Promise<AreaFeedbackEntry[]> {
+    return (await this.request<{ feedback: AreaFeedbackEntry[] }>("GET", `/import-areas/${encodeURIComponent(areaId)}/feedback`)).feedback;
   }
 
   route(areaId: string, origin: Coordinate, destination: Coordinate, strategy?: string): Promise<Route> {

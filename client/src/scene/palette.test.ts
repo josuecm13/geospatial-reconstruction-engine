@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import * as THREE from "three";
-import { COLORS, MATERIALS, SCENE_BACKGROUND } from "./palette";
+import { areaFeatureMaterial, COLORS, MATERIALS, SCENE_BACKGROUND, zoneMaterial } from "./palette";
 import { shade } from "./shading";
 
 const sceneDir = __dirname;
@@ -79,6 +79,40 @@ describe("the night clay palette reads on the dark ground", () => {
 
   it("draws defaulted buildings dimmer than measured ones", () => {
     expect(luminance(COLORS.buildingDefaulted)).toBeLessThan(luminance(COLORS.buildingMeasured));
+  });
+
+  it("tells generated buildings from measured and defaulted ones, by tone and by a cool hue", () => {
+    expect(ratio(COLORS.buildingGenerated, COLORS.buildingMeasured)).toBeGreaterThanOrEqual(1.3);
+    expect(ratio(COLORS.buildingGenerated, COLORS.buildingDefaulted)).toBeGreaterThanOrEqual(1.3);
+    expect(ratio(COLORS.buildingGenerated, COLORS.ground)).toBeGreaterThanOrEqual(5);
+    const { r, b } = new THREE.Color(COLORS.buildingGenerated);
+    expect(b).toBeGreaterThan(r);
+    expect(MATERIALS.buildingGenerated).not.toBe(MATERIALS.buildingDefaulted);
+  });
+
+  it("reads every land-use kind against the ground, each apart from park green and from the others", () => {
+    const kinds = ["forest", "farmland", "cemetery", "railway", "industrial"] as const;
+    for (const kind of kinds) {
+      expect(ratio(COLORS[kind], COLORS.ground), kind).toBeGreaterThanOrEqual(1.4);
+      expect(COLORS[kind], kind).not.toBe(COLORS.green);
+    }
+    expect(new Set(kinds.map((kind) => COLORS[kind])).size).toBe(kinds.length);
+    expect(areaFeatureMaterial("forest")).toBe(MATERIALS.forest);
+    expect(areaFeatureMaterial("water")).toBe(MATERIALS.water);
+    expect(areaFeatureMaterial("park")).toBe(MATERIALS.green);
+    expect(areaFeatureMaterial("something_new")).toBe(MATERIALS.green);
+  });
+
+  it("shades each zone reason in its own translucent colour", () => {
+    const reasons = ["water", "steep", "landuse", "setback"];
+    expect(new Set(reasons.map((reason) => zoneMaterial(reason))).size).toBe(reasons.length);
+    for (const reason of reasons) expect((zoneMaterial(reason) as THREE.MeshBasicMaterial).opacity, reason).toBeLessThan(0.5);
+  });
+
+  it("draws block outlines dashed, with the selected one solid", () => {
+    for (const dashed of [MATERIALS.blockOutline, MATERIALS.blockOutlineFaint, MATERIALS.blockOutlineReference]) expect(dashed.isLineDashedMaterial).toBe(true);
+    expect(MATERIALS.blockOutlineFaint.dashSize).toBeLessThan(MATERIALS.blockOutline.dashSize);
+    expect((MATERIALS.blockOutlineSelected as unknown as { isLineDashedMaterial?: boolean }).isLineDashedMaterial).toBeUndefined();
   });
 
   it("draws building edges as one shared, translucent, unshaded line material", () => {

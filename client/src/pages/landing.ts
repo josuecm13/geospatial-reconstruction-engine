@@ -6,11 +6,11 @@ import { renderArchitecture } from "../landing/architecture";
 import { renderBento } from "../landing/bento";
 import { selectionDemo } from "../landing/selectionDemo";
 import type { FeaturedStage } from "../landing/featuredStage";
-import { pickFeatured } from "../landing/featured";
+import { resolveFeatured } from "../landing/featured";
 import { renderFooter } from "../landing/footer";
 import { importTarget } from "../landing/importTarget";
 import { shareMapData } from "../landing/sharedMapData";
-import { STORY_STEPS } from "../landing/storySteps";
+import { bodyFor, hasGeneratedContext, STORY_STEPS } from "../landing/storySteps";
 import { renderLocationCard } from "../locations/card";
 import { formatCentre, toCard } from "../locations/cardModel";
 import { PreviewLoader, type PreviewTarget } from "../locations/preview";
@@ -192,7 +192,7 @@ export const mount: Mount<{ page: "landing" }> = (el, ctx) => {
     heroInner.append(text, heroStage);
     hero.replaceChildren(heroInner);
 
-    // --- the story: a sticky stage beside four steps that scroll ---
+    // --- the story: a sticky stage beside the steps that scroll ---
     const story = element("section", "landing-section landing-story");
     const storyInner = element("div", "landing-inner landing-story-grid");
     const storyStage = element("div", "landing-stage landing-stage-story");
@@ -203,14 +203,28 @@ export const mount: Mount<{ page: "landing" }> = (el, ctx) => {
     const stepItems = STORY_STEPS.map((step, index) => {
       const item = element("li", "landing-step");
       item.dataset.step = String(index);
-      item.append(element("p", "landing-step-number", `Step ${index + 1} of ${STORY_STEPS.length}`), element("h3", undefined, step.title), element("p", undefined, step.body));
+      item.append(element("p", "landing-step-number", `Step ${index + 1} of ${STORY_STEPS.length}`), element("h3", undefined, step.title), element("p", undefined, bodyFor(step, true).text));
       steps.append(item);
       return item;
     });
     storyInner.append(stageColumn, steps);
     const storyHeading = element("div", "landing-inner");
-    storyHeading.append(sectionHead("How it is built", "How a place is rebuilt", "Four steps from an OpenStreetMap rectangle to a model you can walk through."));
+    storyHeading.append(sectionHead("How it is built", "How a place is rebuilt", "Five steps from an OpenStreetMap rectangle to a model you can walk through."));
     story.append(storyHeading, storyInner);
+
+    // Once the map-data is in (shared with the stage, so no second request), a place with no generation run says how to get one.
+    api
+      .mapData(area.id)
+      .then((data) => {
+        if (disposed || hasGeneratedContext(data)) return;
+        STORY_STEPS.forEach((step, index) => {
+          if (!bodyFor(step, false).notGenerated) return;
+          const note = element("p", "landing-step-note");
+          note.append("This place hasn't been generated yet: ", link(`/explore/${area.id}`, "open it"), " and press Generate.");
+          stepItems[index].append(note);
+        });
+      })
+      .catch(() => undefined);
 
     const setActive = (index: number) => {
       activeStep = index;
@@ -272,13 +286,10 @@ export const mount: Mount<{ page: "landing" }> = (el, ctx) => {
 
   api.listImportAreas({ status: "completed", limit: RECENT_LIMIT }).then(
     async (list) => {
-      // The configured area may be older than the recent list, so fetch it when it isn't in there.
-      const configured = featuredId
-        ? (list.find((a) => a.id === featuredId) ?? (await api.getImportArea(featuredId).catch(() => null)))
-        : null;
+      // The server setting first (a failed request falls through), then the environment variable, then the most recent.
+      const featured = await resolveFeatured(list, { setting: () => api.featuredArea(), env: featuredId, getArea: (id) => api.getImportArea(id) });
       if (disposed) return;
       areas = list;
-      const featured = pickFeatured(list, configured);
       if (featured) {
         shared.share(featured.id);
         renderFeatured(featured);

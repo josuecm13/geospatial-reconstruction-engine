@@ -1,5 +1,6 @@
 from geoalchemy2 import Geometry
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
     Column,
@@ -14,7 +15,7 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.dialects.postgresql import ENUM as PgEnum
-from sqlalchemy.dialects.postgresql import ARRAY, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase
 
 from app.domain.enums import (
@@ -325,6 +326,18 @@ class TracedBoundaryModel(Base):
     )
 
 
+class SiteSettingModel(Base):
+    """A deployment-wide setting, e.g. the import area the landing page features."""
+
+    __tablename__ = "site_settings"
+
+    key = Column(String, primary_key=True)
+    value = Column(JSONB, nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+
 class AreaElevationGridModel(Base):
     """An area's ground, one row per area. Elevation lives apart from the observed tables."""
 
@@ -369,3 +382,90 @@ class RoadSegmentElevationModel(Base):
     # One value per vertex of the segment's geometry, in order.
     exact_meters = Column(ARRAY(Float), nullable=False)
     smoothed_meters = Column(ARRAY(Float), nullable=False)
+
+
+class GenerationRunModel(Base):
+    """The current generation run of an area: one per area, replaced when the area is generated again."""
+
+    __tablename__ = "generation_runs"
+
+    id = uuid_pk()
+    import_area_id = Column(
+        UUID(as_uuid=True), ForeignKey("import_areas.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    seed = Column(BigInteger, nullable=False)
+    algorithm_version = Column(String, nullable=False)
+    parameters = Column(JSONB, nullable=False)
+    elevation_version = Column(Integer, nullable=True)
+    road_graph_hash = Column(String, nullable=False)
+    building_count = Column(Integer, nullable=False)
+    block_count = Column(Integer, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class GeneratedBuildingModel(Base):
+    __tablename__ = "generated_buildings"
+
+    id = uuid_pk()
+    run_id = Column(UUID(as_uuid=True), ForeignKey("generation_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    # A re-import that sweeps a block takes its generated buildings with it, and the run goes stale.
+    block_id = Column(UUID(as_uuid=True), ForeignKey("blocks.id", ondelete="CASCADE"), nullable=False, index=True)
+    geom = Column(Geometry(geometry_type="POLYGON", srid=4326, spatial_index=False), nullable=False)
+    height_meters = Column(Float, nullable=False)
+    levels = Column(Integer, nullable=False)
+    base_elevation_meters = Column(Float, nullable=True)
+    style = Column(String, nullable=False)
+    # No foreign key: the reference can be a block of another area.
+    reference_block_id = Column(UUID(as_uuid=True), nullable=True)
+    count_source = Column(String, nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("count_source IN ('reference', 'default', 'feedback')", name="ck_generated_buildings_count_source"),
+        CheckConstraint("height_meters > 0", name="ck_generated_buildings_height_positive"),
+    )
+
+
+class GenerationZoneModel(Base):
+    __tablename__ = "generation_zones"
+
+    id = uuid_pk()
+    run_id = Column(UUID(as_uuid=True), ForeignKey("generation_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    block_id = Column(UUID(as_uuid=True), ForeignKey("blocks.id", ondelete="CASCADE"), nullable=False, index=True)
+    reason = Column(String, nullable=False)
+    geom = Column(Geometry(geometry_type="MULTIPOLYGON", srid=4326, spatial_index=False), nullable=False)
+
+
+class BlockFingerprintModel(Base):
+    """The fingerprint a run used for an exemplar block, so the run is reproducible."""
+
+    __tablename__ = "block_fingerprints"
+
+    run_id = Column(UUID(as_uuid=True), ForeignKey("generation_runs.id", ondelete="CASCADE"), primary_key=True)
+    # No foreign key: an exemplar may belong to another area.
+    block_id = Column(UUID(as_uuid=True), primary_key=True)
+    fingerprint = Column(JSONB, nullable=False)
+
+
+class BlockFeedbackModel(Base):
+    """What a person says a block really holds. There is no foreign key to `blocks`: feedback has to
+    outlive a re-import that removes its block, so it can be reported as orphaned."""
+
+    __tablename__ = "block_feedback"
+
+    block_id = Column(UUID(as_uuid=True), primary_key=True)
+    import_area_id = Column(
+        UUID(as_uuid=True), ForeignKey("import_areas.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    building_count = Column(Integer, nullable=True)
+    no_buildings = Column(Boolean, nullable=False, server_default="false")
+    updated_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "(building_count IS NOT NULL AND NOT no_buildings) OR (building_count IS NULL AND no_buildings)",
+            name="ck_block_feedback_exactly_one",
+        ),
+        CheckConstraint("building_count >= 0", name="ck_block_feedback_count_non_negative"),
+    )

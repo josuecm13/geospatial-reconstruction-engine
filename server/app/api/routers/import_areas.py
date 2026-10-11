@@ -35,7 +35,11 @@ from app.api.mappers import (
     block_feature,
     building_feature,
     elevation_out,
+    block_generation_properties,
     feature_collection,
+    generated_building_feature,
+    generation_run_out,
+    generation_zone_feature,
     import_area_out,
     node_feature,
     poi_feature,
@@ -58,9 +62,11 @@ from app.domain.covered_areas import compose_by_source_id
 from app.domain.cross_section import cross_sections_by_segment
 from app.domain.elevation import StoredGrid, smoothed
 from app.domain.enums import ImportStatus
+from app.domain.generation import eligibility
 from app.domain.import_area import ImportArea
 from app.domain.local_projection import local_projection_for
 from app.domain.traced_boundary import TracedBoundary
+from app.generation.run import stale_reasons
 from app.ingestion.elevation_source import ElevationUnavailable, TerrainTilesSource
 from app.ingestion.jobs import ImportAlreadyRunning, ImportJob, ImportJobRegistry
 from app.ingestion.overpass import IncompleteSourceResponse, OverpassClient
@@ -70,6 +76,7 @@ from app.persistence.repositories.area_feature import AreaFeatureRepository
 from app.persistence.repositories.block import BlockRepository
 from app.persistence.repositories.building import BuildingRepository
 from app.persistence.repositories.elevation import ElevationRepository
+from app.persistence.repositories.generation import BlockFeedbackRepository, GenerationRepository
 from app.persistence.repositories.import_area import ImportAreaRepository
 from app.persistence.repositories.poi import PointOfInterestRepository
 from app.persistence.repositories.road_graph import NavigableNodeRepository, RoadSegmentRepository
@@ -310,6 +317,21 @@ def get_map_data(
     pois = _composed(PointOfInterestRepository(session), owner_ids)
     area_features = _composed(AreaFeatureRepository(session), owner_ids)
 
+    # Generated content. Block properties count against everything the area composes, before the
+    # scope narrows the layers; the layers are narrowed with the others below.
+    generations = GenerationRepository(session)
+    runs = {owner_id: generations.get_run(owner_id) for owner_id in owner_ids}
+    own_run = runs[area.id]
+    block_ids = {block.id for block in blocks}
+    # An inner area's run may have built on a block the outer area holds whole instead: that block
+    # is not composed, and the outer area's own run covers it.
+    generated = [building for building in generations.list_buildings(owner_ids) if building.block_id in block_ids]
+    zones = generations.list_zones(area.id)
+    block_extras = _block_generation_properties(session, blocks, buildings, generated, runs, generations, owner_ids)
+    generation_out = (
+        generation_run_out(own_run, stale_reasons(session, area, own_run)) if own_run is not None else None
+    )
+
     if scope is None:
         scope_out = ScopeOut(type=ScopeType.IMPORT_AREA, id=area.id, composed_area_ids=composed_area_ids)
         projection = local_projection_for(area.bbox.ring())
@@ -324,6 +346,8 @@ def get_map_data(
         buildings = [building for building in buildings if building.id in in_scope.buildings]
         pois = [poi for poi in pois if poi.id in in_scope.pois]
         area_features = [feature for feature in area_features if feature.id in in_scope.area_features]
+        generated = [building for building in generated if building.id in in_scope.generated_buildings]
+        zones = [zone for zone in zones if zone.id in in_scope.generation_zones]
 
     elevations = ElevationRepository(session)
     stored_grid = elevations.get_grid(area.id)
@@ -338,10 +362,12 @@ def get_map_data(
             for entry in segments
         ],
         "navigable_nodes": [node_feature(node) for node in nodes],
-        "blocks": [block_feature(block) for block in blocks],
+        "blocks": [block_feature(block, block_extras[block.id]) for block in blocks],
         "buildings": [building_feature(building, base_elevations.get(building.id)) for building in buildings],
         "pois": [poi_feature(poi) for poi in pois],
         "area_features": [area_feature_feature(feature) for feature in area_features],
+        "generated_buildings": [generated_building_feature(building) for building in generated],
+        "generation_zones": [generation_zone_feature(zone) for zone in zones],
     }
     if mode is ExportMode.CLIP:
         layers = _clipped(layers, clip_to_scope(session, area.id, scope.id if scope else None, composed_area_ids))
@@ -353,8 +379,54 @@ def get_map_data(
         mode=mode,
         projection=projection_out(projection),
         elevation=elevation_out(stored_grid),
+        generation=generation_out,
         **{name: feature_collection(features) for name, features in layers.items()},
     )
+
+
+def _block_generation_properties(
+    session: Session,
+    blocks: list,
+    buildings: list,
+    generated: list,
+    runs: dict,
+    generations: GenerationRepository,
+    owner_ids: list,
+) -> dict:
+    """Per block, the generation properties of its feature: its eligibility, its real and generated
+    building counts, whether it was a reference in its area's current run and which block it learned
+    from, its style (null without a run), and its feedback."""
+    real_counts: dict = {}
+    for building in buildings:
+        if building.block_id is not None:
+            real_counts[building.block_id] = real_counts.get(building.block_id, 0) + 1
+    generated_counts: dict = {}
+    for building in generated:
+        generated_counts[building.block_id] = generated_counts.get(building.block_id, 0) + 1
+    assignments: dict = {}
+    reference_ids: set = set()
+    for run in runs.values():
+        if run is not None:
+            assignments.update(run.assignments())
+            reference_ids.update(generations.fingerprints(run.id))
+    feedback = {}
+    for owner_id in owner_ids:
+        for entry in BlockFeedbackRepository(session).list_for_import_area(owner_id):
+            feedback[entry.feedback.block_id] = entry.feedback
+
+    properties = {}
+    for block in blocks:
+        assignment = assignments.get(block.id)
+        properties[block.id] = block_generation_properties(
+            eligibility=eligibility(block).value,
+            real_building_count=real_counts.get(block.id, 0),
+            generated_building_count=generated_counts.get(block.id, 0),
+            is_reference=block.id in reference_ids,
+            reference_block_id=assignment.reference_block_id if assignment is not None else None,
+            style=assignment.style.value if assignment is not None else None,
+            feedback=feedback.get(block.id),
+        )
+    return properties
 
 
 def _composed(repository, owner_ids: list) -> list:

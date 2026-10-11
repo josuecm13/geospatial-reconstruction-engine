@@ -51,6 +51,11 @@ class AreaFeatureKind(str, enum.Enum):
     PARK = "park"
     WATER = "water"
     GREEN_SPACE = "green_space"
+    FOREST = "forest"
+    FARMLAND = "farmland"
+    CEMETERY = "cemetery"
+    RAILWAY = "railway"
+    INDUSTRIAL = "industrial"
 
 
 class MovementKind(str, enum.Enum):

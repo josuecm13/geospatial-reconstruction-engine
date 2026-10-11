@@ -143,7 +143,7 @@ body:has(#map-view[hidden]) .panel { display: none; }
 }
 .scene-toggle[hidden] { display: none; }
 .scene-actions { position: absolute; top: 48px; right: 12px; display: flex; flex-direction: row-reverse; gap: 8px; }
-.scene-mode, .scene-rotate, .scene-terrain {
+.scene-mode, .scene-rotate, .scene-terrain, .scene-pin {
   padding: 7px 12px; border: 1px solid var(--border); border-radius: 8px; text-box: trim-both cap alphabetic;
   background: transparent; color: var(--text); font-size: 13px; cursor: pointer;
 }
@@ -160,8 +160,31 @@ body:has(#map-view[hidden]) .panel { display: none; }
 .route-output { margin-top: 4px; }
 .route-error { color: var(--danger); }
 .route-warning { color: var(--warning); }
-.scene-rotate[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.scene-rotate[aria-pressed="true"], .scene-pin[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); }
 .scene-rotate:disabled, .scene-terrain:disabled { opacity: 0.5; cursor: default; }
+/* A stale run: the Regenerate button asks to be pressed. */
+.scene-generate.stale { border-color: var(--warning); color: var(--warning); }
+/* The block panel (3D and 2D): the selected block's summary and the feedback controls, over the lower right. */
+.block-panel {
+  position: absolute; bottom: 44px; right: 12px; z-index: 2; width: 300px; padding: 10px 14px; font-size: 13px; line-height: 1.4;
+}
+.block-panel[hidden], .zone-legend[hidden] { display: none; }
+.block-close { position: absolute; top: 4px; right: 6px; padding: 0 6px; border: none; background: none; color: var(--text-muted); font-size: 18px; cursor: pointer; }
+.block-summary { padding-right: 20px; font-weight: 600; }
+.block-reason, .block-said { margin-top: 4px; color: var(--text-muted); }
+.block-said { color: var(--text); }
+.block-count { display: block; margin-top: 8px; }
+.block-count input { width: 5em; margin: 0 6px; background: var(--surface-2); color: var(--text); border: 1px solid var(--border); border-radius: 4px; }
+.block-panel button:not(.block-close) { margin: 6px 6px 0 0; padding: 4px 10px; border: 1px solid var(--border); border-radius: 8px; background: transparent; color: var(--text); font-size: 13px; cursor: pointer; }
+.block-panel button:not(.block-close):hover { background: color-mix(in oklch, var(--text) 9%, transparent); }
+.block-panel button:disabled, .block-panel input:disabled { opacity: 0.5; cursor: default; }
+.block-panel button:focus-visible, .block-panel input:focus-visible { outline: 2px solid color-mix(in oklch, var(--accent) 80%, transparent); outline-offset: 1px; }
+.block-status { margin-top: 6px; min-height: 1.4em; color: var(--text-muted); }
+.block-status.error { color: var(--danger); }
+/* The legend of the generation zones' colours, shown with the blocks. */
+.zone-legend { position: absolute; top: 12px; left: 12px; margin: 0; padding: 8px 12px; list-style: none; font-size: 13px; }
+.zone-legend li { display: flex; align-items: center; gap: 8px; }
+.zone-swatch { width: 12px; height: 12px; border-radius: 3px; opacity: 0.8; }
 /* The terrain credit and the "Add terrain" progress line sit along the bottom of the scene, clear of the build label (centre) and Skip (right). */
 .scene-attribution, .scene-terrain-note {
   position: absolute; left: 12px; max-width: min(520px, calc(100% - 24px));
@@ -169,6 +192,7 @@ body:has(#map-view[hidden]) .panel { display: none; }
 }
 .scene-attribution { bottom: 12px; }
 .scene-terrain-note { bottom: 52px; font-size: 13px; color: var(--text); }
+.scene-generation-note { bottom: 92px; } /* above the terrain note, in case both jobs report at once */
 .scene-terrain-note.error { color: var(--danger); }
 .scene-attribution[hidden], .scene-terrain-note[hidden] { display: none; }
 .scene-export {
@@ -266,6 +290,7 @@ main > .page.landing { padding: var(--header-height) 0 0; background: var(--bg);
 .landing .landing-step h3 { margin: 0 0 12px; font-size: clamp(1.875rem, 1.3rem + 2vw, 2.75rem); font-weight: 650; line-height: 1.1; letter-spacing: -0.025em; }
 .landing .landing-step p { margin: 0; font-size: clamp(1.0625rem, 1rem + 0.5vw, 1.25rem); line-height: 1.5; }
 .landing .landing-step .landing-step-number { margin-bottom: 8px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--link); }
+.landing .landing-step .landing-step-note { margin-top: 16px; font-size: 1rem; opacity: 0.8; }
 @media (max-width: 899px) {
   .landing .landing-hero:has(.landing-hero-grid) { min-height: 0; }
   .landing .landing-hero-grid, .landing .landing-story-grid { grid-template-columns: 1fr; }
@@ -545,6 +570,18 @@ main > .page.landing { padding: var(--header-height) 0 0; background: var(--bg);
   font: inherit; font-size: 12px; font-weight: 600; color: var(--text-muted); cursor: pointer;
   background: color-mix(in oklch, var(--surface-3) 95%, transparent); border: 1px solid var(--border); border-radius: 999px;
 }
+.location-featured {
+  position: absolute; top: 10px; left: 10px; padding: 7px 10px; text-box: trim-both cap alphabetic; border-radius: 999px;
+  background: var(--accent); color: var(--bg); font-size: 12px; font-weight: 600;
+}
+.location-featured[hidden] { display: none; }
+.location-feature {
+  position: relative; z-index: 2; align-self: flex-start; padding: 7px 10px; text-box: trim-both cap alphabetic;
+  font: inherit; font-size: 12px; font-weight: 600; color: var(--text-muted); cursor: pointer;
+  background: color-mix(in oklch, var(--surface-3) 95%, transparent); border: 1px solid var(--border); border-radius: 999px;
+}
+.location-feature:hover { color: var(--text); border-color: var(--accent); }
+.location-feature:focus-visible { outline: 3px solid var(--link); outline-offset: 2px; }
 .location-delete:hover { color: var(--danger); border-color: var(--danger); }
 .location-delete:focus-visible { outline: 3px solid var(--link); outline-offset: 2px; }
 .location-counts { display: flex; gap: 20px; list-style: none; margin: 6px 0 0; padding: 10px 0 0; border-top: 1px solid var(--border); }
@@ -652,7 +689,7 @@ main > .page.landing { padding: var(--header-height) 0 0; background: var(--bg);
 }
 
 /* --- Overlays: frosted glass over the map and the 3D scene --- */
-.panel, .scene-actions, .scene-toggle, .route-panel, .scene-help, .feature-popup, .selection-label, .scene-empty, .api-tip, .scene-attribution, .scene-terrain-note {
+.panel, .scene-actions, .scene-toggle, .route-panel, .scene-help, .feature-popup, .selection-label, .scene-empty, .api-tip, .scene-attribution, .scene-terrain-note, .block-panel, .zone-legend {
   background: color-mix(in oklch, var(--surface-1) 72%, transparent);
   backdrop-filter: blur(16px) saturate(1.3);
   border: 1px solid var(--border);
@@ -671,12 +708,12 @@ main > .page.landing { padding: var(--header-height) 0 0; background: var(--bg);
 .feature-popup { padding: 10px 28px 10px 14px; font-size: 13px; }
 
 /* Buttons in the overlays: ghost by default, --accent for the primary one, hover and pressed steps from color-mix. */
-.panel button:not(.link):hover, .scene-mode:hover, .scene-rotate:hover, .scene-terrain:hover, .scene-export:hover { background: color-mix(in oklch, var(--text) 9%, transparent); }
-.panel button:not(.link):active, .scene-mode:active, .scene-rotate:active, .scene-terrain:active, .scene-export:active { background: color-mix(in oklch, var(--text) 16%, transparent); }
+.panel button:not(.link):hover, .scene-mode:hover, .scene-rotate:hover, .scene-terrain:hover, .scene-pin:hover, .scene-export:hover { background: color-mix(in oklch, var(--text) 9%, transparent); }
+.panel button:not(.link):active, .scene-mode:active, .scene-rotate:active, .scene-terrain:active, .scene-pin:active, .scene-export:active { background: color-mix(in oklch, var(--text) 16%, transparent); }
 .panel button.primary:hover, .scene-rotate[aria-pressed="true"]:hover { background: color-mix(in oklch, var(--accent) 85%, var(--text)); }
 .panel button.primary:active, .scene-rotate[aria-pressed="true"]:active { background: color-mix(in oklch, var(--accent) 80%, var(--bg)); }
 .panel button:disabled:hover, .scene-rotate:disabled:hover, .scene-terrain:disabled:hover, .scene-export:disabled:hover { background: transparent; }
-.panel button:focus-visible, .scene-mode:focus-visible, .scene-rotate:focus-visible, .scene-terrain:focus-visible, .scene-export:focus-visible { outline: 2px solid color-mix(in oklch, var(--accent) 80%, transparent); outline-offset: 1px; }
+.panel button:focus-visible, .scene-mode:focus-visible, .scene-rotate:focus-visible, .scene-terrain:focus-visible, .scene-pin:focus-visible, .scene-export:focus-visible { outline: 2px solid color-mix(in oklch, var(--accent) 80%, transparent); outline-offset: 1px; }
 
 /* The API status tooltip: a hint popover on the header's status pill, shown on hover or focus through `interestfor`. */
 .api-tip {

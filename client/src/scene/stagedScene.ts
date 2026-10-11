@@ -57,6 +57,9 @@ function partialData(projection: Projection, layers: Partial<MapData>): MapData 
     buildings: emptyCollection(),
     pois: emptyCollection(),
     area_features: emptyCollection(),
+    generation: null,
+    generated_buildings: emptyCollection(),
+    generation_zones: emptyCollection(),
     elevation: null,
     ...layers,
   };

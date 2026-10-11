@@ -31,7 +31,7 @@ function metadata(world: THREE.Object3D) {
 
 /**
  * Exports the world group (and nothing else: no lights, markers, or placeholder) as a binary glTF.
- * Hidden layers (the buildable-area blocks, unless shown) and the buildings' edge lines are left out. Node names stay
+ * Hidden layers (the blocks group, unless shown: its fill and zones) and every line (the buildings' edges, the block outlines) are left out. Node names stay
  * `<layer>:<id>`. The exporter writes `userData` into `extras`, so for the export the world carries
  * the metadata above and each mesh only `layer` and `id`; the originals (footprints, road outlines,
  * the API properties) are put back afterwards, and so is the visibility of the edge lines.
@@ -46,8 +46,8 @@ export async function exportWorld(world: THREE.Group): Promise<ArrayBuffer> {
   // dead weight too (a viewer computes flat ones when they are absent, as the glTF spec says). Taken off for the export.
   const normals: [THREE.BufferGeometry, THREE.BufferAttribute | THREE.InterleavedBufferAttribute][] = [];
   world.traverse((object) => {
-    // Building edges are a viewer effect: left out, since `onlyVisible` skips what is hidden.
-    if ((object as THREE.LineSegments).isLineSegments && object.visible) {
+    // Building edges and block outlines are viewer effects: every line is left out, since `onlyVisible` skips what is hidden.
+    if ((object as THREE.Line).isLine && object.visible) {
       object.visible = false;
       hidden.push(object);
     }
