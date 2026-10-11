@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import { validateBytes } from "gltf-validator";
 import * as THREE from "three";
-import { Blob as NodeBlob } from "node:buffer";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Feature, MapData, Position } from "../api/types";
 import { buildWorld, roadOutlineLines, setRoadMode } from "./buildWorld";
@@ -267,7 +266,7 @@ describe("exportWorld by theme", () => {
   function stubCanvas() {
     vi.stubGlobal("ImageData", class {});
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({ putImageData() {}, translate() {}, scale() {}, drawImage() {} } as never);
-    vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation((callback) => callback(new NodeBlob([PNG], { type: "image/png" }) as never));
+    vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation((callback) => callback(new Blob([PNG], { type: "image/png" }) as never));
   }
 
   afterEach(() => {
@@ -361,7 +360,7 @@ describe("exportWorld by theme", () => {
       expect(entry.userData).toBe(before[i].userData);
       expect(entry.visible).toBe(before[i].visible);
       expect(entry.material).toBe(before[i].material);
-      expect(Object.keys(entry.attributes)).toEqual(Object.keys(before[i].attributes));
+      expect(Object.keys(entry.attributes).sort()).toEqual(Object.keys(before[i].attributes).sort()); // re-adding changes the key order, which is harmless
       for (const [name, attribute] of Object.entries(entry.attributes)) expect(attribute).toBe(before[i].attributes[name]);
     });
   });

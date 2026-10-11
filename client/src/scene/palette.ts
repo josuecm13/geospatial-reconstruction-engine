@@ -199,6 +199,18 @@ export function restyle(root: THREE.Object3D): void {
   });
 }
 
+const exportLineMaterials = new WeakMap<THREE.LineBasicMaterial, THREE.MeshBasicMaterial>();
+
+/** The unlit material a line takes in the glTF export (a line primitive with `KHR_materials_unlit`): same colour and opacity, solid even if the line is dashed. Cached per source material. */
+export function exportLineMaterial(line: THREE.LineBasicMaterial): THREE.MeshBasicMaterial {
+  let material = exportLineMaterials.get(line);
+  if (!material) {
+    material = new THREE.MeshBasicMaterial({ color: line.color, transparent: line.transparent, opacity: line.opacity });
+    exportLineMaterials.set(line, material);
+  }
+  return material;
+}
+
 export const roadMaterial = (laneType: string) =>
   laneType === "wide" ? MATERIALS.roadWide : laneType === "narrow" ? MATERIALS.roadNarrow : MATERIALS.roadNormal;
 

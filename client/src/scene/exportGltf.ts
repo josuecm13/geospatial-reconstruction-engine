@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
+import { exportLineMaterial } from "./palette";
 import { themeById } from "./themes";
 import { FACADE_REPEAT_METRES, GROUND_TILE_METRES } from "./themes/textures";
 import type { ThemeId, TimeOfDay } from "./themes/types";
@@ -117,12 +118,8 @@ export async function exportWorld(world: THREE.Group, options: ExportOptions): P
       const material = line.material as THREE.LineBasicMaterial;
       if (mode === "line" && (object.name === "edges" || object.name === "road_outlines") && !Array.isArray(material)) {
         // A line primitive with an unlit material; a dashed line goes out solid.
-        const unlit = new THREE.MeshBasicMaterial({ color: material.color, transparent: material.transparent, opacity: material.opacity });
-        line.material = unlit;
-        undo.push(() => {
-          line.material = material;
-          unlit.dispose();
-        });
+        line.material = exportLineMaterial(material);
+        undo.push(() => (line.material = material));
       } else {
         // Edges, block outlines and the like are viewer effects; `onlyVisible` skips what is hidden.
         object.visible = false;
