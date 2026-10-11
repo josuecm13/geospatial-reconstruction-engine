@@ -8,7 +8,8 @@ import { RevealQueue } from "../scene/revealQueue";
 import { pointDelays } from "../scene/revealSchedule";
 import type { GeneratedFeature } from "../scene/generationStream";
 import type { Terrain } from "../scene/terrain";
-import { COLORS, MATERIALS, SCENE_BACKGROUND } from "../scene/palette";
+import { COLORS, MATERIALS, restyle, SCENE_BACKGROUND, setActiveTheme } from "../scene/palette";
+import { DEFAULT_THEME } from "../scene/themes";
 import { shadeGeometry } from "../scene/shading";
 import { createAutoRotate, ROTATE_SPEED } from "../scene/autoRotate";
 import { createCameraModes } from "../scene/cameraModes";
@@ -410,6 +411,8 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
       this.showMessage(EMPTY_HINT);
     },
     shown() {
+      setActiveTheme(DEFAULT_THEME); // the stored choice replaces the default in a later change
+      restyle(scene);
       resize();
       modes.setActive(true);
       pins.setActive(true);

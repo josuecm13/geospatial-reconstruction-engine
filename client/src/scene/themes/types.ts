@@ -1,0 +1,52 @@
+/** The scene's colour roles. Every theme gives each one; the names are the keys of Night clay's palette. */
+export interface ThemeColors {
+  ground: string;
+  green: string;
+  water: string;
+  forest: string;
+  farmland: string;
+  cemetery: string;
+  railway: string;
+  industrial: string;
+  roadNormal: string;
+  roadWide: string;
+  roadNarrow: string;
+  buildingMeasured: string;
+  buildingDefaulted: string;
+  buildingGenerated: string;
+  buildable: string;
+  blockOutline: string;
+  blockSelected: string;
+  blockReference: string;
+  zoneWater: string;
+  zoneSteep: string;
+  zoneLanduse: string;
+  zoneSetback: string;
+  gridCenter: string;
+  gridLine: string;
+  route: string;
+  origin: string;
+  destination: string;
+  pin: string;
+  waiting: string;
+  edge: string;
+}
+
+export const TIMES_OF_DAY = ["dawn", "midday", "golden-hour", "night"] as const;
+export type TimeOfDay = (typeof TIMES_OF_DAY)[number];
+
+export type ThemeId = "night-clay" | "light-clay" | "blueprint" | "realistic";
+
+export interface Theme {
+  id: ThemeId;
+  label: string;
+  colors: ThemeColors;
+  /** The sky gradient: straight up, at the horizon, and below it. */
+  sky: { zenith: string; horizon: string; below: string };
+  fog: { color: string; near: number; far: number } | null;
+  /** How materials are drawn: shade baked into vertex colours, lit by lights, or line work. */
+  mode: "baked" | "lit" | "line";
+  followsSun: boolean;
+  /** When building windows glow. */
+  windows: "always" | "night" | "never";
+}

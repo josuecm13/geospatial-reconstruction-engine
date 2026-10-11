@@ -3,7 +3,7 @@ import * as THREE from "three";
 /**
  * The scene's shading, computed here and baked into vertex colours, so the viewer and the glTF
  * export look the same: three.js lights aren't exported, and any glTF viewer would relight a lit
- * material its own way. Materials are unlit (`MeshBasicMaterial` with `vertexColors`).
+ * material its own way. Baked materials are unlit (`MeshBasicMaterial` with `vertexColors`).
  *
  *   shade(n) = AMBIENT + (1 - AMBIENT) * max(0, n . LIGHT_DIRECTION)
  *
@@ -31,12 +31,14 @@ export function shade(normal: THREE.Vector3): number {
 /**
  * Makes the faces flat-shaded: converts to non-indexed (each face needs its own vertices), computes
  * every triangle's normal from its positions (any `normal` attribute is not trusted), and writes the
- * `color` attribute. Returns the geometry; call it once the orientation is final.
+ * `color` attribute (the baked shade) and the `normal` attribute (the face's flat normal, which lit
+ * materials use; unlit meshes drop it on export). Returns the geometry; call it once the orientation is final.
  */
 export function shadeGeometry(geometry: THREE.BufferGeometry): THREE.BufferGeometry {
   const flat = geometry.index ? geometry.toNonIndexed() : geometry;
   const position = flat.getAttribute("position");
   const colors = new Float32Array(position.count * 3);
+  const normals = new Float32Array(position.count * 3);
   const [a, b, c, normal] = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
   for (let i = 0; i + 2 < position.count; i += 3) {
     a.fromBufferAttribute(position, i);
@@ -44,7 +46,9 @@ export function shadeGeometry(geometry: THREE.BufferGeometry): THREE.BufferGeome
     c.fromBufferAttribute(position, i + 2);
     normal.subVectors(b, a).cross(c.sub(a)).normalize(); // (b - a) x (c - a); a degenerate triangle gets zero, so AMBIENT
     colors.fill(shade(normal), i * 3, i * 3 + 9);
+    for (let k = 0; k < 3; k++) normals.set([normal.x, normal.y, normal.z], (i + k) * 3);
   }
   flat.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+  flat.setAttribute("normal", new THREE.BufferAttribute(normals, 3));
   return flat;
 }

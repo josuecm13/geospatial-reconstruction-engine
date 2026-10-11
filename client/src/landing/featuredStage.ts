@@ -4,7 +4,8 @@ import { prefersReducedMotion } from "../locations/flyTo";
 import { Animator } from "../scene/buildAnimation";
 import { buildWorld } from "../scene/buildWorld";
 import { overview } from "../scene/framing";
-import { SCENE_BACKGROUND } from "../scene/palette";
+import { restyle, SCENE_BACKGROUND, setActiveTheme } from "../scene/palette";
+import { DEFAULT_THEME } from "../scene/themes";
 import { changeBetween, FINAL_STEP, hasGeneratedContext, heroStep, layersFor, pickSlot, STORY_LAYERS, type StoryLayer } from "./storySteps";
 
 /** The turntable's speed, radians per second. */
@@ -57,8 +58,10 @@ export async function createFeaturedStage({ api, areaId, slots, onReady }: Featu
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(SCENE_BACKGROUND);
 
+    setActiveTheme(DEFAULT_THEME);
     world = buildWorld(data);
     scene.add(world);
+    restyle(scene);
     const view = overview(new THREE.Box3().setFromObject(world));
     const camera = new THREE.PerspectiveCamera(45, 1, 1, view.far);
     camera.position.copy(view.position);
