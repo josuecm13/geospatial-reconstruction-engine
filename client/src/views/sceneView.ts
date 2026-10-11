@@ -1,10 +1,12 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import type { BoundingBox, MapData } from "../api/types";
+import type { BoundingBox, MapData, Projection } from "../api/types";
 import { prefersReducedMotion } from "../locations/flyTo";
-import { Animator, RISE_SECONDS, riseDuration, staggerDelay } from "../scene/buildAnimation";
+import { Animator, staggerDelay } from "../scene/buildAnimation";
 import { buildWorld, DEFAULT_ROAD_MODE, generatedMeshes, LAYER_ORDER, setRoadMode } from "../scene/buildWorld";
-import { revealDelays, streamBatchDelay } from "../scene/revealRings";
+import { RevealQueue } from "../scene/revealQueue";
+import { pointDelays } from "../scene/revealSchedule";
+import type { GeneratedFeature } from "../scene/generationStream";
 import type { Terrain } from "../scene/terrain";
 import { COLORS, MATERIALS, SCENE_BACKGROUND } from "../scene/palette";
 import { shadeGeometry } from "../scene/shading";
@@ -87,15 +89,40 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
     credit.textContent = data?.elevation ? `${data.attribution} · ${data.elevation.attribution}` : "";
   };
 
-  // The generated buildings rise: as a job streams them in, and ring by ring from the centre when "Show generated" is ticked.
+  // The generated buildings rise block by block on an accelerating schedule (scene/revealSchedule.ts): as a job streams
+  // them in (the RevealQueue plays them on the schedule's clock) and, when "Show generated" is ticked, from the centre out.
   const animator = new Animator();
+  type Item = { feature: GeneratedFeature; projection: Projection };
+  const reveal = new RevealQueue<Item>();
   const generatedGroup = () => world?.getObjectByName("generated");
+  let rising = 0; // rises in flight
+  const idleWaiters: ((drained: boolean) => void)[] = [];
+  const skipReveal = Object.assign(document.createElement("button"), { className: "scene-skip", type: "button", textContent: "Skip animation", hidden: true });
+  container.appendChild(skipReveal);
+  const busy = () => rising > 0 || reveal.size > 0;
+  /** Shows Skip while a reveal plays; once it has drained, tells whoever waits (a completed job's reload). */
+  const settle = () => {
+    skipReveal.hidden = !busy();
+    if (!busy()) idleWaiters.splice(0).forEach((resolve) => resolve(true));
+  };
+  const track = (rise: Promise<void>) => {
+    rising++;
+    skipReveal.hidden = false;
+    void rise.then(() => {
+      rising--;
+      settle();
+    });
+  };
+  /** Drops what is waiting and finishes every rise in flight, so nothing is left at scale 0. `abandoned`: the world is gone, so waiters are told not to reload. */
+  const cancelReveal = (abandoned: boolean) => {
+    reveal.start();
+    if (abandoned) idleWaiters.splice(0).forEach((resolve) => resolve(false));
+    animator.reset();
+    settle();
+  };
   /** Meshes under the `generated` group go; geometries are released (materials are shared). */
-  /** When the running stream started (its `generation` event clears the group), to pace its batches. */
-  let streamStart = performance.now();
   const clearGenerated = () => {
-    streamStart = performance.now();
-    animator.reset(); // finishes any rise in flight, so no half-risen mesh is left
+    cancelReveal(false);
     const generated = generatedGroup();
     if (!generated) return;
     for (const child of [...generated.children]) {
@@ -103,37 +130,65 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
       child.traverse((object) => (object as THREE.Mesh).geometry?.dispose());
     }
   };
+  /** Builds and adds the meshes of one block's due features, rising together (instant under reduced motion). */
+  const spawn = (items: Item[], instant: boolean) => {
+    const generated = generatedGroup();
+    const terrain: Terrain | undefined = world?.userData.terrain;
+    if (!generated || !terrain || !items.length) return;
+    const present = new Set(generated.children.map((child) => child.name));
+    const fresh = items.filter(({ feature }) => !present.has(`generated:${feature.id}`));
+    const meshes = fresh.flatMap(({ feature, projection }) => generatedMeshes([feature], terrain, projection));
+    if (!meshes.length) return;
+    generated.add(...meshes);
+    generated.visible = true;
+    if (instant || prefersReducedMotion()) return;
+    track(animator.riseAt(meshes, meshes.map((_, i) => staggerDelay(i, meshes.length))));
+  };
+  const playReveal = (groups: { items: Item[] }[], instant = false) => {
+    for (const group of groups) spawn(group.items, instant);
+    settle();
+  };
+  skipReveal.addEventListener("click", () => {
+    playReveal(reveal.flush(), true);
+    animator.reset();
+    settle();
+  });
   const streamSink: GenerationSink = {
     clear: clearGenerated,
-    add(features, projection, blocksDone, blockCount) {
-      const generated = generatedGroup();
-      const terrain: Terrain | undefined = world?.userData.terrain;
-      if (!generated || !terrain) return;
-      const present = new Set(generated.children.map((child) => child.name));
-      const meshes = generatedMeshes(features.filter((feature) => !present.has(`generated:${feature.id}`)), terrain, projection);
-      if (!meshes.length) return;
-      generated.add(...meshes);
-      generated.visible = true;
-      if (prefersReducedMotion()) return;
-      // Spread the stream over about five seconds: this batch waits for its share, or not at all if the server is slower than that.
-      const offset = streamBatchDelay(blocksDone, blockCount, (performance.now() - streamStart) / 1000, riseDuration(meshes.length));
-      void animator.riseAt(meshes, meshes.map((_, i) => offset + staggerDelay(i, meshes.length)));
+    add(features, projection, _blocksDone, blockCount) {
+      if (!generatedGroup()) return;
+      reveal.expect(blockCount);
+      const byBlock = new Map<string, Item[]>();
+      for (const feature of features) byBlock.set(feature.properties.block_id, [...(byBlock.get(feature.properties.block_id) ?? []), { feature, projection }]);
+      if (prefersReducedMotion()) {
+        for (const items of byBlock.values()) spawn(items, true);
+        return;
+      }
+      // Each block waits for its slot on the schedule, or rises on arrival when the server is slower than that.
+      for (const [block, items] of byBlock) reveal.add(block, items);
+      skipReveal.hidden = !busy();
     },
+    whenIdle: () => (busy() ? new Promise<boolean>((resolve) => idleWaiters.push(resolve)) : Promise.resolve(true)),
   };
-  /** Ticked: the buildings rise ring by ring from the centre, over about five seconds. Unticked: they hide at once (a fade would need its own tween for little gain). Both instant under reduced motion. */
+  /** Ticked: the buildings rise block by block from the centre, over about five seconds. Unticked: they hide at once, cancelling a reveal in progress (a fade would need its own tween for little gain). Both instant under reduced motion. */
   const showGenerated = (shown: boolean, animate = false) => {
     const generated = generatedGroup();
     if (!generated) return;
-    animator.reset(); // a rise in flight is finished first, so re-ticking restarts cleanly
     generated.visible = shown;
-    if (!shown || !animate || prefersReducedMotion()) return;
+    if (shown && !animate) return; // a job streaming in, or a world just loaded: leave the rises in flight alone
+    cancelReveal(false); // finishes what is in flight, so re-ticking restarts cleanly
+    generated.visible = shown;
+    if (!shown || prefersReducedMotion()) return;
     const meshes = generated.children.filter((child): child is THREE.Mesh => (child as THREE.Mesh).isMesh);
-    const delays = revealDelays(meshes.map((mesh) => mesh.position), { x: centre.x, z: centre.z }, RISE_SECONDS);
-    void animator.riseAt(meshes, delays);
+    const points = meshes.map((mesh) => {
+      const at = new THREE.Box3().setFromObject(mesh).getCenter(new THREE.Vector3());
+      return { block: String((mesh.userData.properties as { block_id?: string } | undefined)?.block_id ?? mesh.name), x: at.x, z: at.z };
+    });
+    track(animator.riseAt(meshes, pointDelays(points, { x: centre.x, z: centre.z })));
   };
 
   const removeWorld = () => {
-    animator.reset();
+    cancelReveal(true);
     if (!world) return;
     scene.remove(world);
     // Materials are shared across worlds, so only geometries are released.
@@ -245,6 +300,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
     }
     modes.update(delta);
     animator.update(delta);
+    if (reveal.size) playReveal(reveal.update(delta));
     staged.update(delta);
     renderer.render(scene, camera);
     requestAnimationFrame(frame);

@@ -18,8 +18,10 @@ export interface GenerationDeps {
 export interface GenerationSink {
   /** Removes every generated building on show (the previous run's, or the streamed ones). */
   clear(): void;
-  /** Adds a batch, rising; a feature already on show is skipped. `blocksDone` of `blockCount` blocks are processed with this batch (0 when unknown), which paces the rise. */
+  /** Queues a batch to rise block by block on the reveal schedule; a feature already on show is skipped. `blockCount` blocks are expected (0 when unknown). */
   add(features: GeneratedFeature[], projection: Projection, blocksDone: number, blockCount: number): void;
+  /** Resolves when every streamed block has risen: `true`, or `false` if the world was replaced meanwhile (nothing to reload). */
+  whenIdle(): Promise<boolean>;
 }
 
 export interface GenerationControls {
@@ -120,7 +122,8 @@ export function createGenerationControls(
         },
       );
       say(null);
-      deps.reload(); // the new world arrives through `setWorld`, with the stored run's buildings
+      // The reveal is still playing: reloading now would rebuild the world and finish every pending rise at once.
+      if (await sink.whenIdle()) deps.reload(); // the new world arrives through `setWorld`, with the stored run's buildings
     } catch (error) {
       // The streamed buildings were provisional: remove them and load the stored run again.
       state = streamFailed();
