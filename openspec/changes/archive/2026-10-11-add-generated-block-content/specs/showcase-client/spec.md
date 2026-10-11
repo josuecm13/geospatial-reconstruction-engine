@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: The client SHALL generate or regenerate an area's blocks from the scene
-The scene view SHALL offer **Generate** when the open area has no run, and **Regenerate** when it has one, highlighted when the run is stale. Regenerate SHALL request a new seed chosen at random, and Generate SHALL request the server's default seed. While the job runs, the client SHALL show its progress from the area's event stream, and on completion it SHALL reload the map data.
+The scene view SHALL offer **Generate** when the open area has no run, and **Regenerate** when it has one, highlighted when the run is stale. Regenerate SHALL request a new seed chosen at random, and Generate SHALL request the server's default seed. While the job runs, the client SHALL show its progress from the area's event stream and SHALL show the generated buildings as they stream in, block by block from the area's centre, on an accelerating schedule: block *i* of *N* SHALL start rising at about `(T − rise) × √(i/N)` with T about 5 seconds, so a few blocks appear first and then more and more. A block whose buildings have not arrived by its slot SHALL rise when they arrive. The client SHALL offer **Skip animation** while the reveal plays. On completion it SHALL reload the map data once the reveal has finished, and on failure it SHALL remove the streamed buildings. Under reduced motion the buildings SHALL appear at once.
 
 #### Scenario: An area with no run
 - **WHEN** a user opens the scene of an area with no generation run
@@ -15,8 +15,12 @@ The scene view SHALL offer **Generate** when the open area has no run, and **Reg
 - **WHEN** a user chooses Regenerate
 - **THEN** the request carries a new random seed, progress is shown, and the map data reloads when the run completes
 
+#### Scenario: Watching a run stream in
+- **WHEN** a user generates an area whose run completes in about a second
+- **THEN** the blocks still fill in over about five seconds, a few first and then more and more, and the map data reloads only after the last block has risen
+
 ### Requirement: The client SHALL show or hide generated buildings
-The scene SHALL offer a Show generated toggle that is checked by default when the area has a run, and that shows or hides the generated buildings. The glTF export SHALL include generated buildings only while they are shown.
+The scene SHALL offer a Show generated toggle that is checked by default when the area has a run, and that shows or hides the generated buildings. Checking it SHALL replay the same accelerating block-by-block fill from the area's centre, instantly under reduced motion. The glTF export SHALL include generated buildings only while they are shown.
 
 #### Scenario: Hiding generated buildings
 - **WHEN** a user unchecks Show generated

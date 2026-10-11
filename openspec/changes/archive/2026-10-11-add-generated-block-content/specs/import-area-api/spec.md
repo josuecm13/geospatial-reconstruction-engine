@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: The API SHALL start a generation run in the background and stream its progress
-`POST /import-areas/{id}/generation` SHALL accept an optional body holding an integer seed. Without a body, the seed SHALL be the current run's seed when there is one, and otherwise 1. A started run SHALL answer `202` with the import area id and the URL of its event stream, and the stream SHALL emit one `generation` event carrying the block count, followed by `completed` carrying the run, or `failed`. The job SHALL replace the area's run in one transaction. The request SHALL be rejected with `404 import_area_not_found` for an unknown area, `409 import_area_not_ready` when the area is not completed, and `409 import_in_progress` when any job for the area is running, since imports, re-analyses and generation share one registry.
+`POST /import-areas/{id}/generation` SHALL accept an optional body holding an integer seed. Without a body, the seed SHALL be the current run's seed when there is one, and otherwise 1. A started run SHALL answer `202` with the import area id and the URL of its event stream, and the stream SHALL emit one `generation` event carrying the block count, then zero or more `generated` events, then `completed` carrying the run, or `failed`. Each `generated` event SHALL carry the local projection, a ring number, the number of eligible blocks processed so far, the block count, and the buildings generated in that ring of blocks, shaped exactly like map data's generated buildings. Rings SHALL be about 150 m wide around the area's centre, nearest first, and a ring SHALL be split across several events of at most 500 buildings each. A generated building's id SHALL be fixed when it is generated, so the streamed ids equal the stored ones. Streamed buildings SHALL be provisional until `completed`. The job SHALL replace the area's run in one transaction, and the order blocks are streamed in SHALL NOT change the generated buildings. The request SHALL be rejected with `404 import_area_not_found` for an unknown area, `409 import_area_not_ready` when the area is not completed, and `409 import_in_progress` when any job for the area is running, since imports, re-analyses and generation share one registry.
 
 #### Scenario: Generating with no body
 - **WHEN** a client posts to an area with a run seeded 7 and no body
@@ -10,6 +10,10 @@
 #### Scenario: Generating an area with no run
 - **WHEN** a client posts to an area that has no run and no body
 - **THEN** the new run uses seed 1
+
+#### Scenario: Streaming the generated buildings
+- **WHEN** a client follows the event stream of a generation run
+- **THEN** it receives `generation`, then `generated` events nearest ring first, each with at most 500 buildings, then `completed`, and the streamed building ids are exactly the ids in the area's map data afterwards
 
 #### Scenario: Generating while an import runs
 - **WHEN** a client posts while a re-analysis of the same area is running
