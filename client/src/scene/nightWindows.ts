@@ -59,28 +59,29 @@ float windowBand(float l, float a, float b, float w) {
 }
 // Mirrors wallCoords in wallGrid.ts: same tangent, same dot product, same roof cut-off.
 float windowGlow() {
+  // No early returns: fwidth must run in uniform control flow, so every mask is a float multiplied in at the end.
   vec3 n = normalize(vWinNormal);
-  if (abs(n.y) > 0.5) return 0.0;
-  vec2 nh = normalize(n.xz);
+  float wall = step(abs(n.y), 0.5);
+  vec2 nh = normalize(n.xz + vec2(1e-6));
   vec2 tangent = vec2(-nh.y, nh.x);
   float u = dot(vWinPos.xz, tangent);
   float v = vWinPos.y;
-  if (v < 0.5) return 0.0;
+  float aboveGround = step(0.5, v);
   vec2 cellPos = vec2(u / ${f(CELL_WIDTH)}, v / ${f(FLOOR_HEIGHT)});
+  vec2 fw = fwidth(cellPos);
+  float fwMax = max(fw.x, fw.y);
   vec2 cell = floor(cellPos);
   vec2 local = cellPos - cell;
   float plane = floor(dot(vWinPos.xz, nh) * 2.0);
   float density = ${f(density)};
-  vec2 fw = fwidth(cellPos);
-  float fwMax = max(fw.x, fw.y);
   float w = max(fwMax * 0.5, 0.0005);
-  float crisp = 0.0;
-  if (windowHash(cell, plane) < density) {
-    crisp = windowBand(local.x, ${f(WINDOW_RECT.x0)}, ${f(WINDOW_RECT.x1)}, w) * windowBand(local.y, ${f(WINDOW_RECT.y0)}, ${f(WINDOW_RECT.y1)}, w);
-  }
+  float lit = step(windowHash(cell, plane), density);
+  float crisp = lit * windowBand(local.x, ${f(WINDOW_RECT.x0)}, ${f(WINDOW_RECT.x1)}, w) * windowBand(local.y, ${f(WINDOW_RECT.y0)}, ${f(WINDOW_RECT.y1)}, w);
   // Far away a cell is under a pixel: show the average glow (density x window area x brightness) instead of a flickering rectangle.
-  float average = density * ${f((WINDOW_RECT.x1 - WINDOW_RECT.x0) * (WINDOW_RECT.y1 - WINDOW_RECT.y0))} * 2.0;
-  return mix(crisp, average, smoothstep(0.3, 1.0, fwMax));
+  // A coarse hash over 4x4-cell blocks varies it between 0.4x and 1.6x, so a far city reads as a soft speckle.
+  float block = 0.4 + 1.2 * windowHash(floor(cell / 4.0), plane + 101.0);
+  float average = density * ${f((WINDOW_RECT.x1 - WINDOW_RECT.x0) * (WINDOW_RECT.y1 - WINDOW_RECT.y0))} * 2.0 * block;
+  return wall * aboveGround * mix(crisp, average, smoothstep(0.3, 1.0, fwMax));
 }
 `;
 
