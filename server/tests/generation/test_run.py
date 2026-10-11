@@ -344,7 +344,8 @@ def test_rings_are_reported_nearest_first_and_blocks_done_reaches_the_block_coun
 
     run, rings = _stream(db_session, area)
 
-    assert [(ring, done, total) for ring, done, total, _ in rings] == [(0, 1, 3), (2, 2, 3), (4, 3, 3)]
+    # Rings are numbered in emission order, counting only rings that hold blocks (as the import's building rings are).
+    assert [(ring, done, total) for ring, done, total, _ in rings] == [(0, 1, 3), (1, 2, 3), (2, 3, 3)]
     assert [{b.block_id for b in buildings} for *_, buildings in rings] == [{blocks[2]}, {blocks[1]}, {blocks[0]}]
     assert sum(len(buildings) for *_, buildings in rings) == run.building_count > 0
 
