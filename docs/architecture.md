@@ -251,8 +251,11 @@ colours: `COLORS`, `SCENE_BACKGROUND` and `--scene-background` are exported from
   Night clay at midday on any failure (`landing/landingLook.ts`).
 - **Frame time.** `?fps` adds a readout to the scene (`scene/fpsReadout.ts`) with the frame rate, p95, draw
   calls and triangles, the theme, and whether the shadow map redrew.
-- **Export.** The glTF export does not yet record the active theme or time of day; see the showcase-client
-  spec for its contract.
+- **Export.** The glTF root extras carry `theme` and `time_of_day`. Night clay exports unlit with `COLOR_0`;
+  lit themes (Light clay, Realistic) export metallic-roughness with normals and no `COLOR_0`. Realistic writes
+  its textures with UVs baked from the wall and ground coordinates (roofs use the facade map). Blueprint writes
+  building edges and road outlines as line primitives (dashes become solid). Night windows, the sky and shadows
+  are not exported.
 
 ## OSM translation
 

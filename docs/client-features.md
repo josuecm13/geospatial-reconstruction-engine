@@ -175,10 +175,11 @@ Ideas, not commitments. Once one is chosen, it becomes an issue in the milestone
 ### 3D and export
 - **3D mode**: extruded footprints (M8.1 heights, with a clear placeholder when height is
   unknown), roads at real width, and blocks as terrain.
-- **Shading** (#129): the scene has no lights. `scene/shading.ts` computes each face's shade from its
-  normal and a fixed light direction (`AMBIENT + (1 - AMBIENT) * max(0, n . LIGHT_DIRECTION)`), bakes
-  it into vertex colours, and the materials in `scene/palette.ts` (the only source of scene colours)
-  are unlit, so the glTF export (`KHR_materials_unlit`, `COLOR_0`) looks the same as the viewer.
+- **Shading** (#129): `scene/shading.ts` computes each face's shade from its normal and a fixed light
+  direction (`AMBIENT + (1 - AMBIENT) * max(0, n . LIGHT_DIRECTION)`) and bakes it into vertex colours.
+  In Night clay (and Blueprint's unlit fills) the materials in `scene/palette.ts` are unlit, so the glTF
+  export (`KHR_materials_unlit`, `COLOR_0`) matches the viewer; sun-following themes (Light clay, Realistic)
+  are lit by the sun and sky light instead (#141).
 - **Dark theme** (#133): the interface, the 3D scene (night clay, pale edge lines on buildings that the glTF export leaves out) and the 2D map (OpenFreeMap's dark basemap) are dark; `style.css` takes every colour from its `:root` tokens (a test enforces it and 4.5:1 text contrast), and `views/mapColors.ts` holds the 2D overlay colours.
 - **Look and motion** (#133): Inter for type, frosted-glass overlays and a header that frosts as the page scrolls.
   Landing and locations reveal their sections and cards as they scroll into view (CSS scroll-driven

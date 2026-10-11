@@ -63,8 +63,8 @@ The decisions below were settled with the owner on #141. See proposal.md, Why.
   a distant city reads as a soft speckled glow rather than flicker. No per-frame CPU work, geometry or
   textures. A bloom pass was rejected for its full-screen cost.
 - **Realistic's textures are drawn in the browser.** Facade (a window grid), roof, asphalt, grass, forest and
-  water are drawn once on small canvases (64² to 128²) from a seeded generator, so every run draws the same
-  pixels. They use nearest filtering for crisp pixels (nearest mipmaps when minified, so distance doesn't
+  water are drawn once as 64×64 RGBA byte arrays wrapped as `DataTexture`s (no canvas, so they test in jsdom),
+  from a seeded generator, so every run draws the same pixels. They use nearest filtering for crisp pixels (nearest mipmaps when minified, so distance doesn't
   shimmer). Total texture memory is capped at 1 MB, and a test asserts it. Walls are textured in the same
   wall coordinates as the night windows, and ground layers by world x and z over a tile size, so no geometry
   carries new UVs while viewing.
