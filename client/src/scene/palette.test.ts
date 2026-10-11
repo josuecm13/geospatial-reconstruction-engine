@@ -204,6 +204,25 @@ describe("themes and restyle", () => {
   });
 });
 
+describe("terrain depth", () => {
+  const OVERLAYS = ["green", "water", "forest", "farmland", "cemetery", "railway", "industrial", "roadNormal", "roadWide", "roadNarrow", "buildable", "zoneWater", "zoneSteep", "zoneLanduse", "zoneSetback"] as const;
+
+  it("the ground writes depth and the layers on it write none but pull toward the camera, in every theme", () => {
+    for (const theme of THEMES) {
+      const set = materialsFor(theme);
+      expect(set.ground.depthWrite, theme.id).toBe(true);
+      expect(set.ground.polygonOffset, theme.id).toBe(false);
+      for (const key of OVERLAYS) {
+        expect(set[key].depthWrite, `${theme.id} ${key}`).toBe(false);
+        expect(set[key].depthTest, `${theme.id} ${key}`).toBe(true);
+        expect(set[key].polygonOffset, `${theme.id} ${key}`).toBe(true);
+        expect(set[key].polygonOffsetFactor, `${theme.id} ${key}`).toBeLessThan(0);
+        expect(set[key].polygonOffsetUnits, `${theme.id} ${key}`).toBeLessThan(0);
+      }
+    }
+  });
+});
+
 describe("material modes", () => {
   const BUILDINGS = ["buildingMeasured", "buildingDefaulted", "buildingGenerated"] as const;
   const GROUND_LAYERS = ["ground", "green", "water", "forest", "farmland", "cemetery", "railway", "industrial", "roadNormal", "roadWide", "roadNarrow", "buildable", "zoneWater"] as const;
@@ -232,7 +251,7 @@ describe("material modes", () => {
     for (const key of [...BUILDINGS, ...GROUND_LAYERS]) {
       expect([lit[key].transparent, lit[key].opacity, lit[key].depthWrite, lit[key].side], key).toEqual([baked[key].transparent, baked[key].opacity, baked[key].depthWrite, baked[key].side]);
     }
-    expect(lit.ground.depthWrite).toBe(false);
+    expect(lit.ground.depthWrite).toBe(true);
     expect(lit.buildingMeasured.depthWrite).toBe(true);
     expect(lit.zoneWater.transparent).toBe(true);
   });

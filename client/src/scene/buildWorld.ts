@@ -23,7 +23,7 @@ const ROAD_OUTLINE_LIFT = 0.1;
 /** How far apart a draped outline's vertices are when the world has no terrain (a flat line needs none in between). */
 const FLAT_OUTLINE_STEP = 50;
 
-/** Draw order of the ground-level layers, lowest first. They write no depth (palette.ts), so this order alone decides what shows on top. */
+/** Draw order of the ground-level layers, lowest first. Only the ground writes depth (palette.ts); the layers on it write none and depth-test with a polygon offset, so this order decides which of them shows on top of which. */
 export const LAYER_ORDER = { ground: -50, green: -40, water: -39, roadNarrow: -30, roadNormal: -29, roadWide: -28, blocks: -20, zones: -19 } as const;
 
 /** The ground plane over the given local extent. Shared by buildWorld and the staged build. */

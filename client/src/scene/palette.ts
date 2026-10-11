@@ -85,18 +85,27 @@ const tintToward = (color: string, base: string): THREE.Color => {
 /** Blueprint's building fills: unlit, faint, and they write depth. */
 const blueprintFill = (color: string): Surface => new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.16, depthWrite: true });
 
+type PolygonOffset = Pick<THREE.MaterialParameters, "polygonOffset" | "polygonOffsetFactor" | "polygonOffsetUnits">;
+const DECAL_OFFSET: PolygonOffset = { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 };
+/** Roads follow stored smoothed heights, which can dip a little under the terrain mesh between grid points, so they get a stronger pull. */
+const ROAD_OFFSET: PolygonOffset = { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -8 };
+
 const buildMaterials = (theme: Theme) => {
   const { colors } = theme;
   const line = theme.mode === "line";
   const surface = theme.mode === "lit" ? lit : flat;
-  /** Ground-level layers write no depth: their draw order (LAYER_ORDER in buildWorld.ts) decides what shows on top. */
-  const decal = (color: string, extra: Extra = {}) => surface(color, { depthWrite: false, ...extra });
+  /**
+   * Layers drawn on the ground write no depth: their draw order (LAYER_ORDER in buildWorld.ts) decides which shows on top of
+   * which. They still depth-test, and a negative polygon offset pulls them toward the camera so they win against the ground
+   * surface they lie on (even where terrain slopes) while terrain in front of them still hides them.
+   */
+  const decal = (color: string, extra: Extra = {}, offset: PolygonOffset = DECAL_OFFSET) => surface(color, { depthWrite: false, ...offset, ...extra });
   // Realistic: one texture set per theme, built here so it is cached with the materials.
   const textures = theme.textures ? createRealisticTextures(theme.textures.colors) : undefined;
   /** A textured ground layer: the texture over world x and z, tinted so the layer renders as its palette colour. */
-  const ground = (color: string, texture: keyof RealisticTextures | undefined, tile: number) => {
-    if (!textures || !theme.textures || !texture) return decal(color);
-    const material = decal("#ffffff", { map: textures[texture] });
+  const ground = (color: string, texture: keyof RealisticTextures | undefined, tile: number, offset: PolygonOffset = DECAL_OFFSET) => {
+    if (!textures || !theme.textures || !texture) return decal(color, {}, offset);
+    const material = decal("#ffffff", { map: textures[texture] }, offset);
     material.color.copy(tintToward(color, theme.textures.colors[texture]));
     composePatches(material, groundTexturePatch(tile));
     return material;
@@ -113,8 +122,10 @@ const buildMaterials = (theme: Theme) => {
     if (theme.windows !== "never") patchWindows(material, { generated });
     return material;
   };
+  // The ground is the one layer that writes depth, so terrain hides what is behind and below it. It draws first (LAYER_ORDER.ground).
+  const groundSurface = surface(colors.ground, { depthWrite: true });
   return {
-    ground: line ? withGrid(decal(colors.ground), colors) : decal(colors.ground),
+    ground: line ? withGrid(groundSurface, colors) : groundSurface,
     green: ground(colors.green, "grass", GROUND_TILE_METRES.grass),
     water: ground(colors.water, "water", GROUND_TILE_METRES.water),
     forest: ground(colors.forest, "forest", GROUND_TILE_METRES.forest),
@@ -122,9 +133,9 @@ const buildMaterials = (theme: Theme) => {
     cemetery: decal(colors.cemetery),
     railway: decal(colors.railway),
     industrial: decal(colors.industrial),
-    roadNormal: ground(colors.roadNormal, "asphalt", GROUND_TILE_METRES.asphalt),
-    roadWide: ground(colors.roadWide, "asphalt", GROUND_TILE_METRES.asphalt),
-    roadNarrow: ground(colors.roadNarrow, "asphalt", GROUND_TILE_METRES.asphalt),
+    roadNormal: ground(colors.roadNormal, "asphalt", GROUND_TILE_METRES.asphalt, ROAD_OFFSET),
+    roadWide: ground(colors.roadWide, "asphalt", GROUND_TILE_METRES.asphalt, ROAD_OFFSET),
+    roadNarrow: ground(colors.roadNarrow, "asphalt", GROUND_TILE_METRES.asphalt, ROAD_OFFSET),
     buildingMeasured: building(colors.buildingMeasured, false, "measured"),
     buildingDefaulted: building(colors.buildingDefaulted, false, "defaulted"),
     buildingGenerated: building(colors.buildingGenerated, true, "generated"),

@@ -112,8 +112,9 @@ describe("buildWorld", () => {
     expect(Math.max(...sequence)).toBeLessThan(0);
   });
 
-  it("gives the flat materials no depth write, and the building materials one", () => {
-    for (const key of ["ground", "green", "water", "roadNormal", "roadWide", "roadNarrow", "buildable"] as const) {
+  it("gives the ground and the building materials a depth write, and the layers on the ground none", () => {
+    expect(MATERIALS.ground.depthWrite).toBe(true);
+    for (const key of ["green", "water", "roadNormal", "roadWide", "roadNarrow", "buildable"] as const) {
       expect(MATERIALS[key].depthWrite, key).toBe(false);
     }
     expect(MATERIALS.buildingMeasured.depthWrite).toBe(true);
