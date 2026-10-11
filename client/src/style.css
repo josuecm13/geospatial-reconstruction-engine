@@ -747,3 +747,20 @@ main > .page.landing { padding: var(--header-height) 0 0; background: var(--bg);
   }
   .scene-building { animation: scene-building-pulse 1.4s ease-in-out infinite; }
 }
+
+/* The `?fps` dev readout over the scene. */
+.scene-fps {
+  position: fixed;
+  right: 8px;
+  bottom: 8px;
+  z-index: 20;
+  margin: 0;
+  padding: 6px 8px;
+  font: 11px/1.4 var(--font-mono);
+  color: var(--text);
+  background: color-mix(in oklch, var(--surface-1) 85%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  pointer-events: none;
+  white-space: pre;
+}

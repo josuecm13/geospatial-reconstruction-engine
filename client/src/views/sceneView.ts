@@ -28,6 +28,7 @@ import type { SceneTarget } from "../scene/sceneLoader";
 import { bboxMeters, createStagedScene, type StagedHandle } from "../scene/stagedScene";
 import { createZoneLegend } from "../scene/zoneLegend";
 import { loadThemeChoice, saveThemeChoice } from "../scene/themeChoice";
+import { createFpsReadout } from "../scene/fpsReadout";
 import { createThemeControls } from "../scene/themeControls";
 import type { ApiClient } from "../api/client";
 
@@ -332,6 +333,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
   actions.appendChild(rotateButton);
   const staged = createStagedScene(scene, container);
 
+  const fpsReadout = createFpsReadout(container, renderer, { theme: () => theme.id, shadowRedraws: () => atmosphere.shadowRedraws() });
   let running = false;
   const resize = () => {
     const { clientWidth, clientHeight } = container;
@@ -345,6 +347,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
   const frame = () => {
     if (!running) return;
     const delta = clock.getDelta();
+    fpsReadout?.frame(delta * 1000);
     rotateButton.disabled = modes.mode !== "fly";
     const context = { fly: modes.mode === "fly", world: !!world, building };
     const turning = rotate.update(delta, context);
@@ -502,6 +505,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
       pins.dispose();
       blockSelection?.dispose();
       observer.disconnect();
+      fpsReadout?.dispose();
       atmosphere.dispose();
       modes.dispose();
       routes?.dispose();

@@ -34,6 +34,8 @@ export interface Atmosphere {
   night(): number;
   /** Marks the shadow map out of date (a world was loaded, a mesh added, the theme changed). */
   invalidateShadows(): void;
+  /** How many times the shadow map has been asked to redraw since creation (the `?fps` readout watches it). */
+  shadowRedraws(): number;
   dispose(): void;
 }
 
@@ -66,6 +68,7 @@ export function createAtmosphere(scene: THREE.Scene, renderer: THREE.WebGLRender
   let progress = 1; // 1: not in transition
   let fog: THREE.Fog | null = null;
   let dirty = true;
+  let redraws = 0;
   let lastSun: Vec3 | undefined;
   let lastCentre: Vec3 | undefined;
   let lastHalfSize = 0;
@@ -167,10 +170,12 @@ export function createAtmosphere(scene: THREE.Scene, renderer: THREE.WebGLRender
       }
       if (moved || dirty || buildAnimating) {
         sun.shadow.needsUpdate = true;
+        redraws++;
         dirty = false;
       }
     },
     night: () => current?.lighting.night ?? 0,
+    shadowRedraws: () => redraws,
     invalidateShadows() {
       dirty = true;
     },
