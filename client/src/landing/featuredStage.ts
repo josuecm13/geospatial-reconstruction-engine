@@ -5,7 +5,7 @@ import { Animator } from "../scene/buildAnimation";
 import { buildWorld } from "../scene/buildWorld";
 import { overview } from "../scene/framing";
 import { SCENE_BACKGROUND } from "../scene/palette";
-import { changeBetween, FINAL_STEP, layersFor, pickSlot, STORY_LAYERS, type StoryLayer } from "./storySteps";
+import { changeBetween, FINAL_STEP, hasGeneratedContext, heroStep, layersFor, pickSlot, STORY_LAYERS, type StoryLayer } from "./storySteps";
 
 /** The turntable's speed, radians per second. */
 const TURN_SPEED = 0.05;
@@ -30,7 +30,7 @@ export interface FeaturedStageOptions {
 
 /**
  * The landing page's 3D stage: one WebGL renderer for the whole page, turning slowly over the featured
- * place. Its canvas lives in whichever slot is more visible; the hero shows every layer, the story slot
+ * place. Its canvas lives in whichever slot is more visible; the hero shows the finished place (with the generated layer when it has one), the story slot
  * the layers up to the active step. Throws when WebGL is unavailable, and rejects when the map data
  * can't be loaded; the caller keeps its 2D preview then.
  */
@@ -72,6 +72,7 @@ export async function createFeaturedStage({ api, areaId, slots, onReady }: Featu
     /** The step whose layers are on screen now, so a change can be animated from it. */
     let shown: number | null = null;
     let step = FINAL_STEP;
+    const hero = heroStep(hasGeneratedContext(data));
     let slot: StageSlot | null = null;
 
     const apply = (to: number, animate: boolean) => {
@@ -87,7 +88,7 @@ export async function createFeaturedStage({ api, areaId, slots, onReady }: Featu
           const object = group(layer);
           object.visible = true;
           if (reduced) continue;
-          if (layer === "buildings") void animator.rise(object.children as THREE.Mesh[]);
+          if (layer === "buildings" || layer === "generated") void animator.rise(object.children as THREE.Mesh[]);
           else void animator.fadeIn([object]);
         }
       }
@@ -111,7 +112,7 @@ export async function createFeaturedStage({ api, areaId, slots, onReady }: Featu
       slots[next].appendChild(renderer.domElement);
       fit();
       // Moving to a slot restarts its picture without animation: the hero is whole, the story is at its step.
-      apply(next === "hero" ? FINAL_STEP : step, false);
+      apply(next === "hero" ? hero : step, false);
     };
 
     const ratios: Record<StageSlot, number> = { hero: 0, story: 0 };
