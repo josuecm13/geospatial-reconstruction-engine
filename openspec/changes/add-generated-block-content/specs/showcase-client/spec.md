@@ -86,11 +86,22 @@ The client SHALL offer a **Set point** tool, with the shortcut `P`, and double-c
 - **THEN** the pin is removed and the view returns to the centre
 
 ### Requirement: The client SHALL feature a place on the landing page
-Each location card for a completed area SHALL offer **Show on landing**, which sets the featured place. The featured card SHALL show a badge. The landing page SHALL choose its featured place by the order the featured-place setting, the build configuration, and the most recent import.
+Each location card for a completed area SHALL offer **Show on landing**, which sets the featured place. The featured card SHALL show a badge. The landing page SHALL choose its featured place from the featured-place setting first, then the build configuration, then the most recent import.
 
 #### Scenario: Setting the featured place
 - **WHEN** a user chooses Show on landing on a completed area's card
 - **THEN** that card shows the featured badge and the landing page features that area
+
+### Requirement: The landing journey SHALL end with the generated context
+The landing page's step-by-step build of the featured place SHALL end with a **Generated context** step, after the buildings step, in which the generated buildings rise in their own colour on top of everything shown before. The hero SHALL show the finished place including the generated layer when the featured place has a generation run. When it has none, the step SHALL still appear, raise nothing, and say the place hasn't been generated yet, linking to it, and the hero SHALL show the place without a generated layer.
+
+#### Scenario: A featured place with a generation run
+- **WHEN** a user scrolls from the buildings step to the generated-context step
+- **THEN** only the generated buildings rise, in their own colour, and the hero shows the place with them
+
+#### Scenario: A featured place without a run
+- **WHEN** the featured place has never been generated
+- **THEN** the generated-context step raises nothing and says the place hasn't been generated yet, with a link to open it
 
 ## MODIFIED Requirements
 
