@@ -21,8 +21,9 @@ milestone's decisions live in its archived OpenSpec change's `design.md`.
 | 8.1 | Building attributes from source | complete | #22 · #73 · [`add-building-attributes-from-source`](openspec/changes/archive/2026-09-30-add-building-attributes-from-source/) |
 | 9 | Live import and the showcase client | complete | #27 · #99, #120 · [`add-live-import-and-showcase-client`](openspec/changes/archive/2026-10-03-add-live-import-and-showcase-client/) |
 | 10 | Terrain elevation | complete | #105 · #138 · [`add-terrain-elevation`](openspec/changes/archive/2026-10-10-add-terrain-elevation/) |
-| 11 | Generated block content | next | #23 |
-| 12 | Renderable asset semantics | planned | #24 |
+| 11 | Generated block content | complete | #23 · #140 · [`add-generated-block-content`](openspec/changes/archive/2026-10-11-add-generated-block-content/) |
+| 12 | Scene themes and time of day | next | #141 |
+| 13 | Renderable asset semantics | planned | #24 |
 
 When a milestone completes, set its status here and add its PRs and archived change to its row. Its
 completion note (what shipped, verification, decisions, what was deferred) goes on its tracking issue

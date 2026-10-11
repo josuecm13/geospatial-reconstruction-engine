@@ -136,8 +136,8 @@ the same stored values. The decisions below are recorded for Milestone 10 (#105,
 Milestone 11 (#23) fills blocks with generated buildings. The generated buildings are a third layer, apart
 from the observed one and from terrain: they live in their own tables (`generated_buildings` and
 friends, see `docs/schema.md`), and generation reads the observed tables but never writes to one. The
-thresholds below are the contract's (`docs/plans/milestone-11/00-decisions-and-contract.md`, until it is
-deleted at close-out; the numbers are named constants in `app/domain/generation.py`).
+thresholds below are named constants in `app/domain/generation.py`, and the decisions behind them are in
+the archived change's `design.md` (`openspec/changes/archive/2026-10-11-add-generated-block-content/`).
 
 - **Layering.** `app/domain/generation.py` is pure: eligibility, fingerprint maths, matching, seeded
   sampling, and the stored value types. `app/generation/` does the geometry in local metres with
