@@ -47,6 +47,7 @@ class GenerationRepository:
         buildings, zones and fingerprints go with it through the cascades) and the new one inserted."""
         self.delete(run.import_area_id)
         model = GenerationRunModel(
+            id=run.id,
             import_area_id=run.import_area_id,
             seed=run.seed,
             algorithm_version=run.algorithm_version,
@@ -61,6 +62,7 @@ class GenerationRepository:
 
         building_models = [
             GeneratedBuildingModel(
+                id=building.id,
                 run_id=model.id,
                 block_id=building.block_id,
                 geom=polygon_to_geom(building.geom),

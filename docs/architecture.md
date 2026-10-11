@@ -143,6 +143,16 @@ deleted at close-out; the numbers are named constants in `app/domain/generation.
   sampling, and the stored value types. `app/generation/` does the geometry in local metres with
   shapely (`suitability.py`, `fingerprint.py`, `generator.py`) and `run.py` ties it to the database.
   `GenerationService.generate(area, seed)` does not commit; the caller (a background job) does.
+- **Streaming.** `generate` takes an optional `on_ring` callback and generates eligible blocks in rings
+  of 150 m around the area's bbox centre, nearest first (`app/domain/rings.py`), calling it after each
+  ring. Each block has its own `random.Random(f"{seed}:{block_id}")` and calibration is computed before
+  the loop, so the order changes no footprint. Each building's id is assigned at generation time as
+  `uuid5(run_id, f"{block_id}:{index}")` (the run id is chosen up front) and stored under it. The job
+  emits `generation`, then `generated` events `{projection, ring, blocks_done, block_count, buildings}`
+  (`buildings` mapped like map-data's `generated_buildings`; a ring over 500 buildings is split over
+  several events with the same `ring`), then `completed` or `failed`. Streamed buildings are provisional:
+  they are stored only when the run is, in one transaction at the end, and on `failed` the previous run
+  stays and the client discards what it streamed.
 - **Eligibility.** A block is built on only when it is whole and has room: not clipped, not a median,
   and a buildable area of at least 30 m², checked in that order. Only an area's own blocks are
   generated on; composed inner areas' blocks belong to their own areas' runs.

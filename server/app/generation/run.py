@@ -17,6 +17,7 @@ from shapely.validation import make_valid
 from sqlalchemy.orm import Session
 
 from app.domain.block import Block
+from app.domain.bounding_box import Coordinate
 from app.domain.building import Building
 from app.domain.covered_areas import compose_by_source_id
 from app.domain.enums import AreaFeatureKind
@@ -60,6 +61,7 @@ from app.domain.generation import (
 )
 from app.domain.generation import stale_reasons as domain_stale_reasons
 from app.domain.import_area import ImportArea
+from app.domain.rings import mean_vertex, ring_batches
 from app.domain.road_graph import RoadSegment
 from app.domain.local_projection import LocalProjection, local_projection_for
 from app.generation.fingerprint import measure_block
@@ -75,6 +77,12 @@ from app.persistence.repositories.import_area import ImportAreaRepository
 from app.persistence.repositories.road_graph import RoadSegmentRepository
 
 logger = logging.getLogger(__name__)
+
+RING_WIDTH_METERS = 150.0
+
+# Called after each ring of blocks is generated: (ring, blocks_done, block_count, that ring's buildings,
+# each with its final id). Nothing it is given is stored until `generate` returns.
+RingCallback = Callable[[int, int, int, list[GeneratedBuilding]], None]
 
 
 
@@ -101,11 +109,22 @@ class GenerationService:
         self.runs = GenerationRepository(session)
 
     def generate(
-        self, area: ImportArea, seed: int, progress: Callable[[int], None] | None = None
+        self,
+        area: ImportArea,
+        seed: int,
+        progress: Callable[[int], None] | None = None,
+        on_ring: RingCallback | None = None,
     ) -> GenerationRun:
         """Replaces the area's run with a new one for `seed`. The same seed over the same data gives
         the same buildings. `progress` is called once with the number of eligible blocks, before the
-        heavy work starts."""
+        heavy work starts.
+
+        Blocks are generated in rings of 150 m around the area's centre, nearest first, and `on_ring`
+        is called after each with that ring's buildings. Each block has its own seeded generator, so
+        the order changes nothing about the footprints. Every building gets its id here,
+        `uuid5(run_id, "<block_id>:<index>")`, and is stored under it, so what `on_ring` saw is what is
+        read back. Storage still happens once, at the end: what `on_ring` saw is provisional until then."""
+        run_id = uuid.uuid4()
         projection = local_projection_for(area.bbox.ring())
         owner_ids = [area.id, *(inner.id for inner in ImportAreaRepository(self.session).completed_areas_covered_by(area.bbox, exclude_id=area.id))]
 
@@ -188,48 +207,68 @@ class GenerationService:
         zones: list[GenerationZone] = []
         assignments: dict[str, dict] = {}
         shortfalls: list[str] = []
-        for block, fingerprint, reference_id, source, factor in results:
-            suit = suitabilities[block.id]
-            outcome = generate_block(
-                block,
-                suitability=suit,
-                fingerprint=fingerprint,
-                reference_block_id=reference_id,
-                count_source=source,
-                feedback=feedback.get(block.id),
-                rng=random.Random(f"{seed}:{block.id}"),
-                grid=grid,
-                real_footprints=footprints.around(blocks_local[block.id]),
-                projection=projection,
-            )
-            for footprint in outcome.footprints:
-                new_buildings.append(
-                    GeneratedBuilding(
-                        id=None,
-                        run_id=None,
-                        block_id=block.id,
-                        geom=footprint.geom,
-                        height_meters=footprint.height_meters,
-                        levels=footprint.levels,
-                        base_elevation_meters=footprint.base_elevation_meters,
-                        style=footprint.style,
-                        reference_block_id=footprint.reference_block_id,
-                        count_source=footprint.count_source,
-                    )
+        bbox = area.bbox
+        centre = Coordinate(
+            latitude=(bbox.min_corner.latitude + bbox.max_corner.latitude) / 2,
+            longitude=(bbox.min_corner.longitude + bbox.max_corner.longitude) / 2,
+        )
+        ordered = ring_batches(
+            results,
+            centre,
+            lambda result: mean_vertex(result[0].boundary),
+            ring_width_meters=RING_WIDTH_METERS,
+            tie_break=lambda result: str(result[0].id),
+        )
+        blocks_done = 0
+        for ring, batch in enumerate(ordered):
+            ring_buildings: list[GeneratedBuilding] = []
+            for block, fingerprint, reference_id, source, factor in batch:
+                suit = suitabilities[block.id]
+                outcome = generate_block(
+                    block,
+                    suitability=suit,
+                    fingerprint=fingerprint,
+                    reference_block_id=reference_id,
+                    count_source=source,
+                    feedback=feedback.get(block.id),
+                    rng=random.Random(f"{seed}:{block.id}"),
+                    grid=grid,
+                    real_footprints=footprints.around(blocks_local[block.id]),
+                    projection=projection,
                 )
-            for reason, shape in outcome.suitability.zones:
-                parts = tuple(polygon_from_local(projection, polygon) for polygon in solid_polygons(shape))
-                if parts:
-                    zones.append(GenerationZone(id=None, run_id=None, block_id=block.id, reason=reason, geom=parts))
-            assignment = BlockAssignment(suit.style, reference_id, outcome.lot_count, factor)
-            assignments[str(block.id)] = {
-                "style": assignment.style.value,
-                "reference_block_id": str(reference_id) if reference_id else None,
-                "lot_count": assignment.lot_count,
-                "calibration_ratio": factor,
-            }
-            if outcome.shortfall > 0:
-                shortfalls.append(str(block.id))
+                for index, footprint in enumerate(outcome.footprints):
+                    ring_buildings.append(
+                        GeneratedBuilding(
+                            id=uuid.uuid5(run_id, f"{block.id}:{index}"),
+                            run_id=run_id,
+                            block_id=block.id,
+                            geom=footprint.geom,
+                            height_meters=footprint.height_meters,
+                            levels=footprint.levels,
+                            base_elevation_meters=footprint.base_elevation_meters,
+                            style=footprint.style,
+                            reference_block_id=footprint.reference_block_id,
+                            count_source=footprint.count_source,
+                            import_area_id=area.id,
+                        )
+                    )
+                for reason, shape in outcome.suitability.zones:
+                    parts = tuple(polygon_from_local(projection, polygon) for polygon in solid_polygons(shape))
+                    if parts:
+                        zones.append(GenerationZone(id=None, run_id=None, block_id=block.id, reason=reason, geom=parts))
+                assignment = BlockAssignment(suit.style, reference_id, outcome.lot_count, factor)
+                assignments[str(block.id)] = {
+                    "style": assignment.style.value,
+                    "reference_block_id": str(reference_id) if reference_id else None,
+                    "lot_count": assignment.lot_count,
+                    "calibration_ratio": factor,
+                }
+                if outcome.shortfall > 0:
+                    shortfalls.append(str(block.id))
+            new_buildings.extend(ring_buildings)
+            blocks_done += len(batch)
+            if on_ring is not None:
+                on_ring(ring, blocks_done, len(eligible), ring_buildings)
 
         blocks_with_buildings = len({building.block_id for building in new_buildings})
         calibration_ratio = round(sum(calibrations) / len(calibrations), 4) if calibrations else None
@@ -237,7 +276,7 @@ class GenerationService:
             "algorithm_version": ALGORITHM_VERSION,
             "eligible_block_count": len(eligible),
             "calibration_ratio": calibration_ratio,
-            "feedback_shortfall_block_ids": shortfalls,
+            "feedback_shortfall_block_ids": sorted(shortfalls),
             "thresholds": {
                 "min_buildable_square_meters": MIN_GENERATION_BUILDABLE_SQUARE_METERS,
                 "water_buffer_meters": WATER_BUFFER_METERS,
@@ -257,6 +296,7 @@ class GenerationService:
         }
         run = self.runs.replace(
             NewGenerationRun(
+                id=run_id,
                 import_area_id=area.id,
                 seed=seed,
                 parameters=parameters,

@@ -20,6 +20,7 @@ from app.api.mappers import (
     building_feature,
     elevation_out,
     feature_collection,
+    generated_building_feature,
     generation_run_out,
     import_area_out,
     poi_feature,
@@ -155,16 +156,50 @@ def elevation_work(
     return work
 
 
+MAX_BUILDINGS_PER_EVENT = 500
+
+
+def chunks(items: list, size: int = MAX_BUILDINGS_PER_EVENT) -> list[list]:
+    """`items` in slices of at most `size`; an empty list is one empty slice, so a ring with no
+    buildings still announces itself."""
+    return [items[start : start + size] for start in range(0, len(items), size)] or [[]]
+
+
 def generation_work(area: ImportArea, seed: int, session_scope: SessionScope) -> Callable[[ImportJob], None]:
     """The job body of a generation: it reads the observed data and replaces the area's run in one
-    transaction. Emits `generation` with the number of eligible blocks, then `completed` with the new
-    run, or `failed` (rolled back, the previous run untouched) with the error's code."""
+    transaction. Emits `generation` with the number of eligible blocks, then a `generated` event per
+    ring of blocks (nearest the area's centre first; a ring of more than 500 buildings is split over
+    several events with the same `ring`) carrying the buildings generated so far in that ring and
+    `blocks_done`, then `completed` with the new run, or `failed` with the error's code.
+
+    The streamed buildings are provisional: nothing is stored until the run is, at the end. On
+    `failed` the transaction rolls back, the previous run stays, and a client must discard what it
+    streamed. On `completed` the streamed ids are the stored ids, so they agree with map data."""
 
     def work(job: ImportJob) -> None:
         with session_scope() as session:
             try:
+                projection = projection_out(local_projection_for(area.bbox.ring())).model_dump(mode="json")
+
+                def on_ring(ring: int, blocks_done: int, block_count: int, buildings: list) -> None:
+                    for batch in chunks(buildings):
+                        collection = feature_collection([generated_building_feature(b) for b in batch])
+                        job.emit(
+                            "generated",
+                            {
+                                "projection": projection,
+                                "ring": ring,
+                                "blocks_done": blocks_done,
+                                "block_count": block_count,
+                                "buildings": _dump(collection),
+                            },
+                        )
+
                 run = GenerationService(session).generate(
-                    area, seed, progress=lambda block_count: job.emit("generation", {"block_count": block_count})
+                    area,
+                    seed,
+                    progress=lambda block_count: job.emit("generation", {"block_count": block_count}),
+                    on_ring=on_ring,
                 )
                 session.commit()
                 run_out = generation_run_out(run, stale_reasons(session, area, run))

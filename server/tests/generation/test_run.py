@@ -1,6 +1,8 @@
 """Generating an area's buildings against a real (test) database. Blocks are inserted directly, with the
 shape the test wants, in the metres of the area's local projection."""
 
+import uuid
+
 import pytest
 from shapely.geometry import Polygon as ShapelyPolygon
 from sqlalchemy import func, select
@@ -318,3 +320,73 @@ def test_one_feedback_block_is_not_enough_to_calibrate(db_session):
     run = service.generate(area, seed=1)
 
     assert run.calibration_ratio is None
+
+
+def _three_rings(db_session):
+    """Three blocks 0, ~350 and ~650 m from the area's centre: rings 0, 2 and 4."""
+    area = _area(db_session)
+    blocks = [
+        _block(db_session, area, 600, 0, 690, 80),
+        _block(db_session, area, 300, 0, 390, 80),
+        _block(db_session, area, 0, 0, 90, 80),
+    ]
+    return area, blocks
+
+
+def _stream(db_session, area, seed=3):
+    rings = []
+    run = GenerationService(db_session).generate(area, seed, on_ring=lambda *args: rings.append(args))
+    return run, rings
+
+
+def test_rings_are_reported_nearest_first_and_blocks_done_reaches_the_block_count(db_session):
+    area, blocks = _three_rings(db_session)
+
+    run, rings = _stream(db_session, area)
+
+    assert [(ring, done, total) for ring, done, total, _ in rings] == [(0, 1, 3), (2, 2, 3), (4, 3, 3)]
+    assert [{b.block_id for b in buildings} for *_, buildings in rings] == [{blocks[2]}, {blocks[1]}, {blocks[0]}]
+    assert sum(len(buildings) for *_, buildings in rings) == run.building_count > 0
+
+
+def test_the_ids_a_ring_reports_are_the_stored_ids(db_session):
+    area, _ = _three_rings(db_session)
+
+    run, rings = _stream(db_session, area)
+
+    streamed = {b.id: b for *_, buildings in rings for b in buildings}
+    stored = {b.id: b for b in GenerationRepository(db_session).list_buildings([area.id])}
+    assert streamed.keys() == stored.keys() and len(streamed) == run.building_count
+    assert all(b.run_id == run.id for b in streamed.values())
+    for building_id, building in streamed.items():
+        assert building.geom == stored[building_id].geom
+    for block_id in {b.block_id for b in streamed.values()}:
+        ids = [b.id for *_, buildings in rings for b in buildings if b.block_id == block_id]
+        assert ids == [uuid.uuid5(run.id, f"{block_id}:{index}") for index in range(len(ids))]
+
+
+def test_the_order_blocks_are_processed_in_changes_no_footprint(db_session, monkeypatch):
+    area, _ = _three_rings(db_session)
+
+    def footprints_by_block(rings):
+        grouped = {}
+        for *_, buildings in rings:
+            for building in buildings:
+                grouped.setdefault(building.block_id, []).append((building.geom, building.levels, building.height_meters))
+        return grouped
+
+    _, by_ring = _stream(db_session, area)
+    expected = footprints_by_block(by_ring)
+    assert len(expected) == 3
+
+    def one_batch(items, *args, **kwargs):
+        return [sorted(items, key=lambda result: str(result[0].id))]
+
+    monkeypatch.setattr("app.generation.run.ring_batches", one_batch)
+    _, by_id = _stream(db_session, area)
+    assert [ring for ring, *_ in by_id] == [0]
+    assert footprints_by_block(by_id) == expected
+
+    monkeypatch.setattr("app.generation.run.ring_batches", lambda items, *a, **k: [[item] for item in reversed(items)])
+    _, farthest_first = _stream(db_session, area)
+    assert footprints_by_block(farthest_first) == expected

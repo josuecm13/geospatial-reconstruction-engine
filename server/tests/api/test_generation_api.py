@@ -1,6 +1,7 @@
 """Generation and block feedback over HTTP (Milestone 11, #23). Blocks are inserted with the shape the
 test wants, in the metres of the area's local projection, on top of an imported fixture area."""
 
+import json
 import uuid
 
 import pytest
@@ -85,9 +86,9 @@ def test_generate_answers_202_then_streams_generation_and_completed(client, area
     assert response.status_code == 202
     assert response.json() == {"import_area_id": area, "events_url": f"/import-areas/{area}/events"}
     events = _events(client, area)
-    assert [event["stage"] for event in events] == ["generation", "completed"]
+    assert [event["stage"] for event in events] == ["generation", "generated", "completed"]
     assert events[0]["data"] == {"block_count": 1}
-    run = events[1]["data"]["run"]
+    run = events[-1]["data"]["run"]
     assert set(run) == RUN_KEYS
     assert (run["seed"], run["algorithm_version"], run["stale"], run["stale_reasons"]) == (1, "frontage-lots-v1", False, [])
     assert run["building_count"] > 0 and run["block_count"] == 1 and run["eligible_block_count"] == 1
@@ -102,6 +103,45 @@ def test_get_returns_the_run_the_job_completed_with(client, area, block_id):
 
     assert response.status_code == 200
     assert response.json() == _events(client, area)[-1]["data"]["run"]
+
+
+def test_generated_events_stream_rings_whose_buildings_are_the_ones_map_data_returns(client, db_session, area):
+    insert_block(db_session, area, 300, 0, 390, 80)
+    insert_block(db_session, area, 0, 0, 90, 80)
+
+    generate(client, area)
+
+    events = _events(client, area)
+    stages = [event["stage"] for event in events]
+    assert stages[0] == "generation" and stages[-1] == "completed"
+    assert set(stages[1:-1]) == {"generated"} and len(stages) > 2
+    streamed = {}
+    for event in events[1:-1]:
+        data = event["data"]
+        assert set(data) == {"projection", "ring", "blocks_done", "block_count", "buildings"}
+        assert data["block_count"] == 2 and 0 < data["blocks_done"] <= 2
+        assert len(data["buildings"]["features"]) <= 500
+        for feature in data["buildings"]["features"]:
+            streamed[feature["id"]] = feature
+    assert [event["data"]["ring"] for event in events[1:-1]] == sorted(event["data"]["ring"] for event in events[1:-1])
+    assert events[-2]["data"]["blocks_done"] == 2
+    assert len({json.dumps(event["data"]["projection"], sort_keys=True) for event in events[1:-1]}) == 1
+
+    stored = {f["id"]: f for f in client.get(f"/import-areas/{area}/map-data").json()["generated_buildings"]["features"]}
+    assert streamed.keys() == stored.keys() and len(streamed) == events[-1]["data"]["run"]["building_count"] > 0
+    assert streamed == stored
+    assert set(next(iter(streamed.values()))["properties"]) >= {
+        "block_id", "style", "levels", "height_meters", "base_elevation_meters",
+        "reference_block_id", "count_source", "generated",
+    }
+
+
+def test_a_ring_of_more_than_500_buildings_is_split_across_events():
+    from app.api.background_import import chunks
+
+    assert [len(batch) for batch in chunks(list(range(1201)))] == [500, 500, 201]
+    assert [len(batch) for batch in chunks(list(range(500)))] == [500]
+    assert chunks([]) == [[]]
 
 
 def test_the_seed_is_the_bodys_then_the_current_runs_then_one(client, area, block_id):
@@ -164,7 +204,7 @@ def test_a_second_generation_while_one_runs_is_a_409_and_so_is_deleting_the_run(
 def test_a_failed_generation_is_a_failed_event_and_keeps_the_previous_run(client, area, block_id, monkeypatch):
     generate(client, area, seed=7)
 
-    def broken(self, area, seed, progress=None):
+    def broken(self, area, seed, progress=None, on_ring=None):
         raise RuntimeError("boom")
 
     monkeypatch.setattr(GenerationService, "generate", broken)

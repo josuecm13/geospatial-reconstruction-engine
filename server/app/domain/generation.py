@@ -484,6 +484,8 @@ class NewGenerationRun:
     building_count: int
     block_count: int
     algorithm_version: str = ALGORITHM_VERSION
+    # Chosen up front when the run's buildings were given their ids before storage.
+    id: uuid.UUID | None = None
 
 
 class InvalidBlockFeedback(ValueError):
