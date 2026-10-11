@@ -54,7 +54,7 @@ const EMPTY_HINT = "Open an import on the Map tab";
  * city. Before that, a placeholder ground and grid, and a hint. */
 export function createSceneView(container: HTMLElement, routing?: RoutingDeps, terrain?: TerrainDeps, generation?: GenerationDeps, themeApi?: Pick<ApiClient, "setLandingTheme">): SceneView {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   container.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();

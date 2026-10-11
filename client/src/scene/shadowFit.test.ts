@@ -7,8 +7,15 @@ const sun = LIGHTING["golden-hour"].sunDirection;
 const dot = (a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number }) => a.x * b.x + a.y * b.y + a.z * b.z;
 
 describe("fitShadow", () => {
-  it("sizes the box at 0.8 times the camera's distance", () => {
-    expect(fitShadow({ x: 0, y: 0, z: 0 }, 500, sun, MAP).halfSize).toBeCloseTo(400, 9);
+  it("sizes the box at 0.8 times the camera's distance, rounded up to the next step of 150 * 1.25^k", () => {
+    expect(fitShadow({ x: 0, y: 0, z: 0 }, 500, sun, MAP).halfSize).toBeCloseTo(150 * 1.25 ** 5, 9); // wants 400
+    expect(fitShadow({ x: 0, y: 0, z: 0 }, 234.375, sun, MAP).halfSize).toBeCloseTo(187.5, 9); // wants exactly a step
+  });
+
+  it("gives the same half-size for two distances within one step", () => {
+    const at = (distance: number) => fitShadow({ x: 0, y: 0, z: 0 }, distance, sun, MAP).halfSize;
+    expect(at(500)).toBe(at(560)); // wants 400 and 448, both in (366.2, 457.8]
+    expect(at(600)).toBeGreaterThan(at(500)); // wants 480
   });
 
   it("clamps the half-size to 150-1500 m", () => {
@@ -38,7 +45,7 @@ describe("fitShadow", () => {
 
   it("moves the centre in whole texels only: by at most one for a tiny move, and by about the move for a larger one", () => {
     const { right } = lightAxes(sun);
-    const texel = (2 * 240) / MAP; // distance 300 gives a half-size of 240
+    const texel = (2 * 292.96875) / MAP; // distance 300 wants 240, which rounds up to 150 * 1.25^3
     const base = { x: 10, y: 0, z: 10 };
     const nudge = (amount: number) => ({ x: base.x + right.x * amount, y: base.y + right.y * amount, z: base.z + right.z * amount });
     const a = fitShadow(base, 300, sun, MAP).centre;
