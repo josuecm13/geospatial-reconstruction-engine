@@ -1,5 +1,6 @@
 import type * as THREE from "three";
 import { downloadGlb, exportWorld, glbFileName } from "./exportGltf";
+import type { ExportOptions } from "./exportGltf";
 
 export interface ExportButton {
   /** Enabled once a world is loaded; `undefined` disables it. */
@@ -11,7 +12,8 @@ export interface ExportButton {
 const LABEL = "Download glTF";
 
 /** The "Download glTF" button in the scene view's corner. */
-export function createExportButton(container: HTMLElement): ExportButton {
+/** `options` is read at each click: the theme and time of day the scene shows then. */
+export function createExportButton(container: HTMLElement, options: () => ExportOptions): ExportButton {
   const button = Object.assign(document.createElement("button"), { className: "scene-export", type: "button", textContent: LABEL, disabled: true });
   container.appendChild(button);
   let world: THREE.Group | undefined;
@@ -23,7 +25,7 @@ export function createExportButton(container: HTMLElement): ExportButton {
     exporting = true;
     refresh();
     try {
-      downloadGlb(await exportWorld(world), glbFileName(world.userData.scope));
+      downloadGlb(await exportWorld(world, options()), glbFileName(world.userData.scope));
       button.textContent = LABEL;
     } catch (error) {
       button.textContent = "Export failed";

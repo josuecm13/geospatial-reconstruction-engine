@@ -8,7 +8,7 @@ import { RevealQueue } from "../scene/revealQueue";
 import { pointDelays } from "../scene/revealSchedule";
 import type { GeneratedFeature } from "../scene/generationStream";
 import type { Terrain } from "../scene/terrain";
-import { COLORS, MATERIALS, restyle, SCENE_BACKGROUND, setActiveTheme } from "../scene/palette";
+import { activeTheme, COLORS, MATERIALS, restyle, SCENE_BACKGROUND, setActiveTheme } from "../scene/palette";
 import { createAtmosphere } from "../scene/atmosphere";
 import { themeById } from "../scene/themes";
 import type { ThemeId, TimeOfDay } from "../scene/themes/types";
@@ -62,6 +62,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
   // The stored choice (Night clay at midday when there is none), applied with no animation.
   const stored = loadThemeChoice();
   let theme = themeById(stored.theme);
+  let timeOfDay = stored.time; // the time on show, for the glTF export's extras
   const atmosphere = createAtmosphere(scene, renderer);
   atmosphere.setTheme(theme);
   atmosphere.setTime(stored.time, { animate: false });
@@ -228,6 +229,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
       saveThemeChoice(themeControls.choice());
     },
     onTime: (time) => {
+      timeOfDay = time;
       atmosphere.setTime(time, { animate: !prefersReducedMotion() });
       saveThemeChoice(themeControls.choice());
     },
@@ -317,7 +319,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
   blockSelection =
     generation && createBlockSelection(camera, renderer.domElement, container, generation.api, () => modes.mode === "fly" && renderer.domElement.style.cursor !== "crosshair");
 
-  const exporter = createExportButton(actions);
+  const exporter = createExportButton(actions, () => ({ theme: activeTheme().id, timeOfDay }));
   const terrainControls = terrain && createTerrainControls(actions, container, terrain);
   // Generate / Regenerate, its progress line, and "Show generated" beside "Smooth roads": the generated buildings are the `generated` group.
   const generationControls =
@@ -457,6 +459,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
       applyTheme();
     },
     setTimeOfDay(time) {
+      timeOfDay = time;
       atmosphere.setTime(time, { animate: !prefersReducedMotion() });
     },
     showMessage(message: string) {
