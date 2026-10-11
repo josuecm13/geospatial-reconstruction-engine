@@ -1,11 +1,12 @@
 import * as THREE from "three";
 import type { ApiClient } from "../api/client";
 import { prefersReducedMotion } from "../locations/flyTo";
+import { createAtmosphere } from "../scene/atmosphere";
 import { Animator } from "../scene/buildAnimation";
 import { buildWorld } from "../scene/buildWorld";
 import { overview } from "../scene/framing";
 import { restyle, SCENE_BACKGROUND, setActiveTheme } from "../scene/palette";
-import { DEFAULT_THEME } from "../scene/themes";
+import { readLandingLook } from "./landingLook";
 import { changeBetween, FINAL_STEP, hasGeneratedContext, heroStep, layersFor, pickSlot, STORY_LAYERS, type StoryLayer } from "./storySteps";
 
 /** The turntable's speed, radians per second. */
@@ -45,7 +46,8 @@ export async function createFeaturedStage({ api, areaId, slots, onReady }: Featu
     renderer.forceContextLoss();
     renderer.domElement.remove();
   };
-  const data = await api.mapData(areaId).catch((error: unknown) => {
+  // The look never fails (it falls back to Night clay at midday), so only the map data can stop the stage.
+  const [data, look] = await Promise.all([api.mapData(areaId), readLandingLook(api)]).catch((error: unknown) => {
     release();
     throw error;
   });
@@ -58,10 +60,13 @@ export async function createFeaturedStage({ api, areaId, slots, onReady }: Featu
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(SCENE_BACKGROUND);
 
-    setActiveTheme(DEFAULT_THEME);
+    setActiveTheme(look.theme);
     world = buildWorld(data);
     scene.add(world);
     restyle(scene);
+    const atmosphere = createAtmosphere(scene, renderer);
+    atmosphere.setTheme(look.theme);
+    atmosphere.setTime(look.time, { animate: false });
     const view = overview(new THREE.Box3().setFromObject(world));
     const camera = new THREE.PerspectiveCamera(45, 1, 1, view.far);
     camera.position.copy(view.position);
@@ -70,6 +75,13 @@ export async function createFeaturedStage({ api, areaId, slots, onReady }: Featu
 
     const animator = new Animator();
     if (reduced) animator.skip(); // layers appear and disappear at once
+
+    /** Build animations still running, so the atmosphere holds its shadows still while they do. */
+    let animating = 0;
+    const track = (done: Promise<unknown>) => {
+      animating += 1;
+      void done.finally(() => (animating -= 1));
+    };
 
     const group = (layer: StoryLayer) => world!.getObjectByName(layer)!;
     /** The step whose layers are on screen now, so a change can be animated from it. */
@@ -91,8 +103,8 @@ export async function createFeaturedStage({ api, areaId, slots, onReady }: Featu
           const object = group(layer);
           object.visible = true;
           if (reduced) continue;
-          if (layer === "buildings" || layer === "generated") void animator.rise(object.children as THREE.Mesh[]);
-          else void animator.fadeIn([object]);
+          if (layer === "buildings" || layer === "generated") track(animator.rise(object.children as THREE.Mesh[]));
+          else track(animator.fadeIn([object]));
         }
       }
       shown = to;
@@ -149,6 +161,7 @@ export async function createFeaturedStage({ api, areaId, slots, onReady }: Featu
         camera.position.copy(target).add(offset);
         camera.lookAt(target);
       }
+      atmosphere.update(delta, camera, target, { buildAnimating: animating > 0 });
       renderer.render(scene, camera);
       frame = requestAnimationFrame(tick);
     };
@@ -179,6 +192,7 @@ export async function createFeaturedStage({ api, areaId, slots, onReady }: Featu
         resizes?.disconnect();
         document.removeEventListener("visibilitychange", onVisibility);
         for (const host of Object.values(slots)) delete host.dataset.stage;
+        atmosphere.dispose();
         release();
       },
     } satisfies FeaturedStage;
