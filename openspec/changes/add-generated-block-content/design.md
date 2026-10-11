@@ -30,8 +30,11 @@ decisions behind them. See proposal.md, Why.
   grid, so it is never chosen without elevation. `sparse` is decided by road length per square kilometre
   of land within 500 m of the block centroid, not by building coverage: OSM maps roads far more completely
   than buildings, so coverage would call an under-mapped town rural.
-- **References come from fully built frontages.** The frontage is the exterior of the buildable area, and
-  each real building is measured against its nearest edge. A block is an exemplar only at 0.70 or more
+- **References come from fully built frontages.** The frontage is the exterior of the buildable area (the
+  curb line). It is sampled every metre, and a ray cast inward 25 m from each sample finds the building
+  that fronts the street there, so corners, through-block buildings and many short edges need no special
+  case. A building's width is its longest run of samples, its setback the median ray distance, and
+  coverage the share of samples whose ray hits a building. A block is an exemplar only at 0.70 or more
   frontage coverage with three or more buildings, so its fingerprint describes a built street rather than
   a few stray houses.
 - **Matching is local and scored.** Candidates are exemplars within 500 m, in any completed area. The score

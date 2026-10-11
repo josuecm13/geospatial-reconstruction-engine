@@ -67,7 +67,7 @@ When Show blocks is on, the client SHALL shade each generation zone by its reaso
 - **THEN** the two zones are shaded differently
 
 ### Requirement: The client SHALL offer a Set point tool shared by fly and walk
-The client SHALL offer a **Set point** tool, with the shortcut `P`, and double-clicking the ground SHALL also drop a pin on the terrain. Fly mode SHALL ease its orbit target to the pin over about 400 milliseconds, instantly under reduced motion, keeping its distance and angle. Walk mode SHALL start at the pin at eye height, facing the camera's horizontal direction, and a pin inside a building SHALL move to the nearest open point. **Reset to centre** SHALL clear the pin. The pin SHALL be excluded from picking and from the glTF export. The Set point and the other tools SHALL NOT be active together.
+The client SHALL offer a **Set point** tool, with the shortcut `P`, and double-clicking the ground SHALL also drop a pin on the terrain. Fly mode SHALL ease its orbit target to the pin over about 400 milliseconds, instantly under reduced motion, keeping its distance and angle. Walk mode SHALL start at the pin at eye height, facing the camera's horizontal direction, and a pin inside a building SHALL move to the nearest open point. **Reset to centre** SHALL clear the pin. The pin SHALL be excluded from picking and from the glTF export. The Set point and Route tools SHALL NOT be armed together: arming one SHALL disarm the other.
 
 #### Scenario: Dropping a pin in fly mode
 - **WHEN** a user double-clicks the ground in fly mode
