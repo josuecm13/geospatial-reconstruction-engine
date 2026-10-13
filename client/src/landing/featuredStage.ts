@@ -6,6 +6,7 @@ import { createAtmosphere } from "../scene/atmosphere";
 import { Animator } from "../scene/buildAnimation";
 import { buildWorld } from "../scene/buildWorld";
 import { overview } from "../scene/framing";
+import { initialPixelRatio } from "../scene/pixelRatio";
 import { restyle, SCENE_BACKGROUND, setActiveTheme } from "../scene/palette";
 import { DRONE_FOV, droneShot, dronePosition, type Footprint } from "./droneShot";
 import { readLandingLook, STORY_LOOK, type LandingLook } from "./landingLook";
@@ -57,7 +58,7 @@ export async function createFeaturedStage({ api, areaId, slots, onReady }: Featu
 
   const stage = (() => {
     const reduced = prefersReducedMotion();
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(initialPixelRatio(window.devicePixelRatio));
     renderer.domElement.className = "landing-stage-canvas";
 
     const scene = new THREE.Scene();
@@ -251,6 +252,7 @@ export async function createFeaturedStage({ api, areaId, slots, onReady }: Featu
         resizes?.disconnect();
         document.removeEventListener("visibilitychange", onVisibility);
         for (const host of Object.values(slots)) delete host.dataset.stage;
+        animator.skip(); // finishes any fade, which disposes its cloned materials
         atmosphere.dispose();
         release();
       },

@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { fitShadow } from "./shadowFit";
+import { fitShadow, fitStands, shadowHalfSize } from "./shadowFit";
 import { applyWindowUniforms, windowNight } from "./nightWindows";
 import { createSkyMaterial } from "./themes/sky";
 import { blendLighting, blendSky, LIGHTING, type Lighting, type Vec3 } from "./themes/timeOfDay";
@@ -7,6 +7,7 @@ import type { Sky, Theme, TimeOfDay } from "./themes/types";
 
 /** How long a change of time of day takes to play. */
 export const TRANSITION_SECONDS = 1.5;
+/** Kept at 2048: at the 150 m minimum box that is about 15 cm a texel, and the fit already stays put while the camera is still (see `update`). */
 export const SHADOW_MAP_SIZE = 2048;
 /** The dome's radius, as a share of the camera's far plane. */
 const DOME_RADIUS = 0.9;
@@ -70,8 +71,8 @@ export function createAtmosphere(scene: THREE.Scene, renderer: THREE.WebGLRender
   let dirty = true;
   let redraws = 0;
   let lastSun: Vec3 | undefined;
-  let lastCentre: Vec3 | undefined;
   let lastHalfSize = 0;
+  let lastTarget: Vec3 | undefined; // the target the box was last fitted to
 
   const lookFor = (forTheme: Theme, at: TimeOfDay): Look =>
     forTheme.followsSun ? { lighting: LIGHTING[at], sky: forTheme.skies?.[at] ?? forTheme.sky } : { lighting: UNLIT, sky: forTheme.sky };
@@ -141,21 +142,22 @@ export function createAtmosphere(scene: THREE.Scene, renderer: THREE.WebGLRender
       }
       if (!theme?.followsSun) return;
       const direction = (current ?? to).lighting.sunDirection;
-      const { centre, halfSize } = fitShadow(target, camera.position.distanceTo(target), direction, SHADOW_MAP_SIZE);
-      const moved =
-        !lastSun ||
-        !lastCentre ||
-        direction.x !== lastSun.x ||
-        direction.y !== lastSun.y ||
-        direction.z !== lastSun.z ||
-        centre.x !== lastCentre.x ||
-        centre.y !== lastCentre.y ||
-        centre.z !== lastCentre.z ||
-        halfSize !== lastHalfSize;
+      const distanceToTarget = camera.position.distanceTo(target);
+      // A target that has only drifted a little keeps the last fit, and so the shadow map: a refit snaps to a new texel grid and redraws it.
+      const stands =
+        !!lastSun &&
+        !!lastTarget &&
+        direction.x === lastSun.x &&
+        direction.y === lastSun.y &&
+        direction.z === lastSun.z &&
+        shadowHalfSize(distanceToTarget) === lastHalfSize &&
+        fitStands(target, lastTarget, lastHalfSize);
+      const moved = !stands;
       if (moved) {
+        const { centre, halfSize } = fitShadow(target, distanceToTarget, direction, SHADOW_MAP_SIZE);
         lastSun = direction;
-        lastCentre = centre;
         lastHalfSize = halfSize;
+        lastTarget = { x: target.x, y: target.y, z: target.z };
         // The light sits far enough along the sun's direction to see everything in the box, and looks at its centre.
         const distance = halfSize + 800;
         sun.target.position.set(centre.x, centre.y, centre.z);

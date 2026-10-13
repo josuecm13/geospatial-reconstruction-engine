@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fitShadow, lightAxes, MAX_HALF_SIZE, MIN_HALF_SIZE } from "./shadowFit";
+import { fitShadow, fitStands, lightAxes, MAX_HALF_SIZE, MIN_HALF_SIZE, REFIT_FRACTION, shadowHalfSize } from "./shadowFit";
 import { LIGHTING } from "./themes/timeOfDay";
 
 const MAP = 2048;
@@ -69,5 +69,29 @@ describe("lightAxes", () => {
     expect(dot(right, up)).toBeCloseTo(0, 9);
     expect(dot(right, sun)).toBeCloseTo(0, 9);
     expect(dot(up, sun)).toBeCloseTo(0, 9);
+  });
+});
+
+describe("fitStands", () => {
+  const at = { x: 10, y: 0, z: -5 };
+  it("holds while the target stays within a fraction of the half-size of the last fit", () => {
+    expect(fitStands(at, at, 200)).toBe(true);
+    expect(fitStands({ x: 10 + REFIT_FRACTION * 200, y: 0, z: -5 }, at, 200)).toBe(true);
+  });
+  it("lapses once the target drifts further, in any direction", () => {
+    expect(fitStands({ x: 10 + REFIT_FRACTION * 200 + 1, y: 0, z: -5 }, at, 200)).toBe(false);
+    expect(fitStands({ x: 10, y: 0, z: -5 - REFIT_FRACTION * 200 - 1 }, at, 200)).toBe(false);
+  });
+  it("scales with the half-size", () => {
+    const near = { x: 10 + 30, y: 0, z: -5 };
+    expect(fitStands(near, at, 150)).toBe(false);
+    expect(fitStands(near, at, 400)).toBe(true);
+  });
+});
+
+describe("shadowHalfSize", () => {
+  it("is what fitShadow uses, clamped", () => {
+    expect(shadowHalfSize(500)).toBe(fitShadow({ x: 0, y: 0, z: 0 }, 500, sun, MAP).halfSize);
+    expect(shadowHalfSize(1e6)).toBe(MAX_HALF_SIZE);
   });
 });

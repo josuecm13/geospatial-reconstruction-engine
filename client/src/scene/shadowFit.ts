@@ -13,6 +13,16 @@ export const quantiseHalfSize = (wanted: number) => {
   return MIN_HALF_SIZE * Math.pow(HALF_SIZE_STEP, Math.max(0, k));
 };
 
+/** The half-size of the box for a camera at `distance` from the target: stepped, and clamped. */
+export const shadowHalfSize = (distance: number) => Math.min(MAX_HALF_SIZE, quantiseHalfSize(Math.max(MIN_HALF_SIZE, distance * HALF_SIZE_PER_DISTANCE)));
+
+/** The target may drift this share of the half-size from where the box was last fitted before it is fitted again, so walking and orbiting redraw the shadow map every so often, not on every small move. */
+export const REFIT_FRACTION = 0.1;
+
+/** Whether the target is still close enough to where the box was last fitted (`fitted`) for that fit to stand. */
+export const fitStands = (target: Vec3, fitted: Vec3, halfSize: number) =>
+  Math.hypot(target.x - fitted.x, target.y - fitted.y, target.z - fitted.z) <= REFIT_FRACTION * halfSize;
+
 const cross = (a: Vec3, b: Vec3): Vec3 => ({ x: a.y * b.z - a.z * b.y, y: a.z * b.x - a.x * b.z, z: a.x * b.y - a.y * b.x });
 const dot = (a: Vec3, b: Vec3) => a.x * b.x + a.y * b.y + a.z * b.z;
 const unit = (a: Vec3): Vec3 => {
@@ -34,7 +44,7 @@ export function lightAxes(sunDirection: Vec3): { right: Vec3; up: Vec3 } {
  * (one texel is 2 * halfSize / mapSize), so the shadow edges don't shimmer as the target moves.
  */
 export function fitShadow(target: Vec3, distance: number, sunDirection: Vec3, mapSize: number): { centre: Vec3; halfSize: number } {
-  const halfSize = Math.min(MAX_HALF_SIZE, quantiseHalfSize(Math.max(MIN_HALF_SIZE, distance * HALF_SIZE_PER_DISTANCE)));
+  const halfSize = shadowHalfSize(distance);
   const texel = (2 * halfSize) / mapSize;
   const { right, up } = lightAxes(sunDirection);
   const [x, y] = [dot(target, right), dot(target, up)];

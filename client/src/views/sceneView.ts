@@ -29,6 +29,7 @@ import { bboxMeters, createStagedScene, type StagedHandle } from "../scene/stage
 import { createZoneLegend } from "../scene/zoneLegend";
 import { loadThemeChoice, saveThemeChoice } from "../scene/themeChoice";
 import { createFpsReadout } from "../scene/fpsReadout";
+import { createPixelRatioController, initialPixelRatio } from "../scene/pixelRatio";
 import { createThemeControls } from "../scene/themeControls";
 import type { ApiClient } from "../api/client";
 
@@ -54,7 +55,10 @@ const EMPTY_HINT = "Open an import on the Map tab";
  * city. Before that, a placeholder ground and grid, and a hint. */
 export function createSceneView(container: HTMLElement, routing?: RoutingDeps, terrain?: TerrainDeps, generation?: GenerationDeps, themeApi?: Pick<ApiClient, "setLandingTheme">): SceneView {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  // Antialiasing stays on (a context fixes it at creation) and costs MSAA samples at every pixel; the pixel ratio cap, stepped down further under load, is the main saving.
+  const pixelRatioCap = initialPixelRatio(window.devicePixelRatio);
+  const pixelRatio = createPixelRatioController(pixelRatioCap);
+  renderer.setPixelRatio(pixelRatioCap);
   container.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
@@ -335,7 +339,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
   actions.appendChild(rotateButton);
   const staged = createStagedScene(scene, container);
 
-  const fpsReadout = createFpsReadout(container, renderer, { theme: () => theme.id, shadowRedraws: () => atmosphere.shadowRedraws() });
+  const fpsReadout = createFpsReadout(container, renderer, { theme: () => theme.id, shadowRedraws: () => atmosphere.shadowRedraws(), pixelRatio: () => renderer.getPixelRatio() });
   let running = false;
   const resize = () => {
     const { clientWidth, clientHeight } = container;
@@ -350,6 +354,11 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
     if (!running) return;
     const delta = clock.getDelta();
     fpsReadout?.frame(delta * 1000);
+    const adapted = pixelRatio.frame(delta * 1000);
+    if (adapted !== renderer.getPixelRatio()) {
+      renderer.setPixelRatio(adapted);
+      resize(); // setSize applies the new ratio to the canvas
+    }
     rotateButton.disabled = modes.mode !== "fly";
     const context = { fly: modes.mode === "fly", world: !!world, building };
     const turning = rotate.update(delta, context);
@@ -513,6 +522,13 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
       modes.dispose();
       routes?.dispose();
       controls.dispose();
+      animator.skip(); // finishes any fade, which disposes its cloned materials
+      removeWorld();
+      scene.remove(placeholder);
+      placeholder.traverse((object) => {
+        (object as THREE.Mesh).geometry?.dispose();
+        if ((object as THREE.Line).isLine) ((object as THREE.Line).material as THREE.Material).dispose(); // the grid's own; the ground's is the shared palette's
+      });
       renderer.dispose();
       renderer.forceContextLoss();
       renderer.domElement.remove();
