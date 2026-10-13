@@ -3,7 +3,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { BoundingBox, MapData, Projection } from "../api/types";
 import { prefersReducedMotion } from "../locations/flyTo";
 import { Animator, staggerDelay } from "../scene/buildAnimation";
-import { buildWorld, DEFAULT_ROAD_MODE, generatedMeshes, LAYER_ORDER, roadOutlineLines, setRoadMode } from "../scene/buildWorld";
+import { buildWorld, DEFAULT_ROAD_MODE, generatedMeshes, LAYER_ORDER, registerFeatures, roadOutlineLines, setRoadMode, WORLD_GROUPS } from "../scene/buildWorld";
 import { RevealQueue } from "../scene/revealQueue";
 import { pointDelays } from "../scene/revealSchedule";
 import type { GeneratedFeature } from "../scene/generationStream";
@@ -92,6 +92,9 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
   const credit = Object.assign(document.createElement("div"), { className: "scene-attribution", hidden: true });
   container.append(overlay, toggle, credit);
   let world: THREE.Group | undefined;
+  /** The map data of the world on screen, and the generated features streamed into it since: what the glTF export rebuilds the world from (see `exportSource`). */
+  let mapData: MapData | undefined;
+  let streamed: GeneratedFeature[] = [];
   // "Show blocks": the dashed block outlines, the faint buildable-area fill under them, and the generation zones (with their legend). Blocks can only be picked while it is on.
   const zoneLegend = createZoneLegend(container);
   let blockSelection: ReturnType<typeof createBlockSelection> | undefined;
@@ -150,20 +153,28 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
     cancelReveal(false);
     const generated = generatedGroup();
     if (!generated) return;
+    const known: Map<string, object> | undefined = world?.userData.features;
     for (const child of [...generated.children]) {
       generated.remove(child);
+      for (const id of (child.userData.featureIds as string[] | undefined) ?? []) known?.delete(id);
       child.traverse((object) => (object as THREE.Mesh).geometry?.dispose());
     }
+    streamed = [];
   };
   /** Builds and adds the meshes of one block's due features, rising together (instant under reduced motion). */
   const spawn = (items: Item[], instant: boolean) => {
     const generated = generatedGroup();
     const terrain: Terrain | undefined = world?.userData.terrain;
     if (!generated || !terrain || !items.length) return;
-    const present = new Set(generated.children.map((child) => child.name));
-    const fresh = items.filter(({ feature }) => !present.has(`generated:${feature.id}`));
-    const meshes = fresh.flatMap(({ feature, projection }) => generatedMeshes([feature], terrain, projection));
+    // The ids already drawn, from the chunks of these items' blocks (a block is one chunk, so only those are scanned).
+    const blocks = new Set(items.map(({ feature }) => feature.properties.block_id));
+    const present = new Set(generated.children.filter((child) => blocks.has(child.userData.block)).flatMap((child) => child.userData.featureIds as string[]));
+    const fresh = items.filter(({ feature }) => !present.has(feature.id));
+    // One chunk per block: the items arrive a block at a time, so these are the block's buildings merged.
+    const meshes = fresh.length ? generatedMeshes(fresh.map(({ feature }) => feature), terrain, fresh[0].projection) : [];
     if (!meshes.length) return;
+    registerFeatures(world!, fresh.map(({ feature }) => feature));
+    streamed.push(...fresh.map(({ feature }) => feature));
     generated.add(...meshes);
     atmosphere.invalidateShadows();
     generated.visible = true;
@@ -208,7 +219,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
     const meshes = generated.children.filter((child): child is THREE.Mesh => (child as THREE.Mesh).isMesh);
     const points = meshes.map((mesh) => {
       const at = new THREE.Box3().setFromObject(mesh).getCenter(new THREE.Vector3());
-      return { block: String((mesh.userData.properties as { block_id?: string } | undefined)?.block_id ?? mesh.name), x: at.x, z: at.z };
+      return { block: String((mesh.userData.block as string | undefined) ?? mesh.name), x: at.x, z: at.z };
     });
     track(animator.riseAt(meshes, pointDelays(points, { x: centre.x, z: centre.z })));
   };
@@ -323,7 +334,22 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
   blockSelection =
     generation && createBlockSelection(camera, renderer.domElement, container, generation.api, () => modes.mode === "fly" && renderer.domElement.style.cursor !== "crosshair");
 
-  const exporter = createExportButton(actions, () => ({ theme: activeTheme().id, timeOfDay }));
+  /**
+   * What the glTF export writes: the world rebuilt from its map data with one mesh per feature (`building:<id>`, `generated:<id>`
+   * nodes, as the spec requires; the on-screen world is merged chunks), the generated buildings streamed in since included, the
+   * layers hidden on screen hidden here too, and Blueprint's road outlines when that theme is on. Falls back to the live world.
+   */
+  const exportSource = (live: THREE.Group): THREE.Group => {
+    if (!mapData) return live;
+    const drawn = mapData.generated_buildings?.features ?? [];
+    const ids = new Set(drawn.map((feature) => feature.id));
+    const generated = { type: "FeatureCollection" as const, features: [...drawn, ...streamed.filter((feature) => !ids.has(feature.id))] };
+    const copy = buildWorld({ ...mapData, generated_buildings: generated }, live.userData.roadMode, { batched: false });
+    for (const name of WORLD_GROUPS) copy.getObjectByName(name)!.visible = live.getObjectByName(name)?.visible ?? true;
+    if (activeTheme().mode === "line" && copy.userData.roadOutlines) copy.getObjectByName("roads")!.add(roadOutlineLines(copy));
+    return copy;
+  };
+  const exporter = createExportButton(actions, () => ({ theme: activeTheme().id, timeOfDay }), exportSource);
   const terrainControls = terrain && createTerrainControls(actions, container, terrain);
   // Generate / Regenerate, its progress line, and "Show generated" beside "Smooth roads": the generated buildings are the `generated` group.
   const generationControls =
@@ -385,6 +411,8 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
     camera,
     setWorld(data: MapData) {
       removeWorld();
+      mapData = data;
+      streamed = [];
       world = buildWorld(data, roadMode());
       blockSelection?.setWorld(world);
       zoneLegend.setReasons(data.generation_zones?.features.map((zone) => zone.properties.reason) ?? []);
@@ -421,6 +449,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
     },
     beginStaged(bbox) {
       removeWorld();
+      mapData = undefined;
       modes.setWorld(undefined);
       flyIntent.take(); // a pin from the old world is gone
       pins.setWorld(undefined);
@@ -474,6 +503,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
     showMessage(message: string) {
       framing.reset();
       removeWorld();
+      mapData = undefined;
       blockSelection?.setWorld(undefined);
       zoneLegend.setReasons([]);
       modes.setWorld(undefined);

@@ -12,8 +12,8 @@ export interface ExportButton {
 const LABEL = "Download glTF";
 
 /** The "Download glTF" button in the scene view's corner. */
-/** `options` is read at each click: the theme and time of day the scene shows then. */
-export function createExportButton(container: HTMLElement, options: () => ExportOptions): ExportButton {
+/** `options` is read at each click: the theme and time of day the scene shows then. `source` turns the world on screen into the one that is written (the scene view rebuilds it with a mesh per feature); the result is released afterwards unless it is the same world. */
+export function createExportButton(container: HTMLElement, options: () => ExportOptions, source: (world: THREE.Group) => THREE.Group = (world) => world): ExportButton {
   const button = Object.assign(document.createElement("button"), { className: "scene-export", type: "button", textContent: LABEL, disabled: true });
   container.appendChild(button);
   let world: THREE.Group | undefined;
@@ -24,13 +24,16 @@ export function createExportButton(container: HTMLElement, options: () => Export
     if (!world || button.disabled) return;
     exporting = true;
     refresh();
+    let out: THREE.Group | undefined;
     try {
-      downloadGlb(await exportWorld(world, options()), glbFileName(world.userData.scope));
+      out = source(world);
+      downloadGlb(await exportWorld(out, options()), glbFileName(world.userData.scope));
       button.textContent = LABEL;
     } catch (error) {
       button.textContent = "Export failed";
       button.title = error instanceof Error ? error.message : String(error);
     } finally {
+      if (out && out !== world) out.traverse((object) => (object as THREE.Mesh).geometry?.dispose());
       exporting = false;
       refresh();
     }

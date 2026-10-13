@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import type { Feature, GeneratedBuildingProperties, Geometry, MapData, Position, Projection } from "../api/types";
 import { buildingHeights } from "./buildingHeight";
+import { cellKey, mergeChunks, ringsCentre, type BatchEntry } from "./batching";
 import { drapedGeometry, extrudeFootprints, flatGeometry, footprintShape, polygonShape } from "./extrude";
 import { densify, hasBlockFill, insetRing, outlineKind } from "./blockOutline";
 import { areaFeatureMaterial, MATERIALS, outlineMaterial, roadMaterial, zoneMaterial } from "./palette";
@@ -85,9 +86,20 @@ function entity(layer: string, feature: Feature<object>, geometry: THREE.BufferG
 
 const group = (name: string) => Object.assign(new THREE.Group(), { name });
 
+/** The height a building's base stands at: the lowest ground under its footprint (or its stored base height), so nothing floats. */
+function groundBase(terrain: Terrain, polygons: Rings[], base: number | null | undefined): number {
+  return !terrain.hasGround ? 0 : base != null ? base - terrain.baseline : Math.min(...polygons.map((rings) => terrain.lowestUnder(rings[0])));
+}
+
 /** A building stands on the lowest ground under its footprint (or at its stored base height), so nothing floats. */
 function standOnGround(terrain: Terrain, mesh: THREE.Mesh, polygons: Rings[], base: number | null | undefined): void {
-  mesh.position.y = !terrain.hasGround ? 0 : base != null ? base - terrain.baseline : Math.min(...polygons.map((rings) => terrain.lowestUnder(rings[0])));
+  mesh.position.y = groundBase(terrain, polygons, base);
+}
+
+/** Every feature's properties once, by id, in `world.userData.features`: batched chunks carry only ids, so readers look the rest up here. */
+export function registerFeatures(world: THREE.Object3D, features: Feature<object>[]): void {
+  const known: Map<string, object> = (world.userData.features ??= new Map());
+  for (const feature of features) known.set(feature.id, feature.properties);
 }
 
 /** The pale outline of a building's edges: a child, so it follows the build animation's scale.y. Not pickable (routeLayer raycasts recursively) and left out of the glTF export (exportGltf.ts). */
@@ -126,30 +138,54 @@ export function roadOutlineLines(world: THREE.Object3D): THREE.LineSegments {
 }
 
 /**
- * The meshes of generated buildings, one per feature with a footprint: extruded to `height_meters` in the
- * generated material, standing on `base_elevation_meters` (minus the terrain's baseline), edges as a child,
- * named `generated:<id>` and tagged `userData.generated`. Shared by `buildWorld` and by the batches that
- * stream into a world while a run is being generated, so both look the same.
+ * The meshes of generated buildings, with a footprint: extruded to `height_meters` in the generated material, standing on
+ * `base_elevation_meters` (minus the terrain's baseline), edges as a child. Batched (the default), they are one merged mesh
+ * per block (`generated:chunk:<block_id>`, or the grid cell for a feature with none) that records its features' ids and
+ * block in `userData`; unbatched, one mesh per feature named `generated:<id>` (the glTF export's shape). Shared by `buildWorld`
+ * and by the batches that stream into a world while a run is being generated, so both look the same.
  */
-export function generatedMeshes(features: Feature<GeneratedBuildingProperties>[], terrain: Terrain, projection: Projection): THREE.Mesh[] {
+export function generatedMeshes(features: Feature<GeneratedBuildingProperties>[], terrain: Terrain, projection: Projection, batched = true): THREE.Mesh[] {
   const meshes: THREE.Mesh[] = [];
+  const entries: BatchEntry[] = [];
   for (const feature of features) {
     const polygons = polygonsOf(feature.geometry, projection);
     if (!polygons.length) continue;
     const shapes = polygons.map((rings) => footprintShape(rings[0]));
-    const mesh = entity("generated", feature, extrudeFootprints(shapes, feature.properties.height_meters), MATERIALS.buildingGenerated);
+    const geometry = extrudeFootprints(shapes, feature.properties.height_meters);
+    if (batched) {
+      const rings = polygons.map((p) => p[0]);
+      const block = feature.properties.block_id as string | undefined;
+      const centre = ringsCentre(rings);
+      entries.push({ id: feature.id, key: block ?? `cell:${cellKey(centre.x, centre.z)}`, material: MATERIALS.buildingGenerated, geometry, base: groundBase(terrain, polygons, feature.properties.base_elevation_meters), height: feature.properties.height_meters, rings });
+      continue;
+    }
+    const mesh = entity("generated", feature, geometry, MATERIALS.buildingGenerated);
     mesh.userData.generated = true;
     mesh.userData.height = feature.properties.height_meters;
     standOnGround(terrain, mesh, polygons, feature.properties.base_elevation_meters);
     withEdges(mesh, true);
     meshes.push(mesh);
   }
-  return meshes;
+  if (!batched) return meshes;
+  return mergeChunks(entries, {
+    layer: "generated",
+    prefix: "generated",
+    edgeMaterial: MATERIALS.edgeGenerated,
+    dashed: true, // the dashes (Blueprint) are measured along the line
+    castShadow: true,
+    extra: (key) => ({ generated: true, block: key.startsWith("cell:") ? undefined : key }),
+  });
+}
+
+/** `batched: false` draws every building as a mesh of its own named `<layer>:<id>`, which is what the glTF export writes; the default merges them into chunks. */
+export interface WorldOptions {
+  batched?: boolean;
 }
 
 /** Builds the low-poly world for a map-data response. See the World contract
  * (openspec/specs/showcase-client, and design.md of the archived change): meters from the projection origin, x east, z south, y up. */
-export function buildWorld(data: MapData, roadMode: RoadMode = DEFAULT_ROAD_MODE): THREE.Group {
+export function buildWorld(data: MapData, roadMode: RoadMode = DEFAULT_ROAD_MODE, options: WorldOptions = {}): THREE.Group {
+  const batched = options.batched ?? true;
   const projection = data.projection;
   const terrain = data.elevation ? createTerrain(data.elevation, projection) : flatTerrain();
   const grid = terrain.extent();
@@ -271,6 +307,7 @@ export function buildWorld(data: MapData, roadMode: RoadMode = DEFAULT_ROAD_MODE
   groups.blocks.visible = false;
 
   const buildingHeightList = buildingHeights(data.buildings.features);
+  const entries: BatchEntry[] = [];
   for (const [index, feature] of data.buildings.features.entries()) {
     const polygons = polygonsOf(feature.geometry, projection);
     if (!polygons.length) continue;
@@ -282,6 +319,12 @@ export function buildWorld(data: MapData, roadMode: RoadMode = DEFAULT_ROAD_MODE
     // Footprints are single outer rings; any holes are ignored.
     const shapes = polygons.map((rings) => footprintShape(rings[0]));
     const material = defaulted ? MATERIALS.buildingDefaulted : MATERIALS.buildingMeasured;
+    if (batched) {
+      const rings = polygons.map((p) => p[0]);
+      const centre = ringsCentre(rings);
+      entries.push({ id: feature.id, key: `${cellKey(centre.x, centre.z)}:${defaulted ? "defaulted" : "measured"}`, material, geometry: extrudeFootprints(shapes, height), base: groundBase(terrain, polygons, feature.properties.base_elevation_meters), height, rings });
+      continue;
+    }
     const mesh = entity("building", feature, extrudeFootprints(shapes, height), material);
     mesh.userData.defaulted = defaulted;
     mesh.userData.height = height;
@@ -290,11 +333,17 @@ export function buildWorld(data: MapData, roadMode: RoadMode = DEFAULT_ROAD_MODE
     withEdges(mesh);
     groups.buildings.add(mesh);
   }
+  if (batched) {
+    // One mesh per (150 m cell, material), each with its edges: ~16k buildings are a few hundred draw calls, not 32k objects.
+    groups.buildings.add(...mergeChunks(entries, { layer: "building", prefix: "buildings", edgeMaterial: MATERIALS.edge, castShadow: true, extra: (_key, group) => ({ defaulted: group[0].material === MATERIALS.buildingDefaulted }) }));
+    registerFeatures(world, data.buildings.features);
+  }
 
   // Generated buildings (Milestone 11): a layer of their own, so they can be hidden, and are left out of the export while they are.
   const generated = data.generated_buildings?.features ?? [];
   for (const feature of generated) polygonsOf(feature.geometry, projection).forEach((rings) => grow(rings[0]));
-  groups.generated.add(...generatedMeshes(generated, terrain, projection));
+  groups.generated.add(...generatedMeshes(generated, terrain, projection, batched));
+  if (batched) registerFeatures(world, generated);
 
   // On terrain the ground is the grid (with the margin), not the union of every feature's envelope.
   const [minX, maxX, minZ, maxZ] = grid

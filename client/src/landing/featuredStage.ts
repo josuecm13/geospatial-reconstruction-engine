@@ -80,11 +80,9 @@ export async function createFeaturedStage({ api, areaId, slots, onReady }: Featu
     const footprints: Footprint[] = [];
     for (const name of ["buildings", "generated"]) {
       for (const child of world.getObjectByName(name)?.children ?? []) {
-        const mesh = child as THREE.Mesh;
-        if (!mesh.geometry) continue;
-        mesh.geometry.boundingBox ?? mesh.geometry.computeBoundingBox();
-        const bounds = mesh.geometry.boundingBox!;
-        footprints.push({ x: mesh.position.x + (bounds.min.x + bounds.max.x) / 2, z: mesh.position.z + (bounds.min.z + bounds.max.z) / 2, height: bounds.max.y - bounds.min.y });
+        // A chunk records each of its buildings' centre and height (batching.ts), as x, z, height.
+        const centres = (child.userData.centres as number[] | undefined) ?? [];
+        for (let i = 0; i + 2 < centres.length; i += 3) footprints.push({ x: child.position.x + centres[i], z: child.position.z + centres[i + 1], height: centres[i + 2] });
       }
     }
     const terrain = world.userData.terrain as { hasGround?: boolean; heightAtLocal(x: number, z: number): number } | undefined;

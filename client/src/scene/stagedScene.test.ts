@@ -49,7 +49,7 @@ describe("an inner area in a staged build", () => {
     handle.apply({ layer: "fetched", projection, innerAreaIds: ["inner-1"] });
     handle.addBuilt(inner);
     expect(world.getObjectByName("roads")!.children).toHaveLength(0);
-    expect(world.getObjectByName("buildings")!.children.map((c) => c.name)).toEqual(["building:bu1"]);
+    expect(world.getObjectByName("buildings")!.children.flatMap((c) => c.userData.featureIds)).toEqual(["bu1"]);
     expect(world.getObjectByName("blocks")!.children.map((c) => c.name)).toEqual(["block_outline:b1", "block:b1"]);
   });
 });

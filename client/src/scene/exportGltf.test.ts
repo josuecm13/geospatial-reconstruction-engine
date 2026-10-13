@@ -3,12 +3,16 @@ import { validateBytes } from "gltf-validator";
 import * as THREE from "three";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Feature, MapData, Position } from "../api/types";
-import { buildWorld, roadOutlineLines, setRoadMode } from "./buildWorld";
+import { buildWorld as buildBatched, roadOutlineLines, setRoadMode } from "./buildWorld";
+import type { RoadMode } from "./terrain";
 import { exportWorld, glbFileName } from "./exportGltf";
 import type { ExportOptions } from "./exportGltf";
 import { setActiveTheme } from "./palette";
 import { DEFAULT_THEME, themeById } from "./themes";
 import type { ThemeId } from "./themes/types";
+
+/** The export is of a per-feature world (`building:<id>` nodes): the scene view rebuilds it that way (sceneView.ts `exportSource`). */
+const buildWorld = (data: MapData, roadMode?: RoadMode) => buildBatched(data, roadMode, { batched: false });
 
 const night: ExportOptions = { theme: "night-clay", timeOfDay: "midday" };
 const D = 0.0001;

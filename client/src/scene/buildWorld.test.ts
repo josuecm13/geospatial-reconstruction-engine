@@ -1,9 +1,13 @@
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
 import type { Elevation, Feature, GeneratedBuildingProperties, MapData, Position } from "../api/types";
-import { buildWorld, generatedMeshes, groundPlane, LAYER_ORDER, LAYER_Y, OUTLINE_LIFT, roadOutlineLines, setRoadMode } from "./buildWorld";
+import { buildWorld as buildBatched, generatedMeshes, groundPlane, LAYER_ORDER, LAYER_Y, OUTLINE_LIFT, roadOutlineLines, setRoadMode } from "./buildWorld";
+import type { RoadMode } from "./terrain";
 import { FALLBACK_HEIGHT } from "./buildingHeight";
 import { MATERIALS } from "./palette";
+
+/** One mesh per building, named `<layer>:<id>`: the shape the glTF export writes, and what most of these tests read. The merged chunks have a describe of their own below. */
+const buildWorld = (data: MapData, roadMode?: RoadMode) => buildBatched(data, roadMode, { batched: false });
 
 const D = 0.0001; // about 11 m
 const square = (lon: number, lat: number): Position[][] => [[[lon, lat], [lon + D, lat], [lon + D, lat + D], [lon, lat + D], [lon, lat]]];
@@ -347,7 +351,7 @@ describe("buildWorld generated buildings", () => {
 
   it("generatedMeshes builds the same meshes without a world: named, tagged, extruded and edged from the features", () => {
     const terrain = buildWorld(data).userData.terrain;
-    const meshes = generatedMeshes([generated("g1", -84, 10.0004, null, 8), generated("g2", -84, 10.0006, null, 12)], terrain, data.projection);
+    const meshes = generatedMeshes([generated("g1", -84, 10.0004, null, 8), generated("g2", -84, 10.0006, null, 12)], terrain, data.projection, false);
 
     expect(meshes.map((mesh) => mesh.name)).toEqual(["generated:g1", "generated:g2"]);
     expect(meshes.every((mesh) => mesh.userData.generated === true && mesh.material === MATERIALS.buildingGenerated)).toBe(true);
@@ -365,6 +369,7 @@ describe("buildWorld generated buildings", () => {
       [generated("g1", -84, 10.0004, 25), { ...generated("g2", -84, 10.0006, null), geometry: null } as never],
       terrain,
       data.projection,
+      false,
     );
     expect(rest).toEqual([]);
     expect(mesh.position.y).toBeCloseTo(25 - terrain.baseline, 6);
@@ -532,5 +537,93 @@ describe("buildWorld block outlines and zones", () => {
 
   it("draws no zones without a run", () => {
     expect(buildWorld(data).getObjectByName("blocks")!.children.some((child) => child.name.startsWith("zone:"))).toBe(false);
+  });
+});
+
+describe("buildWorld batched buildings", () => {
+  const generated = (id: string, block: string, lat: number, base: number | null = null) =>
+    ({
+      type: "Feature",
+      id,
+      geometry: { type: "Polygon", coordinates: square(-84, lat) },
+      properties: { block_id: block, style: "regular", levels: 2, height_meters: 6.4, base_elevation_meters: base, reference_block_id: null, count_source: "default", generated: true },
+    }) as Feature<GeneratedBuildingProperties>;
+  const withGenerated = { ...data, generated_buildings: fc([generated("g1", "b1", 10.0004), generated("g2", "b1", 10.0006), generated("g3", "b2", 10.0008)]) };
+  const world = buildBatched(withGenerated);
+  const chunks = (group: string) => world.getObjectByName(group)!.children as THREE.Mesh[];
+
+  it("draws the observed buildings as chunks named for their cell and material, not as one mesh each", () => {
+    expect(chunks("buildings").every((chunk) => /^buildings:chunk:/.test(chunk.name) && chunk.userData.layer === "building" && chunk.castShadow && chunk.receiveShadow)).toBe(true);
+    expect(world.getObjectByName("building:bu1")).toBeUndefined();
+    expect(chunks("buildings").flatMap((chunk) => chunk.userData.featureIds).sort()).toEqual(["bu1", "bu2"]);
+  });
+
+  it("keeps the defaulted and measured materials apart, even in one cell", () => {
+    const byId = (id: string) => chunks("buildings").find((chunk) => chunk.userData.featureIds.includes(id))!;
+    expect(byId("bu1").material).toBe(MATERIALS.buildingDefaulted);
+    expect(byId("bu2").material).toBe(MATERIALS.buildingMeasured);
+    expect(byId("bu1")).not.toBe(byId("bu2"));
+  });
+
+  it("gives each chunk one edges child in the edge material, and the generated ones the dashed material", () => {
+    for (const chunk of chunks("buildings")) {
+      const edges = chunk.children.filter((child) => child.name === "edges") as THREE.LineSegments[];
+      expect(edges).toHaveLength(1);
+      expect(edges[0].material).toBe(MATERIALS.edge);
+    }
+    for (const chunk of chunks("generated")) {
+      const edges = chunk.getObjectByName("edges") as THREE.LineSegments;
+      expect(edges.material).toBe(MATERIALS.edgeGenerated);
+      expect(edges.geometry.getAttribute("lineDistance")).toBeDefined();
+    }
+  });
+
+  it("merges the generated buildings of a block into one chunk, and keeps blocks apart", () => {
+    expect(chunks("generated").map((chunk) => chunk.name)).toEqual(["generated:chunk:b1", "generated:chunk:b2"]);
+    expect(chunks("generated").map((chunk) => chunk.userData.featureIds)).toEqual([["g1", "g2"], ["g3"]]);
+    expect(chunks("generated").map((chunk) => chunk.userData.block)).toEqual(["b1", "b2"]);
+    expect(chunks("generated").every((chunk) => chunk.userData.generated === true && chunk.material === MATERIALS.buildingGenerated)).toBe(true);
+  });
+
+  it("generatedMeshes falls back to the grid cell for a feature with no block", () => {
+    const terrain = world.userData.terrain;
+    const feature = generated("g1", "b1", 10.0004);
+    const [chunk] = generatedMeshes([{ ...feature, properties: { ...feature.properties, block_id: undefined as never } }], terrain, data.projection);
+    expect(chunk.name).toMatch(/^generated:chunk:cell:/);
+    expect(chunk.userData.block).toBeUndefined();
+  });
+
+  it("keeps each feature's properties once in the world, and none on the meshes", () => {
+    const features: Map<string, { height_meters: number | null }> = world.userData.features;
+    expect(features.get("bu2")).toMatchObject({ height_meters: 12 });
+    expect(features.get("g3")).toMatchObject({ block_id: "b2" });
+    world.traverse((object) => expect(object.userData.properties).toBeUndefined());
+  });
+
+  it("still lists every footprint for walking", () => {
+    expect(world.userData.footprints.map((footprint: { id: string }) => footprint.id)).toEqual(["bu1", "bu2"]);
+  });
+
+  it("stands each building on its base inside a chunk that sits at its lowest one", () => {
+    const terrainWorld = buildBatched(terrainData);
+    const bottoms = new Map<string, number>();
+    for (const chunk of terrainWorld.getObjectByName("buildings")!.children as THREE.Mesh[]) {
+      const position = chunk.geometry.getAttribute("position") as THREE.BufferAttribute;
+      const starts: number[] = chunk.userData.triangleStarts;
+      (chunk.userData.featureIds as string[]).forEach((id, i) => {
+        let min = Infinity;
+        for (let v = starts[i] * 3; v < starts[i + 1] * 3; v++) min = Math.min(min, position.getY(v));
+        bottoms.set(id, chunk.position.y + min);
+      });
+    }
+    expect(bottoms.get("bu1")).toBeCloseTo(7, 4); // the server's base: 57 m over the 50 m baseline
+    expect(bottoms.get("bu2")).toBeCloseTo(10, 3); // the lowest ground under it
+  });
+
+  it("holds the same buildings as the per-feature world: same ids", () => {
+    const flat = buildWorld(withGenerated);
+    const ids = (group: string) => (flat.getObjectByName(group)!.children as THREE.Mesh[]).map((mesh) => mesh.userData.id).sort();
+    expect(chunks("buildings").flatMap((chunk) => chunk.userData.featureIds).sort()).toEqual(ids("buildings"));
+    expect(chunks("generated").flatMap((chunk) => chunk.userData.featureIds).sort()).toEqual(ids("generated"));
   });
 });
