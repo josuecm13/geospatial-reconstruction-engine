@@ -234,7 +234,9 @@ colours: `COLORS`, `SCENE_BACKGROUND` and `--scene-background` are exported from
 - **Shadows** (sun-following themes only). A 2048² shadow map is fitted to the view (`scene/shadowFit.ts`).
   Its box is centred on the orbit target and sized to 0.8 of the camera's distance, clamped to 150 to 1500 m
   and stepped by 1.25×. The centre snaps to whole texels so edges don't shimmer. The map redraws only when the
-  sun, the centre or the size changes, or while buildings are rising.
+  sun, the centre or the size changes, or while buildings are rising. Past 1280 m from the target, where a texel
+  passes about a metre, the sun stops casting shadows (the lights stay), and they return below 90% of that
+  (`SHADOW_OFF_DISTANCE`, with that hysteresis, in `shadowFit.ts`).
 
 ### Night windows and Realistic's textures
 
@@ -318,6 +320,15 @@ Every error response uses one JSON shape with a machine-readable `code` (`app/ap
 `../HOW_TO_RUN.md` has worked curl examples.
 
 The client (`client/`, Milestone 9) is the engine's showcase: MapLibre GL is the 2D surface for choosing a place, tracing a boundary, and importing it; Three.js renders the built world as a stylized low-poly scene from `map-data` and its local projection, and exports it as glTF. It consumes the API's representation and never re-derives the domain; scene and mesh geometry are built client-side only.
+
+The scene draws buildings as merged chunks, one per 150 m cell and material (`client/src/scene/batching.ts`), each with
+one merged edge-line child and a record in `userData` of its features (`featureIds`, `triangleStarts`, `centres`, and for
+generated buildings the `blocks` and the `cell`), so a ray hit maps back to a feature. Generated buildings stream in and rise
+one chunk per block, and the scene view folds those into their cell's chunk once nothing is rising. Detail falls with
+distance: near cells are drawn in full with edge lines and shadows, middle ones without edge lines, and far ones as boxes
+merged per 4×4 super-cell with no shadows; shadows also go off past a camera distance (see Scene themes). The glTF export does
+not read the chunks: it rebuilds the world from the map data with one mesh per feature (`building:<id>`, `generated:<id>`),
+streamed generated buildings included, and leaves the edge lines out.
 
 ### Background imports
 

@@ -13,7 +13,7 @@ const REFRESH_MS = 250;
 export function createFpsReadout(
   container: HTMLElement,
   renderer: THREE.WebGLRenderer,
-  info: { theme: () => string; shadowRedraws: () => number; pixelRatio: () => number },
+  info: { theme: () => string; shadowRedraws: () => number; shadowsOn?: () => boolean; pixelRatio: () => number },
   search: string = window.location.search,
 ): FpsReadout | null {
   if (!new URLSearchParams(search).has("fps")) return null;
@@ -38,7 +38,7 @@ export function createFpsReadout(
         `calls ${render.calls}  tris ${render.triangles}`,
         `textures ${memory.textures}  pixel ratio ${info.pixelRatio().toFixed(2)}`,
         `theme ${info.theme()}`,
-        `shadows redrawn: ${shadows ? "yes" : "no"}`,
+        info.shadowsOn?.() === false ? "shadows: off" : `shadows redrawn: ${shadows ? "yes" : "no"}`,
       ].join("\n");
     },
     dispose() {

@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { fitShadow, fitStands, shadowHalfSize } from "./shadowFit";
+import { fitShadow, fitStands, SHADOW_MAP_SIZE, shadowHalfSize, shadowsOn } from "./shadowFit";
 import { applyWindowUniforms, windowNight } from "./nightWindows";
 import { createSkyMaterial } from "./themes/sky";
 import { blendLighting, blendSky, LIGHTING, type Lighting, type Vec3 } from "./themes/timeOfDay";
@@ -7,8 +7,7 @@ import type { Sky, Theme, TimeOfDay } from "./themes/types";
 
 /** How long a change of time of day takes to play. */
 export const TRANSITION_SECONDS = 1.5;
-/** Kept at 2048: at the 150 m minimum box that is about 15 cm a texel, and the fit already stays put while the camera is still (see `update`). */
-export const SHADOW_MAP_SIZE = 2048;
+export { SHADOW_MAP_SIZE };
 /** The dome's radius, as a share of the camera's far plane. */
 const DOME_RADIUS = 0.9;
 /** Fog stays inside the dome: it ends at this share of the camera's far plane, and starts no later than 0.4 of where it ends. */
@@ -37,6 +36,8 @@ export interface Atmosphere {
   invalidateShadows(): void;
   /** How many times the shadow map has been asked to redraw since creation (the `?fps` readout watches it). */
   shadowRedraws(): number;
+  /** Whether the sun casts shadows now: false in a theme that doesn't follow the sun, and while the camera is past `SHADOW_OFF_DISTANCE` (the lights stay on). */
+  shadowsOn(): boolean;
   dispose(): void;
 }
 
@@ -70,6 +71,7 @@ export function createAtmosphere(scene: THREE.Scene, renderer: THREE.WebGLRender
   let fog: THREE.Fog | null = null;
   let dirty = true;
   let redraws = 0;
+  let shadowing = true; // false while the camera is too far for the shadow map's texels (`shadowsOn`)
   let lastSun: Vec3 | undefined;
   let lastHalfSize = 0;
   let lastTarget: Vec3 | undefined; // the target the box was last fitted to
@@ -82,8 +84,8 @@ export function createAtmosphere(scene: THREE.Scene, renderer: THREE.WebGLRender
     const { lighting, sky } = look;
     const following = !!theme?.followsSun;
     sun.visible = hemisphere.visible = following;
-    sun.castShadow = following;
-    renderer.shadowMap.enabled = following;
+    sun.castShadow = following && shadowing;
+    renderer.shadowMap.enabled = following && shadowing;
     sun.color.set(lighting.sunColor);
     sun.intensity = lighting.sunIntensity;
     hemisphere.color.set(lighting.skyColor);
@@ -143,6 +145,15 @@ export function createAtmosphere(scene: THREE.Scene, renderer: THREE.WebGLRender
       if (!theme?.followsSun) return;
       const direction = (current ?? to).lighting.sunDirection;
       const distanceToTarget = camera.position.distanceTo(target);
+      // Far from the target the box is capped, its texels are metres wide and the pass is wasted: shadows go off (the lights stay) and, coming back, refit and redraw.
+      const wanted = shadowsOn(distanceToTarget, shadowing);
+      if (wanted !== shadowing) {
+        shadowing = wanted;
+        sun.castShadow = renderer.shadowMap.enabled = wanted;
+        lastSun = undefined; // the box is refitted on the way back
+        dirty = true;
+      }
+      if (!shadowing) return;
       // A target that has only drifted a little keeps the last fit, and so the shadow map: a refit snaps to a new texel grid and redraws it.
       const stands =
         !!lastSun &&
@@ -178,6 +189,7 @@ export function createAtmosphere(scene: THREE.Scene, renderer: THREE.WebGLRender
     },
     night: () => current?.lighting.night ?? 0,
     shadowRedraws: () => redraws,
+    shadowsOn: () => !!theme?.followsSun && shadowing,
     invalidateShadows() {
       dirty = true;
     },

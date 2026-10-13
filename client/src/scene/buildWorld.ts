@@ -188,13 +188,17 @@ export function roadOutlineLines(world: THREE.Object3D): THREE.LineSegments {
 /**
  * The meshes of generated buildings, with a footprint: extruded to `height_meters` in the generated material, standing on
  * `base_elevation_meters` (minus the terrain's baseline), edges as a child. Batched (the default), they are one merged mesh
- * per block (`generated:chunk:<block_id>`, or the grid cell for a feature with none) that records its features' ids and
- * block in `userData`; unbatched, one mesh per feature named `generated:<id>` (the glTF export's shape). Shared by `buildWorld`
- * and by the batches that stream into a world while a run is being generated, so both look the same.
+ * per (150 m cell, material) (`generated:chunk:<cell>:<material>`) that records its features' ids and each one's block (`blocks`,
+ * parallel to `featureIds`) in `userData`, with the cell as `cell`. `by: "block"` makes one chunk per block instead
+ * (`generated:chunk:<block_id>`, or the grid cell for a feature with none), what a run's batches are drawn as while they stream
+ * in and rise block by block (the scene view folds them into the cell chunks once they have risen). Unbatched, one mesh per
+ * feature named `generated:<id>` (the glTF export's shape). Shared by `buildWorld` and by the batches that stream into a world
+ * while a run is being generated, so both look the same.
  */
-export function generatedMeshes(features: Feature<GeneratedBuildingProperties>[], terrain: Terrain, projection: Projection, batched = true): THREE.Mesh[] {
+export function generatedMeshes(features: Feature<GeneratedBuildingProperties>[], terrain: Terrain, projection: Projection, batched = true, by: "cell" | "block" = "cell"): THREE.Mesh[] {
   const meshes: THREE.Mesh[] = [];
   const entries: BatchEntry[] = [];
+  const blockOf = new Map<string, string>();
   for (const feature of features) {
     const polygons = polygonsOf(feature.geometry, projection);
     if (!polygons.length) continue;
@@ -204,7 +208,10 @@ export function generatedMeshes(features: Feature<GeneratedBuildingProperties>[]
       const rings = polygons.map((p) => p[0]);
       const block = feature.properties.block_id as string | undefined;
       const centre = ringsCentre(rings);
-      entries.push({ id: feature.id, key: block ?? `cell:${cellKey(centre.x, centre.z)}`, material: MATERIALS.buildingGenerated, geometry, base: groundBase(terrain, polygons, feature.properties.base_elevation_meters), height: feature.properties.height_meters, rings });
+      const cell = cellKey(centre.x, centre.z);
+      blockOf.set(feature.id, block ?? "");
+      const key = by === "block" ? block ?? `cell:${cell}` : `${cell}:${materialKey(MATERIALS.buildingGenerated)}`;
+      entries.push({ id: feature.id, key, material: MATERIALS.buildingGenerated, geometry, base: groundBase(terrain, polygons, feature.properties.base_elevation_meters), height: feature.properties.height_meters, rings });
       continue;
     }
     const mesh = entity("generated", feature, geometry, MATERIALS.buildingGenerated);
@@ -221,7 +228,16 @@ export function generatedMeshes(features: Feature<GeneratedBuildingProperties>[]
     edgeMaterial: MATERIALS.edgeGenerated,
     dashed: true, // the dashes (Blueprint) are measured along the line
     castShadow: true,
-    extra: (key) => ({ generated: true, block: key.startsWith("cell:") ? undefined : key }),
+    extra: (key, group) => {
+      // A cell chunk's key starts with its cell; a block's chunk is in the cell of the block's centre.
+      const centre = ringsCentre(group.flatMap((entry) => entry.rings));
+      return {
+        generated: true,
+        block: by === "block" && !key.startsWith("cell:") ? key : undefined,
+        blocks: group.map((entry) => blockOf.get(entry.id)!),
+        cell: by === "cell" ? key.slice(0, key.lastIndexOf(":")) : cellKey(centre.x, centre.z),
+      };
+    },
   });
 }
 

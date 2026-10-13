@@ -578,17 +578,26 @@ describe("buildWorld batched buildings", () => {
     }
   });
 
-  it("merges the generated buildings of a block into one chunk, and keeps blocks apart", () => {
-    expect(chunks("generated").map((chunk) => chunk.name)).toEqual(["generated:chunk:b1", "generated:chunk:b2"]);
-    expect(chunks("generated").map((chunk) => chunk.userData.featureIds)).toEqual([["g1", "g2"], ["g3"]]);
-    expect(chunks("generated").map((chunk) => chunk.userData.block)).toEqual(["b1", "b2"]);
+  it("merges the generated buildings of a cell and material into one chunk, recording each feature's block and the cell", () => {
+    // The three stand within 90 m north of the origin: cell 0,-1, whatever their block.
+    expect(chunks("generated").map((chunk) => chunk.name)).toEqual(["generated:chunk:0,-1:buildingGenerated"]);
+    expect(chunks("generated").map((chunk) => chunk.userData.featureIds)).toEqual([["g1", "g2", "g3"]]);
+    expect(chunks("generated").map((chunk) => chunk.userData.blocks)).toEqual([["b1", "b1", "b2"]]);
+    expect(chunks("generated").map((chunk) => chunk.userData.cell)).toEqual(["0,-1"]);
+    expect(chunks("generated").map((chunk) => chunk.userData.block)).toEqual([undefined]);
     expect(chunks("generated").every((chunk) => chunk.userData.generated === true && chunk.material === MATERIALS.buildingGenerated)).toBe(true);
   });
 
-  it("generatedMeshes falls back to the grid cell for a feature with no block", () => {
+  it("generatedMeshes draws a chunk per block with by: block, each in the cell of its centre, and falls back to the grid cell for a feature with no block", () => {
     const terrain = world.userData.terrain;
+    const features = withGenerated.generated_buildings.features as Feature<GeneratedBuildingProperties>[];
+    const perBlock = generatedMeshes(features, terrain, data.projection, true, "block");
+    expect(perBlock.map((chunk) => chunk.name)).toEqual(["generated:chunk:b1", "generated:chunk:b2"]);
+    expect(perBlock.map((chunk) => chunk.userData.block)).toEqual(["b1", "b2"]);
+    expect(perBlock.map((chunk) => chunk.userData.blocks)).toEqual([["b1", "b1"], ["b2"]]);
+    expect(perBlock.map((chunk) => chunk.userData.cell)).toEqual(["0,-1", "0,-1"]);
     const feature = generated("g1", "b1", 10.0004);
-    const [chunk] = generatedMeshes([{ ...feature, properties: { ...feature.properties, block_id: undefined as never } }], terrain, data.projection);
+    const [chunk] = generatedMeshes([{ ...feature, properties: { ...feature.properties, block_id: undefined as never } }], terrain, data.projection, true, "block");
     expect(chunk.name).toMatch(/^generated:chunk:cell:/);
     expect(chunk.userData.block).toBeUndefined();
   });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fitShadow, fitStands, lightAxes, MAX_HALF_SIZE, MIN_HALF_SIZE, REFIT_FRACTION, shadowHalfSize } from "./shadowFit";
+import { fitShadow, fitStands, lightAxes, MAX_HALF_SIZE, MIN_HALF_SIZE, REFIT_FRACTION, SHADOW_OFF_DISTANCE, SHADOW_ON_FRACTION, shadowHalfSize, shadowsOn } from "./shadowFit";
 import { LIGHTING } from "./themes/timeOfDay";
 
 const MAP = 2048;
@@ -93,5 +93,33 @@ describe("shadowHalfSize", () => {
   it("is what fitShadow uses, clamped", () => {
     expect(shadowHalfSize(500)).toBe(fitShadow({ x: 0, y: 0, z: 0 }, 500, sun, MAP).halfSize);
     expect(shadowHalfSize(1e6)).toBe(MAX_HALF_SIZE);
+  });
+});
+
+describe("shadowsOn", () => {
+  it("puts the threshold where the box makes a texel pass about a metre: 1280 m, short of the 1500 m cap", () => {
+    expect(SHADOW_OFF_DISTANCE).toBe(1280);
+    // The box half-size there is 1024 m wanted, 1117.6 m quantised: a texel of 2 * 1117.6 / 2048 = 1.09 m.
+    expect((2 * shadowHalfSize(SHADOW_OFF_DISTANCE)) / MAP).toBeLessThan(1.1);
+    expect(shadowHalfSize(SHADOW_OFF_DISTANCE)).toBeLessThan(MAX_HALF_SIZE);
+  });
+
+  it("turns off past the threshold and on below the band, whatever it was", () => {
+    expect(shadowsOn(SHADOW_OFF_DISTANCE + 1, true)).toBe(false);
+    expect(shadowsOn(SHADOW_OFF_DISTANCE + 1, false)).toBe(false);
+    expect(shadowsOn(SHADOW_OFF_DISTANCE * SHADOW_ON_FRACTION - 1, false)).toBe(true);
+    expect(shadowsOn(SHADOW_OFF_DISTANCE * SHADOW_ON_FRACTION - 1, true)).toBe(true);
+    expect(shadowsOn(0, false)).toBe(true);
+  });
+
+  it("holds its state inside the hysteresis band, so a camera hovering at the threshold doesn't flip", () => {
+    const inside = SHADOW_OFF_DISTANCE * 0.95;
+    expect(shadowsOn(inside, true)).toBe(true);
+    expect(shadowsOn(inside, false)).toBe(false);
+    expect(shadowsOn(SHADOW_OFF_DISTANCE, true)).toBe(true); // exactly at it is not past it
+    // Walking out and back in: off at 1300, still off at 1200, on again at 1100.
+    let on = true;
+    const states = [1000, 1300, 1200, 1100, 1200, 1281].map((distance) => (on = shadowsOn(distance, on)));
+    expect(states).toEqual([true, false, false, true, true, false]);
   });
 });

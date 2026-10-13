@@ -2,6 +2,10 @@ import type { Vec3 } from "./themes/timeOfDay";
 
 export const MIN_HALF_SIZE = 150;
 export const MAX_HALF_SIZE = 1500;
+/** The shadow map's side in texels. At the 150 m minimum box that is about 15 cm a texel, and the fit already stays put while the camera is still (see `atmosphere.update`). */
+export const SHADOW_MAP_SIZE = 2048;
+/** The coarsest shadow texel worth drawing, in metres: past it a shadow is a blur wider than a car, and the map costs a pass over every building for nothing visible. */
+export const MAX_TEXEL_METERS = 1;
 /** How much of the camera's distance to the orbit target the shadow box covers on each side of the target. */
 const HALF_SIZE_PER_DISTANCE = 0.8;
 /** The half-size moves in geometric steps of this ratio from the minimum, so zooming redraws the shadow map only when it crosses one. */
@@ -15,6 +19,19 @@ export const quantiseHalfSize = (wanted: number) => {
 
 /** The half-size of the box for a camera at `distance` from the target: stepped, and clamped. */
 export const shadowHalfSize = (distance: number) => Math.min(MAX_HALF_SIZE, quantiseHalfSize(Math.max(MIN_HALF_SIZE, distance * HALF_SIZE_PER_DISTANCE)));
+
+/**
+ * The camera's distance to the target past which shadows are turned off: where the box (0.8 times the distance on each side)
+ * makes a texel of `SHADOW_MAP_SIZE` pass `MAX_TEXEL_METERS`: 1 m * 2048 / 2 / 0.8 = 1280 m. The box only stops growing at
+ * `MAX_HALF_SIZE` (1500 m, a 1.5 m texel, from a distance of 1875 m); this goes before it, where texels are about 1 m.
+ */
+export const SHADOW_OFF_DISTANCE = (MAX_TEXEL_METERS * SHADOW_MAP_SIZE) / 2 / HALF_SIZE_PER_DISTANCE;
+/** Shadows come back below this share of `SHADOW_OFF_DISTANCE`, so a camera hovering at the threshold doesn't flip them (each flip recompiles the lit materials) on every frame. */
+export const SHADOW_ON_FRACTION = 0.9;
+
+/** Whether shadows should be on for a camera `distance` from the target, given whether they are on now: off past `SHADOW_OFF_DISTANCE`, on again below `SHADOW_ON_FRACTION` of it, and unchanged between. */
+export const shadowsOn = (distance: number, wasOn: boolean): boolean =>
+  distance > SHADOW_OFF_DISTANCE ? false : distance < SHADOW_OFF_DISTANCE * SHADOW_ON_FRACTION ? true : wasOn;
 
 /** The target may drift this share of the half-size from where the box was last fitted before it is fitted again, so walking and orbiting redraw the shadow map every so often, not on every small move. */
 export const REFIT_FRACTION = 0.1;

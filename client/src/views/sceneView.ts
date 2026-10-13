@@ -3,6 +3,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { BoundingBox, MapData, Projection } from "../api/types";
 import { prefersReducedMotion } from "../locations/flyTo";
 import { Animator, staggerDelay } from "../scene/buildAnimation";
+import { foldChunks, materialKey } from "../scene/batching";
 import { buildWorld, DEFAULT_ROAD_MODE, generatedMeshes, LAYER_ORDER, registerFeatures, roadOutlineLines, setRoadMode, WORLD_GROUPS } from "../scene/buildWorld";
 import { applyDetail } from "../scene/detailLevels";
 import { RevealQueue } from "../scene/revealQueue";
@@ -129,10 +130,35 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
   const skipReveal = Object.assign(document.createElement("button"), { className: "scene-skip", type: "button", textContent: "Skip animation", hidden: true });
   container.appendChild(skipReveal);
   const busy = () => rising > 0 || reveal.size > 0;
-  /** Shows Skip while a reveal plays; once it has drained, tells whoever waits (a completed job's reload). */
-  const settle = () => {
+  /**
+   * Folds the block chunks the batches were drawn as into one chunk per (150 m cell, material), the shape a loaded world has
+   * (`generated:chunk:<cell>:<material>`): up to 740 draw calls become a few dozen. Only while nothing rises or waits (a
+   * rising chunk is scaled), and only the cells that changed. The merged-away geometries are disposed; the features, their
+   * blocks and the cell stay on the chunk (`userData`), so every reader of the group sees the same things.
+   */
+  const fold = () => {
+    const generated = generatedGroup();
+    if (!generated || busy()) return;
+    const chunks = generated.children.filter((child): child is THREE.Mesh => (child as THREE.Mesh).isMesh && child.userData.chunk === true && typeof child.userData.cell === "string");
+    const folded = foldChunks(chunks, {
+      prefix: "generated",
+      keyOf: (chunk) => `${chunk.userData.cell}:${materialKey(chunk.material as THREE.Material)}`,
+      edgeMaterial: MATERIALS.edgeGenerated,
+      dashed: true,
+    });
+    if (!folded.length) return;
+    for (const { replaced, chunk } of folded) {
+      replaced.forEach((old) => generated.remove(old));
+      generated.add(chunk);
+    }
+    atmosphere.invalidateShadows();
+  };
+  /** Shows Skip while a reveal plays; once it has drained, folds the chunks and tells whoever waits (a completed job's reload). `foldNow: false` for a world or its buildings that are about to go. */
+  const settle = (foldNow = true) => {
     skipReveal.hidden = !busy();
-    if (!busy()) idleWaiters.splice(0).forEach((resolve) => resolve(true));
+    if (busy()) return;
+    if (foldNow) fold();
+    idleWaiters.splice(0).forEach((resolve) => resolve(true));
   };
   const track = (rise: Promise<void>) => {
     rising++;
@@ -147,7 +173,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
     reveal.start();
     if (abandoned) idleWaiters.splice(0).forEach((resolve) => resolve(false));
     animator.reset();
-    settle();
+    settle(false);
   };
   /** Meshes under the `generated` group go; geometries are released (materials are shared). */
   const clearGenerated = () => {
@@ -167,19 +193,23 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
     const generated = generatedGroup();
     const terrain: Terrain | undefined = world?.userData.terrain;
     if (!generated || !terrain || !items.length) return;
-    // The ids already drawn, from the chunks of these items' blocks (a block is one chunk, so only those are scanned).
+    // The ids already drawn in these items' blocks: every chunk, block or folded cell, lists its features' blocks beside their ids.
     const blocks = new Set(items.map(({ feature }) => feature.properties.block_id));
-    const present = new Set(generated.children.filter((child) => blocks.has(child.userData.block)).flatMap((child) => child.userData.featureIds as string[]));
+    const present = new Set<string>();
+    for (const child of generated.children) {
+      const chunkBlocks = child.userData.blocks as string[] | undefined;
+      (child.userData.featureIds as string[] | undefined)?.forEach((id, i) => chunkBlocks && blocks.has(chunkBlocks[i]) && present.add(id));
+    }
     const fresh = items.filter(({ feature }) => !present.has(feature.id));
-    // One chunk per block: the items arrive a block at a time, so these are the block's buildings merged.
-    const meshes = fresh.length ? generatedMeshes(fresh.map(({ feature }) => feature), terrain, fresh[0].projection) : [];
+    // One chunk per block while they rise: the items arrive a block at a time, so these are the block's buildings merged. `fold` merges them into their cell's chunk once nothing rises.
+    const meshes = fresh.length ? generatedMeshes(fresh.map(({ feature }) => feature), terrain, fresh[0].projection, true, "block") : [];
     if (!meshes.length) return;
     registerFeatures(world!, fresh.map(({ feature }) => feature));
     streamed.push(...fresh.map(({ feature }) => feature));
     generated.add(...meshes);
     atmosphere.invalidateShadows();
     generated.visible = true;
-    if (instant || prefersReducedMotion()) return;
+    if (instant || prefersReducedMotion()) return; // folded by the `settle` that follows (the reveal, Skip, or the sink's `add`)
     track(animator.riseAt(meshes, meshes.map((_, i) => staggerDelay(i, meshes.length))));
   };
   const playReveal = (groups: { items: Item[] }[], instant = false) => {
@@ -200,6 +230,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
       for (const feature of features) byBlock.set(feature.properties.block_id, [...(byBlock.get(feature.properties.block_id) ?? []), { feature, projection }]);
       if (prefersReducedMotion()) {
         for (const items of byBlock.values()) spawn(items, true);
+        settle();
         return;
       }
       // Each block waits for its slot on the schedule, or rises on arrival when the server is slower than that.
@@ -217,6 +248,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
     cancelReveal(false); // finishes what is in flight, so re-ticking restarts cleanly
     generated.visible = shown;
     if (!shown || prefersReducedMotion()) return;
+    // Folded, a cell is one chunk, so it rises as one, from the middle of the chunk (a cell has no single block).
     const meshes = generated.children.filter((child): child is THREE.Mesh => (child as THREE.Mesh).isMesh);
     const points = meshes.map((mesh) => {
       const at = new THREE.Box3().setFromObject(mesh).getCenter(new THREE.Vector3());
@@ -366,7 +398,7 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
   actions.appendChild(rotateButton);
   const staged = createStagedScene(scene, container);
 
-  const fpsReadout = createFpsReadout(container, renderer, { theme: () => theme.id, shadowRedraws: () => atmosphere.shadowRedraws(), pixelRatio: () => renderer.getPixelRatio() });
+  const fpsReadout = createFpsReadout(container, renderer, { theme: () => theme.id, shadowRedraws: () => atmosphere.shadowRedraws(), shadowsOn: () => atmosphere.shadowsOn(), pixelRatio: () => renderer.getPixelRatio() });
   let running = false;
   const resize = () => {
     const { clientWidth, clientHeight } = container;

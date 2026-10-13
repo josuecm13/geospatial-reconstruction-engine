@@ -49,11 +49,15 @@ The scene SHALL draw a sky dome with a gradient from horizon to zenith, with a s
 - **THEN** the new lighting appears at once, with no animation
 
 ### Requirement: Themes that follow the sun SHALL cast shadows from it
-In a theme that follows the sun, buildings SHALL cast shadows from the sun onto the ground, roads and area features, using a shadow map that covers the camera's view and is redrawn only when the sun, the view or the buildings change. Themes that do not follow the sun SHALL draw no shadows.
+In a theme that follows the sun, buildings SHALL cast shadows from the sun onto the ground, roads and area features, using a shadow map that covers the camera's view and is redrawn only when the sun, the view or the buildings change. Themes that do not follow the sun SHALL draw no shadows. When the camera is far enough from its target that a shadow texel would pass about a metre, the sun SHALL stop casting shadows (the lights stay on), and SHALL cast them again once the camera is nearer by a margin, so a camera at the threshold does not flip them.
 
 #### Scenario: Shadows move with the sun
 - **WHEN** a user in Realistic changes the time from midday to golden hour
 - **THEN** building shadows lengthen and turn with the sun
+
+#### Scenario: Shadows from high up
+- **WHEN** a user in Realistic zooms out until the camera is far from the orbit target
+- **THEN** the shadows disappear while the sun and sky light still light the scene, and they return when the user zooms back in
 
 ### Requirement: Buildings SHALL show lit windows at night
 At the night preset, in a theme with night windows, building walls SHALL show small lit windows: a grid of floors and columns at a realistic scale on each wall, with a share of the cells lit in a warm colour that shows even where no light falls, and none on roofs. Generated buildings SHALL use a different window colour and density from real ones. From a distance the windows SHALL blend into a soft glow rather than flicker. The windows SHALL cost no per-frame CPU work and no extra geometry. Night clay SHALL show its windows always, and Blueprint SHALL show none.

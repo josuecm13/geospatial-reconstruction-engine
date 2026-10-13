@@ -174,6 +174,86 @@ export function mergeChunks(entries: BatchEntry[], options: ChunkOptions): THREE
   return meshes;
 }
 
+export interface FoldOptions {
+  /** Chunk names are `<prefix>:chunk:<key>`. */
+  prefix: string;
+  /** Which merged chunk a chunk joins (the key says the material too). */
+  keyOf: (chunk: THREE.Mesh) => string;
+  /** The material of the merged edges child. */
+  edgeMaterial: THREE.LineBasicMaterial;
+  dashed?: boolean;
+  /** Extra `userData` for a merged chunk, from its key and the chunks it replaces. */
+  extra?: (key: string, chunks: THREE.Mesh[]) => Record<string, unknown>;
+}
+
+/** A merged chunk and the chunks it replaces: the caller swaps them in the scene (`foldChunks` has disposed what the replaced chunks no longer need). */
+export interface Folded {
+  replaced: THREE.Mesh[];
+  chunk: THREE.Mesh;
+}
+
+/**
+ * Merges chunks that `mergeChunks` made (at rest: unscaled, at x = z = 0) into one chunk per `keyOf`, keeping what a chunk
+ * records: `featureIds`, `triangleStarts`, `centres`, `blocks` (when every chunk has it), `baseLift` and one edges child. The
+ * merged chunk sits at the lowest `position.y` of its chunks; the others are moved up by the difference, in their geometry, their
+ * `baseLift` and their edges. The replaced chunks' geometries (edges included) are disposed, except a lone chunk's own, which the
+ * renamed chunk keeps. A key held by one chunk already named for it is left alone.
+ */
+export function foldChunks(chunks: THREE.Mesh[], options: FoldOptions): Folded[] {
+  const folded: Folded[] = [];
+  for (const [key, group] of groupByKey(chunks, options.keyOf)) {
+    const name = `${options.prefix}:chunk:${key}`;
+    if (group.length === 1 && group[0].name === name) continue;
+    let y = Infinity;
+    for (const chunk of group) y = Math.min(y, chunk.position.y);
+    const index: ChunkIndex = { featureIds: [], triangleStarts: [], centres: [] };
+    const blocks: string[] = [];
+    let hasBlocks = true;
+    let triangles = 0;
+    const edges: number[] = [];
+    for (const chunk of group) {
+      const lift = chunk.position.y - y;
+      const { geometry } = chunk;
+      const lifted = geometry.getAttribute("baseLift") as THREE.BufferAttribute;
+      geometry.translate(0, lift, 0);
+      for (let i = 0; i < lifted.count; i++) lifted.setX(i, lifted.getX(i) + lift);
+      const data = chunk.userData as ChunkIndex & { blocks?: string[] };
+      const starts = data.triangleStarts;
+      data.featureIds.forEach((id, i) => {
+        index.featureIds.push(id);
+        index.triangleStarts.push(triangles + starts[i]);
+      });
+      triangles += starts[starts.length - 1];
+      index.centres.push(...data.centres);
+      if (data.blocks) blocks.push(...data.blocks);
+      else hasBlocks = false;
+      const at = (chunk.getObjectByName("edges") as THREE.LineSegments | undefined)?.geometry.getAttribute("position");
+      for (let i = 0; at && i < at.count; i++) edges.push(at.getX(i), at.getY(i) + lift, at.getZ(i));
+    }
+    index.triangleStarts.push(triangles);
+    const geometry = group.length === 1 ? group[0].geometry : mergeGeometries(group.map((chunk) => chunk.geometry))!;
+    const mesh = new THREE.Mesh(geometry, group[0].material);
+    mesh.name = name;
+    mesh.userData = { ...group[0].userData, block: undefined, ...index, ...(hasBlocks ? { blocks } : {}), ...options.extra?.(key, group) };
+    mesh.position.y = y;
+    mesh.castShadow = group[0].castShadow;
+    mesh.receiveShadow = true;
+    const lineGeometry = new THREE.BufferGeometry();
+    lineGeometry.setAttribute("position", new THREE.Float32BufferAttribute(edges, 3));
+    const lines = new THREE.LineSegments(lineGeometry, options.edgeMaterial);
+    if (options.dashed) lines.computeLineDistances();
+    lines.name = "edges";
+    lines.raycast = () => {};
+    mesh.add(lines);
+    for (const chunk of group) {
+      if (group.length > 1) chunk.geometry.dispose();
+      (chunk.getObjectByName("edges") as THREE.LineSegments | undefined)?.geometry.dispose();
+    }
+    folded.push({ replaced: group, chunk: mesh });
+  }
+  return folded;
+}
+
 /** A material's key (`userData.key`, which `restyle` swaps by), else its uuid: what chunks of one material share in their grouping key. */
 export const materialKey = (material: THREE.Material): string => String(material.userData.key ?? material.uuid);
 
