@@ -5,7 +5,9 @@ import { useErrorReporter } from "../errors/errorReporter";
 import { ImportPanel } from "../importing/importPanel";
 import type { StagedTarget } from "../importing/stagedImport";
 import { consumeFlyTo } from "../locations/flyTo";
+import { PlaceSearch } from "../search/placeSearch";
 import { formatRoute, type ExploreRoute, type ExploreView, type Route } from "../routing/routes";
+import { defaultOpen, layoutFor, toggled, type PanelLayout } from "./panelLayout";
 import { SceneLoader } from "../scene/sceneLoader";
 import { SelectionStore, type Scope } from "../state/selection";
 import { MapDataLayers } from "../views/mapDataLayers";
@@ -38,9 +40,15 @@ export const mount: Mount<ExploreRoute> = (el, ctx) => {
 
   el.innerHTML = `
     <section id="map-view" class="view" aria-label="2D map"></section>
+    <div id="search-slot"></div>
     <aside id="import-panel" class="panel" aria-label="Import and boundaries">
-      <div id="import-section"></div>
-      <div id="boundary-section" class="panel-section"></div>
+      <button type="button" class="panel-toggle" id="panel-toggle" aria-controls="panel-body">
+        <span>Import and boundaries</span><span class="panel-chevron" aria-hidden="true"></span>
+      </button>
+      <div id="panel-body" class="panel-body">
+        <div id="import-section"></div>
+        <div id="boundary-section" class="panel-section"></div>
+      </div>
     </aside>
     <section id="scene-view" class="view" aria-label="3D scene" hidden></section>`;
   const pick = (id: string) => el.querySelector<HTMLElement>(`#${id}`)!;
@@ -97,6 +105,34 @@ export const mount: Mount<ExploreRoute> = (el, ctx) => {
 
   // --- map and panels ---
   const mapView = createMapView(pick("map-view"));
+  const placeSearch = new PlaceSearch(pick("search-slot"), mapView.map, api);
+
+  // --- the panel's layout: a floating panel, a docked side panel, or a bottom sheet (panelLayout.ts, style.css) ---
+  const panel = pick("import-panel");
+  const panelToggle = pick("panel-toggle");
+  const panelBody = pick("panel-body");
+  let layout: PanelLayout = layoutFor(window.innerWidth);
+  let panelOpen = defaultOpen(layout);
+  const drawPanel = () => {
+    panel.dataset.layout = layout;
+    panel.dataset.open = String(panelOpen);
+    panelToggle.setAttribute("aria-expanded", String(panelOpen));
+    panelBody.hidden = layout !== "overlay" && !panelOpen;
+    // The docked panel narrows the map: ask MapLibre to measure it again.
+    if (view === "map") mapView.shown();
+  };
+  panelToggle.addEventListener("click", () => {
+    panelOpen = toggled(layout, panelOpen);
+    drawPanel();
+  });
+  const onResize = () => {
+    const next = layoutFor(window.innerWidth);
+    if (next === layout) return;
+    layout = next;
+    panelOpen = defaultOpen(layout);
+    drawPanel();
+  };
+  window.addEventListener("resize", onResize);
   let importPanel: ImportPanel | undefined;
   let boundaryPanel: BoundaryPanel | undefined;
   let mapLayers: MapDataLayers | undefined;
@@ -112,7 +148,7 @@ export const mount: Mount<ExploreRoute> = (el, ctx) => {
     mapLayers = layers;
     // The boundary panel needs the import panel's rectangle, and the import panel saves a traced shape
     // through the boundary panel once an import succeeds, so each is handed to the other as a callback.
-    const panel = new ImportPanel(
+    const imports = new ImportPanel(
       pick("import-section"),
       mapView.map,
       api,
@@ -121,15 +157,15 @@ export const mount: Mount<ExploreRoute> = (el, ctx) => {
       (areaId) => boundaryPanel?.saveTraced(areaId) ?? Promise.resolve(),
       stagedTarget,
     );
-    importPanel = panel;
-    boundaryPanel = new BoundaryPanel(pick("boundary-section"), mapView.map, api, selection, () => panel.bbox, (tracing) => layers.setPopupsEnabled(!tracing));
+    importPanel = imports;
+    boundaryPanel = new BoundaryPanel(pick("boundary-section"), mapView.map, api, selection, () => imports.bbox, (tracing) => layers.setPopupsEnabled(!tracing));
     void applyRoute(routeNow(), true);
   });
 
   /** Makes the selection (and the panels following it) match `route`. */
   async function applyRoute(route: ExploreRoute, initial = false): Promise<void> {
-    const panel = importPanel;
-    if (!panel) return; // before the map has loaded; its load handler applies the route then
+    const imports = importPanel;
+    if (!imports) return; // before the map has loaded; its load handler applies the route then
     const mine = ++applies;
     applying = true;
     try {
@@ -152,7 +188,7 @@ export const mount: Mount<ExploreRoute> = (el, ctx) => {
         // A page that opens on this URL (a pasted link, a reload) jumps to the area, unless a gallery card
         // asked for the fly. Moving to another area while the page is open always flies.
         const gallery = consumeFlyTo(route.areaId);
-        await panel.open(route.areaId, { area, instant: initial && !gallery, camera: route.at });
+        await imports.open(route.areaId, { area, instant: initial && !gallery, camera: route.at });
         if (mine !== applies || disposed) return;
       }
       if (!initial) selection.setScope(scopeOf(route));
@@ -241,11 +277,14 @@ export const mount: Mount<ExploreRoute> = (el, ctx) => {
   });
 
   renderTabs(start);
+  drawPanel();
   show(view);
 
   return () => {
     disposed = true;
     applies += 1;
+    window.removeEventListener("resize", onResize);
+    placeSearch.dispose();
     unsubscribeRoute();
     unsubscribeSelection();
     ctx.tabs.replaceChildren();

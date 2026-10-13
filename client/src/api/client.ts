@@ -17,6 +17,7 @@ import type {
   ImportStatus,
   LandingTheme,
   MapData,
+  PlaceResult,
   Route,
   RoutingStrategies,
 } from "./types";
@@ -77,6 +78,12 @@ export class ApiClient {
     const suffix = params.size ? `?${params}` : "";
     const body = await this.request<{ import_areas: ImportArea[] }>("GET", `/import-areas${suffix}`);
     return body.import_areas;
+  }
+
+  /** Places matching a free-text query, best first (2 to 200 characters trimmed; 1 to 10 results). 503 `geocoder_unavailable` when the geocoder can't answer. */
+  async searchPlaces(query: string, limit = 5): Promise<PlaceResult[]> {
+    const params = new URLSearchParams({ q: query, limit: String(limit) });
+    return (await this.request<{ places: PlaceResult[] }>("GET", `/places/search?${params}`)).places;
   }
 
   getImportArea(id: string): Promise<ImportArea> {
