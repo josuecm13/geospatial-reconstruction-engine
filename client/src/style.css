@@ -132,6 +132,121 @@ body:has(#map-view[hidden]) .panel { display: none; }
 .boundary-entry { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .boundary-entry button.link { width: auto; }
 
+/* Brush controls of the boundary panel (shown only in brush mode). */
+.brush-controls { margin: 6px 0; }
+.brush-controls input[type="range"] { width: 100%; }
+.brush-controls output { font-size: 12px; }
+.brush-actions { display: flex; gap: 6px; }
+.brush-actions button { flex: 1; width: auto; }
+
+/* --- Explore map: the place search and the responsive panel (search/placeSearch.ts, pages/panelLayout.ts) ---
+   Layouts by width, the same breakpoints as panelLayout.ts: 900px and up the panel floats over the map; 720 to 899px it is a
+   docked side panel the toggle collapses (the map takes the rest); under 720px it is a bottom sheet that peeks when collapsed. */
+:root { --map-ctrl: 29px; --sheet-peek: calc(52px + env(safe-area-inset-bottom, 0px)); }
+main { --dock: 0px; }
+@supports (height: 100dvh) { body { height: 100dvh; } }
+#search-slot { display: contents; }
+body:has(#map-view[hidden]) .map-search { display: none; }
+
+/* The search sits top left, clear of MapLibre's navigation control (top right) at every width. */
+.map-search {
+  position: absolute; top: 12px; left: calc(var(--dock) + 12px); z-index: 3; font-size: 14px;
+  width: min(340px, calc(100% - var(--dock) - 30px - var(--map-ctrl)));
+}
+.map-search-form, .map-search-results {
+  background: color-mix(in oklch, var(--surface-1) 72%, transparent);
+  backdrop-filter: blur(16px) saturate(1.3);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  corner-shape: squircle;
+  box-shadow: 0 8px 24px color-mix(in oklch, var(--bg) 55%, transparent);
+  color: var(--text);
+}
+.map-search-form { display: flex; gap: 6px; padding: 5px; }
+.map-search-input {
+  flex: 1; min-width: 0; padding: 8px 10px; font: inherit; color: var(--text);
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 9px;
+}
+.map-search-input::placeholder { color: var(--text-muted); }
+.map-search-button {
+  padding: 8px 12px; font: inherit; color: var(--bg); background: var(--accent); border: 1px solid var(--accent); border-radius: 9px; cursor: pointer;
+}
+.map-search-button:disabled { opacity: 0.45; cursor: not-allowed; }
+.map-search-input:focus-visible, .map-search-button:focus-visible { outline: 2px solid color-mix(in oklch, var(--accent) 80%, transparent); outline-offset: 1px; }
+.map-search-results { margin-top: 6px; max-height: min(60dvh, 420px); overflow: auto; padding: 4px; }
+.map-search-results[hidden], .map-search-list[hidden] { display: none; }
+.map-search-status { margin: 0; padding: 6px 8px; color: var(--text-muted); font-size: 13px; }
+.map-search-status[data-state="error"] { color: var(--danger); }
+.map-search-status[data-state="busy"] { color: var(--link); }
+.map-search-status:empty { display: none; }
+.map-search-list { margin: 0; padding: 0; list-style: none; }
+.map-search-list [role="option"] { display: block; padding: 8px 10px; border-radius: 9px; cursor: pointer; }
+.map-search-list [role="option"]:hover, .map-search-list [role="option"][aria-selected="true"] { background: color-mix(in oklch, var(--text) 12%, transparent); }
+.map-search-list [role="option"][aria-selected="true"] { outline: 2px solid color-mix(in oklch, var(--accent) 80%, transparent); outline-offset: -2px; }
+.map-search-title { display: block; font-weight: 600; overflow-wrap: anywhere; }
+.map-search-sub { display: block; margin-top: 2px; color: var(--text-muted); font-size: 12px; overflow-wrap: anywhere; }
+.map-search-credit { margin: 0; padding: 6px 8px 4px; color: var(--text-muted); font-size: 12px; }
+.map-search-credit a { color: var(--link); }
+
+/* The panel clears the search box, and keeps a toggle that only the narrow layouts show. */
+#import-panel { top: 64px; max-height: calc(100% - 76px); }
+.panel .panel-toggle {
+  display: none; align-items: center; justify-content: space-between; gap: 8px; width: 100%; margin: 0; padding: 0; min-height: 44px;
+  border: none; border-radius: 0; background: none; color: var(--text); font: inherit; font-weight: 600; text-align: left; text-box: normal;
+}
+.panel-chevron { width: 8px; height: 8px; margin: 0 4px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg); flex: none; }
+.panel-body[hidden] { display: none; }
+
+/* Side: a docked panel full height beside the map, or, collapsed, a small pill under the search. */
+@media (max-width: 899px) {
+  .panel .panel-toggle { display: flex; }
+  #import-panel[data-layout="side"] { padding-top: 4px; }
+  #import-panel[data-layout="side"][data-open="true"] {
+    top: 0; left: 0; bottom: 0; max-height: none; width: 300px; border-radius: 0; border-width: 0 1px 0 0;
+  }
+  #import-panel[data-layout="side"][data-open="false"] { width: auto; min-width: 200px; padding: 0 14px; }
+  #import-panel[data-layout="side"][data-open="true"] .panel-chevron { transform: rotate(135deg); }
+  #import-panel[data-layout="side"][data-open="false"] .panel-chevron { transform: rotate(-45deg); }
+  main:has(#import-panel[data-layout="side"][data-open="true"]) { --dock: 300px; }
+  main > #map-view { left: var(--dock); }
+}
+
+/* Sheet: a bottom sheet over the map. Collapsed it is one row (its header); the map's own bottom controls rise above it. */
+@media (max-width: 719px) {
+  #import-panel[data-layout="sheet"] {
+    top: auto; left: 0; right: 0; bottom: 0; width: auto; max-height: min(65%, 520px);
+    padding: 0 16px env(safe-area-inset-bottom, 0px); border-radius: 14px 14px 0 0; border-width: 1px 0 0;
+  }
+  #import-panel[data-layout="sheet"] .panel-toggle { min-height: 52px; position: sticky; top: 0; }
+  #import-panel[data-layout="sheet"][data-open="false"] .panel-chevron { transform: rotate(-135deg); }
+  #import-panel[data-layout="sheet"] .panel-body { padding-bottom: 12px; }
+  main:has(#import-panel[data-layout="sheet"]) #map-view :is(.maplibregl-ctrl-bottom-left, .maplibregl-ctrl-bottom-right) { bottom: var(--sheet-peek); }
+  main:has(#import-panel[data-layout="sheet"]) #map-view .block-panel { bottom: calc(var(--sheet-peek) + 44px); right: 12px; width: min(300px, calc(100% - 24px)); }
+  /* The header is compact: the logo is the way home, and the API pill keeps only its dot. */
+  .app-header { gap: 8px; padding: 0 8px; }
+  .app-header h1 { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+  .app-header .view-tabs { gap: 0; }
+  .app-header .view-tabs a { padding: 9px 8px; font-size: 13px; }
+  .app-header .view-tabs a[data-page="landing"] { display: none; }
+}
+@media (max-width: 479px) {
+  .app-header h1 { max-width: 7.5em; }
+  .api-status { font-size: 0; }
+  .api-status::before { font-size: 13px; }
+}
+
+/* Coarse pointers: every control is at least 44px tall, and MapLibre's own buttons grow with it. */
+@media (pointer: coarse) {
+  :root { --map-ctrl: 44px; }
+  .app-header .view-tabs a, .api-status { min-height: 44px; display: inline-flex; align-items: center; }
+  .panel button:not(.link), .panel .field select, .panel .field input, .map-search-input, .map-search-button { min-height: 44px; }
+  .panel button.link { min-height: 44px; display: inline-flex; align-items: center; }
+  .map-search-list [role="option"] { min-height: 44px; }
+  .maplibregl-ctrl-group button { width: 44px; height: 44px; }
+  .block-panel button, .block-close { min-height: 44px; }
+  .block-close { min-width: 44px; }
+}
+
 /* The 3D scene's empty-state hint and its layer toggle sit over the canvas. */
 .scene-empty {
   position: absolute; top: 12px; left: 50%; transform: translateX(-50%);

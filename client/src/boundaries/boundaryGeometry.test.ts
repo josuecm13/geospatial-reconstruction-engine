@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BoundingBox, Position } from "../api/types";
-import { closeRing, ringProblem, simplifyFreehand } from "./boundaryGeometry";
+import { closeRing, douglasPeucker, ringProblem } from "./boundaryGeometry";
 
 const BBOX: BoundingBox = { min_latitude: 0, min_longitude: 0, max_latitude: 1, max_longitude: 1 };
 const SQUARE: Position[] = [[0.2, 0.2], [0.8, 0.2], [0.8, 0.8], [0.2, 0.8], [0.2, 0.2]];
@@ -17,32 +17,24 @@ describe("closeRing", () => {
   });
 });
 
-describe("simplifyFreehand", () => {
+describe("douglasPeucker", () => {
   it("removes collinear points and keeps the corners of a square", () => {
-    const step = 0.00001;
-    const side = 100 * step;
-    const path: Position[] = [];
-    for (let i = 0; i <= 100; i++) path.push([i * step, 0]);
-    for (let i = 1; i <= 100; i++) path.push([side, i * step]);
-    for (let i = 1; i <= 100; i++) path.push([side - i * step, side]);
-    for (let i = 1; i <= 100; i++) path.push([0, side - i * step]);
-    const simplified = simplifyFreehand(path, 1, 0);
-    expect(simplified).toHaveLength(5);
-    expect(simplified[0]).toEqual([0, 0]);
-    expect(simplified[1]).toEqual([side, 0]);
-    expect(simplified[2]).toEqual([side, side]);
-    expect(simplified[3][0]).toBeCloseTo(0, 12);
-    expect(simplified[3][1]).toBeCloseTo(side, 12);
-    expect(simplified[4]).toEqual(path[path.length - 1]);
+    const path: [number, number][] = [];
+    for (let i = 0; i <= 100; i++) path.push([i, 0]);
+    for (let i = 1; i <= 100; i++) path.push([100, i]);
+    for (let i = 1; i <= 100; i++) path.push([100 - i, 100]);
+    for (let i = 1; i <= 100; i++) path.push([0, 100 - i]);
+    const keep = douglasPeucker(path, 1);
+    expect(path.filter((_, i) => keep[i])).toEqual([[0, 0], [100, 0], [100, 100], [0, 100], [0, 0]]);
   });
   it("keeps a point that sticks out further than the tolerance, and drops one within it", () => {
-    const bump = 0.00002; // about 2.2 m at the equator
-    const path: Position[] = [[0, 0], [0.0001, bump], [0.0002, 0]];
-    expect(simplifyFreehand(path, 1, 0)).toHaveLength(3);
-    expect(simplifyFreehand(path, 5, 0)).toHaveLength(2);
+    const path: [number, number][] = [[0, 0], [10, 2], [20, 0]];
+    expect(douglasPeucker(path, 1)).toEqual([true, true, true]);
+    expect(douglasPeucker(path, 5)).toEqual([true, false, true]);
   });
-  it("returns short paths unchanged", () => {
-    expect(simplifyFreehand([[0, 0], [1, 1]], 1, 0)).toEqual([[0, 0], [1, 1]]);
+  it("keeps short paths whole", () => {
+    expect(douglasPeucker([[0, 0], [1, 1]], 1)).toEqual([true, true]);
+    expect(douglasPeucker([], 1)).toEqual([]);
   });
 });
 

@@ -1,16 +1,19 @@
 import * as maplibregl from "maplibre-gl";
 import type { BoundaryProperties, FeatureCollection, Geometry, Position } from "../api/types";
 import { MAP_COLORS } from "../views/mapColors";
-import { closeRing, simplifyFreehand } from "./boundaryGeometry";
+import { closeRing } from "./boundaryGeometry";
+import { BRUSH_DEFAULT_METERS, BrushPainting, circlePolygon, localProjection } from "./brush";
 
-export type TraceMode = "vertices" | "freehand";
+export type TraceMode = "vertices" | "brush";
 
 const TRACE_SOURCE = "boundary-trace";
 const SAVED_SOURCE = "boundary-saved";
 /** How close (in screen pixels) a click must be to the first vertex to close the shape. */
 const CLOSE_PIXELS = 10;
-/** Freehand input is thinned to this tolerance, in meters on the ground. */
-const FREEHAND_TOLERANCE_METERS = 2;
+const CURSOR_SOURCE = "boundary-brush-cursor";
+/** A brush point closer than this to the last one, in screen pixels, is skipped. */
+const BRUSH_POINT_PIXELS = 3;
+const CURSOR_SEGMENTS = 48;
 
 interface Feature {
   type: "Feature";
@@ -23,13 +26,20 @@ const empty = ():{ type: "FeatureCollection"; features: [] } => ({ type: "Featur
 
 /**
  * Trace a shape on the map, either by clicking vertices (click the first point or double-click to
- * close, Escape to cancel) or freehand (press, drag, release). Drawn as a solid orange line over a
+ * close, Escape to cancel) or with a brush (press and drag to paint strokes of a width in meters,
+ * which merge into one shape; erase subtracts; Done or Enter takes its outline). Drawn as a solid orange line over a
  * light fill, so it can't be mistaken for the dashed blue import rectangle. The finished ring stays
  * on the map until `clear()`, so it can be fixed and saved after a rejection.
  */
 export class BoundaryTool {
   private ring: Position[] | null = null;
   private tracing = false;
+  private painting: BrushPainting | null = null;
+  /** What the brush's outline left out (set when a painted shape finishes), for the panel to tell the user. */
+  notice: string | null = null;
+  /** The brush's width in meters, and whether its strokes subtract; the panel sets both. */
+  brushWidth = BRUSH_DEFAULT_METERS;
+  erase = false;
   private cancelTrace: (() => void) | null = null;
 
   constructor(
@@ -38,11 +48,12 @@ export class BoundaryTool {
     private readonly onChange: (ring: Position[] | null, tracing: boolean) => void,
   ) {
     map.addSource(TRACE_SOURCE, { type: "geojson", data: empty() });
+    map.addSource(CURSOR_SOURCE, { type: "geojson", data: empty() });
     map.addLayer({
       id: "boundary-trace-fill",
       type: "fill",
       source: TRACE_SOURCE,
-      filter: ["==", ["geometry-type"], "Polygon"],
+      filter: ["any", ["==", ["geometry-type"], "Polygon"], ["==", ["geometry-type"], "MultiPolygon"]],
       paint: { "fill-color": MAP_COLORS.boundaryDraft, "fill-opacity": 0.15 },
     });
     map.addLayer({
@@ -59,6 +70,12 @@ export class BoundaryTool {
       filter: ["==", ["geometry-type"], "Point"],
       paint: { "circle-radius": 4, "circle-color": MAP_COLORS.handleFill, "circle-stroke-color": MAP_COLORS.boundaryDraft, "circle-stroke-width": 2 },
     });
+    map.addLayer({
+      id: "boundary-brush-cursor",
+      type: "line",
+      source: CURSOR_SOURCE,
+      paint: { "line-color": MAP_COLORS.boundaryDraft, "line-width": 1.5, "line-dasharray": [2, 2] },
+    });
   }
 
   /** The finished, closed ring, or null. */
@@ -74,6 +91,7 @@ export class BoundaryTool {
   start(mode: TraceMode): void {
     this.stop();
     this.clear();
+    this.notice = null;
     this.tracing = true;
     this.onChange(null, true);
     const canvas = this.map.getCanvasContainer();
@@ -81,7 +99,7 @@ export class BoundaryTool {
     this.map.dragPan.disable();
     this.map.doubleClickZoom.disable();
     this.map.boxZoom.disable();
-    this.cancelTrace = mode === "vertices" ? this.traceVertices() : this.traceFreehand();
+    this.cancelTrace = mode === "vertices" ? this.traceVertices() : this.traceBrush();
   }
 
   /** Ends a trace in progress and removes its listeners, for when the page is left. */
@@ -154,41 +172,129 @@ export class BoundaryTool {
     };
   }
 
-  private traceFreehand(): () => void {
-    let path: Position[] = [];
-    let dragging = false;
-    const down = (event: maplibregl.MapMouseEvent) => {
-      dragging = true;
-      path = [[event.lngLat.lng, event.lngLat.lat]];
+  /**
+   * Brush mode: press and drag to paint a stroke `brushWidth` meters wide (Alt, or the erase toggle,
+   * makes it subtract). The painted shape shows live; "Done" (or Enter) turns its outline into the shape.
+   */
+  private traceBrush(): () => void {
+    const canvas = this.map.getCanvas();
+    const painting = (this.painting = new BrushPainting());
+    let pointerId: number | null = null;
+    let lastScreen: [number, number] | null = null;
+    const lngLatOf = (event: PointerEvent): Position => {
+      const rect = canvas.getBoundingClientRect();
+      const { lng, lat } = this.map.unproject([event.clientX - rect.left, event.clientY - rect.top]);
+      return [lng, lat];
     };
-    const move = (event: maplibregl.MapMouseEvent) => {
-      if (!dragging) return;
-      path.push([event.lngLat.lng, event.lngLat.lat]);
-      this.render(path, null);
+    const down = (event: PointerEvent) => {
+      if (pointerId !== null || (event.pointerType === "mouse" && event.button !== 0)) return;
+      pointerId = event.pointerId;
+      canvas.setPointerCapture(event.pointerId);
+      lastScreen = [event.clientX, event.clientY];
+      painting.begin(lngLatOf(event), this.brushWidth, this.erase !== event.altKey);
+      this.renderBrush(painting);
+      this.showCursor(lngLatOf(event));
     };
-    const up = () => {
-      if (!dragging) return;
-      dragging = false;
-      if (path.length < 3) {
-        path = [];
-        this.render([], null);
-        return;
-      }
-      this.finish(closeRing(simplifyFreehand(path, FREEHAND_TOLERANCE_METERS, path[0][1])));
+    const move = (event: PointerEvent) => {
+      const at = lngLatOf(event);
+      this.showCursor(at);
+      if (event.pointerId !== pointerId || !lastScreen) return;
+      // Thinned by screen distance: a fast drag would otherwise add a point per pixel.
+      if (Math.hypot(event.clientX - lastScreen[0], event.clientY - lastScreen[1]) < BRUSH_POINT_PIXELS) return;
+      lastScreen = [event.clientX, event.clientY];
+      painting.extend(at);
+      this.renderBrush(painting);
     };
+    const release = (event: PointerEvent) => {
+      if (event.pointerId !== pointerId) return;
+      pointerId = null;
+      lastScreen = null;
+      if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+      painting.end();
+      this.renderBrush(painting);
+      this.onChange(this.ring, true);
+    };
+    const leave = () => this.showCursor(null);
     const key = (event: KeyboardEvent) => {
       if (event.key === "Escape") this.cancel();
+      else if (event.key === "Enter") this.finishBrush();
+      else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        this.undoStroke();
+      }
     };
-    this.map.on("mousedown", down);
-    this.map.on("mousemove", move);
-    this.map.on("mouseup", up);
+    canvas.addEventListener("pointerdown", down);
+    canvas.addEventListener("pointermove", move);
+    canvas.addEventListener("pointerup", release);
+    canvas.addEventListener("pointercancel", release);
+    canvas.addEventListener("pointerleave", leave);
     document.addEventListener("keydown", key);
     return () => {
-      this.map.off("mousedown", down);
-      this.map.off("mousemove", move);
-      this.map.off("mouseup", up);
+      canvas.removeEventListener("pointerdown", down);
+      canvas.removeEventListener("pointermove", move);
+      canvas.removeEventListener("pointerup", release);
+      canvas.removeEventListener("pointercancel", release);
+      canvas.removeEventListener("pointerleave", leave);
       document.removeEventListener("keydown", key);
+      this.showCursor(null);
     };
+  }
+
+  /** Whether a brush is being painted with, and has something painted or can take a stroke back. */
+  get brushState(): { painting: boolean; hasPaint: boolean; canUndo: boolean } {
+    const painting = this.painting;
+    return { painting: this.tracing && painting !== null, hasPaint: !!painting && !painting.isEmpty, canUndo: !!painting && painting.canUndo };
+  }
+
+  /** Takes back the last stroke. */
+  undoStroke(): void {
+    if (!this.painting) return;
+    this.painting.undo();
+    this.renderBrush(this.painting);
+    this.onChange(this.ring, true);
+  }
+
+  /** Wipes the painted shape but stays in brush mode. */
+  clearPaint(): void {
+    if (!this.painting) return;
+    this.painting.clear();
+    this.renderBrush(this.painting);
+    this.onChange(this.ring, true);
+  }
+
+  /** Turns the painted shape into the finished shape (its outline), noting anything left out. */
+  finishBrush(): void {
+    const painting = this.painting;
+    if (!painting || !this.tracing) return;
+    const { ring, droppedParts, filledHoles } = painting.outline();
+    if (!ring) return;
+    const notes: string[] = [];
+    if (droppedParts > 0) notes.push("Disconnected pieces were dropped: a boundary is a single shape, so only the largest was kept.");
+    if (filledHoles) notes.push("Holes were filled: a boundary can't have holes.");
+    this.notice = notes.join(" ") || null;
+    this.finish(closeRing(ring));
+  }
+
+  private renderBrush(painting: BrushPainting): void {
+    const source = this.map.getSource(TRACE_SOURCE) as maplibregl.GeoJSONSource | undefined;
+    const polygons = painting.lonLatShape();
+    source?.setData({
+      type: "FeatureCollection",
+      features: polygons.length ? [{ type: "Feature", properties: {}, geometry: { type: "MultiPolygon", coordinates: polygons } }] : [],
+    });
+  }
+
+  /** The brush's footprint under the pointer, as a ground circle: it grows and shrinks with the zoom. */
+  private showCursor(at: Position | null): void {
+    const source = this.map.getSource(CURSOR_SOURCE) as maplibregl.GeoJSONSource | undefined;
+    if (!source) return;
+    if (!at) {
+      source.setData(empty());
+      return;
+    }
+    const { toLonLat } = localProjection(at);
+    const ring = circlePolygon([0, 0], this.brushWidth / 2, CURSOR_SEGMENTS).map(toLonLat);
+    source.setData({ type: "FeatureCollection", features: [{ type: "Feature", properties: { erase: this.erase }, geometry: { type: "LineString", coordinates: ring } }] });
   }
 
   private finish(ring: Position[]): void {
@@ -201,6 +307,7 @@ export class BoundaryTool {
   private stop(): void {
     this.cancelTrace?.();
     this.cancelTrace = null;
+    this.painting = null;
     if (!this.tracing) return;
     this.tracing = false;
     this.map.getCanvasContainer().style.cursor = "";
