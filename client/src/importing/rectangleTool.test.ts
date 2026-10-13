@@ -1,8 +1,23 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { fakeMap } from "../testing/fakeMap";
 import { listenerLedger } from "../testing/listenerLedger";
 import { RectangleTool } from "./rectangleTool";
+
+// The drag label is a real maplibregl.Marker, which needs a real map; the fake map has none.
+vi.mock("maplibre-gl", () => ({
+  Marker: class {
+    setLngLat() {
+      return this;
+    }
+    addTo() {
+      return this;
+    }
+    remove() {
+      return this;
+    }
+  },
+}));
 
 let ledger: ReturnType<typeof listenerLedger>;
 afterEach(() => ledger.restore());
