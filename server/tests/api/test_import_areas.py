@@ -191,6 +191,7 @@ def test_map_data_buildings_carry_source_height_and_levels(client):
     buildings = client.get(f"/import-areas/{created['id']}/map-data").json()["buildings"]["features"]
 
     assert {(f["properties"]["height_meters"], f["properties"]["levels"]) for f in buildings} == {(None, None), (9.5, 3)}
+    assert {f["properties"]["building_type"] for f in buildings} == {"yes"}
 
 
 def test_posting_a_timed_out_overpass_response_is_source_incomplete_and_keeps_the_area(client):

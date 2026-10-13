@@ -34,7 +34,7 @@ describe("wallCoords", () => {
     const a = wallCoords(0, 0, 4, 1, 0, 0)!;
     const b = wallCoords(0, 0, 4 + CELL_WIDTH, 1, 0, 0)!;
     expect(Math.abs(b.u - a.u)).toBeCloseTo(CELL_WIDTH, 9);
-    expect(FLOOR_HEIGHT).toBe(3.2);
+    expect(FLOOR_HEIGHT).toBe(3);
   });
 });
 

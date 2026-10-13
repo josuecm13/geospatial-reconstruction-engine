@@ -236,7 +236,7 @@ colours: `COLORS`, `SCENE_BACKGROUND` and `--scene-background` are exported from
 ### Night windows and Realistic's textures
 
 - **Night windows** (`scene/nightWindows.ts`, `scene/wallGrid.ts`) are drawn in the building shader, with no
-  geometry or textures. A wall cell is 3.5 m by 3.2 m; a hash lights about 25% of real buildings' windows
+  geometry or textures. A wall cell is 3.5 m by 3 m, one storey; a hash lights about 25% of real buildings' windows
   and 15% of generated ones, warm or cool. Cells under a pixel show their average glow, so a distant city
   reads as a soft speckle. Roofs get none.
 - **Realistic textures** (`scene/themes/textures.ts`) are 64 × 64 byte arrays drawn in TypeScript, with no
