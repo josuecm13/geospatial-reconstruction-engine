@@ -132,6 +132,13 @@ body:has(#map-view[hidden]) .panel { display: none; }
 .boundary-entry { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .boundary-entry button.link { width: auto; }
 
+/* Brush controls of the boundary panel (shown only in brush mode). */
+.brush-controls { margin: 6px 0; }
+.brush-controls input[type="range"] { width: 100%; }
+.brush-controls output { font-size: 12px; }
+.brush-actions { display: flex; gap: 6px; }
+.brush-actions button { flex: 1; width: auto; }
+
 /* --- Explore map: the place search and the responsive panel (search/placeSearch.ts, pages/panelLayout.ts) ---
    Layouts by width, the same breakpoints as panelLayout.ts: 900px and up the panel floats over the map; 720 to 899px it is a
    docked side panel the toggle collapses (the map takes the rest); under 720px it is a bottom sheet that peeks when collapsed. */

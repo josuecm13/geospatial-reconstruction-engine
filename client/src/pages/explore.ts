@@ -158,7 +158,10 @@ export const mount: Mount<ExploreRoute> = (el, ctx) => {
       stagedTarget,
     );
     importPanel = imports;
-    boundaryPanel = new BoundaryPanel(pick("boundary-section"), mapView.map, api, selection, () => imports.bbox, (tracing) => layers.setPopupsEnabled(!tracing));
+    boundaryPanel = new BoundaryPanel(pick("boundary-section"), mapView.map, api, selection, () => imports.bbox, (tracing) => {
+      layers.setPopupsEnabled(!tracing);
+      imports.setTracing(tracing);
+    });
     void applyRoute(routeNow(), true);
   });
 
