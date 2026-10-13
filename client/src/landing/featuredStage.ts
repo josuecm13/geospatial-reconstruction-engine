@@ -7,7 +7,7 @@ import { buildWorld } from "../scene/buildWorld";
 import { overview } from "../scene/framing";
 import { restyle, SCENE_BACKGROUND, setActiveTheme } from "../scene/palette";
 import { DRONE_FOV, droneShot, dronePosition, type Footprint } from "./droneShot";
-import { readLandingLook } from "./landingLook";
+import { readLandingLook, STORY_LOOK, type LandingLook } from "./landingLook";
 import { changeBetween, FINAL_STEP, hasGeneratedContext, heroStep, layersFor, pickSlot, STORY_LAYERS, type StoryLayer } from "./storySteps";
 
 /** The story slot's turntable speed, radians per second. */
@@ -33,7 +33,8 @@ export interface FeaturedStageOptions {
 
 /**
  * The landing page's 3D stage: one WebGL renderer for the whole page, drifting slowly over the featured
- * place. Its canvas lives in whichever slot is more visible; the hero shows the finished place from a low drone shot (with the generated layer when it has one), the story slot
+ * place. Each slot has its own look: the hero takes the site setting's, the story is always Night clay. Its canvas
+ * lives in whichever slot is more visible; the hero shows the finished place from a low drone shot (with the generated layer when it has one), the story slot
  * the layers up to the active step. Throws when WebGL is unavailable, and rejects when the map data
  * can't be loaded; the caller keeps its 2D preview then.
  */
@@ -48,7 +49,7 @@ export async function createFeaturedStage({ api, areaId, slots, onReady }: Featu
     renderer.domElement.remove();
   };
   // The look never fails (it falls back to Night clay at midday), so only the map data can stop the stage.
-  const [data, look] = await Promise.all([api.mapData(areaId), readLandingLook(api)]).catch((error: unknown) => {
+  const [data, heroLook] = await Promise.all([api.mapData(areaId), readLandingLook(api)]).catch((error: unknown) => {
     release();
     throw error;
   });
@@ -61,13 +62,16 @@ export async function createFeaturedStage({ api, areaId, slots, onReady }: Featu
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(SCENE_BACKGROUND);
 
-    setActiveTheme(look.theme);
+    // The world is built in the hero's look; `place` switches it to the slot's look when that differs.
+    setActiveTheme(heroLook.theme);
     world = buildWorld(data);
     scene.add(world);
     restyle(scene);
     const atmosphere = createAtmosphere(scene, renderer);
-    atmosphere.setTheme(look.theme);
-    atmosphere.setTime(look.time, { animate: false });
+    atmosphere.setTheme(heroLook.theme);
+    atmosphere.setTime(heroLook.time, { animate: false });
+    const looks: Record<StageSlot, LandingLook> = { hero: heroLook, story: STORY_LOOK };
+    let applied = heroLook;
     const box = new THREE.Box3().setFromObject(world);
     const view = overview(box);
     // The hero's drone shot: low across the streets toward the dense centre of the buildings, on the terrain when there is some.
@@ -154,12 +158,27 @@ export async function createFeaturedStage({ api, areaId, slots, onReady }: Featu
       camera.updateProjectionMatrix();
     };
 
+    /** Switches the whole scene to the slot's look: materials, sky, lights, fog and shadows. A no-op when it is already showing. */
+    const applyLook = (next: StageSlot) => {
+      const wanted = looks[next];
+      if (wanted.theme.id === applied.theme.id && wanted.time === applied.time) return;
+      applied = wanted;
+      // Settle any build animation first: a fade holds cloned materials that restyle would otherwise lose.
+      animator.reset();
+      if (reduced) animator.skip();
+      setActiveTheme(wanted.theme);
+      restyle(scene);
+      atmosphere.setTheme(wanted.theme);
+      atmosphere.setTime(wanted.time, { animate: false });
+    };
+
     const place = (next: StageSlot | null) => {
       if (next === slot) return;
       slot = next;
       if (!next) return;
       slots[next].appendChild(renderer.domElement);
       frameFor(next);
+      applyLook(next);
       fit();
       // Moving to a slot restarts its picture without animation: the hero is whole, the story is at its step.
       apply(next === "hero" ? hero : step, false);
