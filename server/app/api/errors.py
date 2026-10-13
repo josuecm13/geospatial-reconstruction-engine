@@ -23,6 +23,7 @@ from app.config.settings import MissingEnvironmentVariable
 from app.domain.bounding_box import InvalidBoundingBox
 from app.domain.traced_boundary import InvalidTracedBoundary
 from app.ingestion.elevation_source import ElevationUnavailable
+from app.ingestion.geocoder import GeocoderUnavailable
 from app.ingestion.osm_adapter import OSMIngestionError, PayloadOutsideBoundingBox
 from app.ingestion.overpass import IncompleteSourceResponse, UpstreamUnavailable
 from app.persistence.repositories.traced_boundary import DuplicateTracedBoundaryName
@@ -73,6 +74,8 @@ def describe_error(exc: Exception) -> tuple[int, str, str, dict[str, Any] | None
         return 503, "upstream_unavailable", str(exc), {"upstream_status": exc.status}
     if isinstance(exc, ElevationUnavailable):
         return 503, "elevation_unavailable", str(exc) or "the terrain source is unavailable", None
+    if isinstance(exc, GeocoderUnavailable):
+        return 503, "geocoder_unavailable", str(exc) or "place search is unavailable", None
     if isinstance(exc, IncompleteSourceResponse):
         return 422, "source_incomplete", str(exc), None
     if isinstance(exc, OSMIngestionError):
@@ -132,6 +135,10 @@ def register_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(ElevationUnavailable)
     async def handle_elevation_unavailable(request: Request, exc: ElevationUnavailable) -> JSONResponse:
+        return _response(*describe_error(exc))
+
+    @app.exception_handler(GeocoderUnavailable)
+    async def handle_geocoder_unavailable(request: Request, exc: GeocoderUnavailable) -> JSONResponse:
         return _response(*describe_error(exc))
 
     @app.exception_handler(IncompleteSourceResponse)

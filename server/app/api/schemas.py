@@ -285,3 +285,24 @@ class RouteOut(BaseModel):
     destination_node_id: uuid.UUID
     origin_snap_distance_meters: float
     destination_snap_distance_meters: float
+
+
+class PlaceBboxOut(BaseModel):
+    south: float
+    west: float
+    north: float
+    east: float
+
+
+class PlaceOut(BaseModel):
+    display_name: str
+    name: str
+    latitude: float
+    longitude: float
+    bbox: PlaceBboxOut
+    category: str | None
+    type: str | None
+
+
+class PlaceSearchOut(BaseModel):
+    places: list[PlaceOut]
