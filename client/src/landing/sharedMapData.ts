@@ -12,10 +12,11 @@ export function shareMapData(api: ApiClient): { api: ApiClient; share(areaId: st
   let sharedId: string | null = null;
 
   wrapped.mapData = (id, query) => {
-    const whole = !query || (!query.boundaryId && !query.mode);
+    // The shared fetch is the whole area in clip mode, which is what the landing's renderers ask for.
+    const whole = query?.mode === "clip" && !query.boundaryId;
     if (id !== sharedId || !whole) return api.mapData(id, query);
     if (shared?.id !== id) {
-      const data = api.mapData(id);
+      const data = api.mapData(id, { mode: "clip" });
       shared = { id, data };
       data.catch(() => {
         if (shared?.data === data) shared = null;

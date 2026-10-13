@@ -1,3 +1,4 @@
+import { CLIPPED } from "../state/selection";
 import type { ApiClient } from "../api/client";
 import type { BoundingBox, Geometry, ImportStatus, MapData, Position } from "../api/types";
 import { LruCache, previewKey, TaskQueue } from "./previewScheduler";
@@ -389,7 +390,7 @@ export class PreviewLoader {
         const task = queue.add(async () => {
           state = "loading";
           host.dataset.state = "loading";
-          const data = await this.api.mapData(target.id);
+          const data = await this.api.mapData(target.id, CLIPPED);
           const picture = renderPreview(target.bbox, data);
           dataCache.set(key, data);
           cache.set(key, picture);

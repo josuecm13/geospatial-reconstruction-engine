@@ -1,3 +1,4 @@
+import { CLIPPED } from "../state/selection";
 import * as THREE from "three";
 import type { ApiClient } from "../api/client";
 import { prefersReducedMotion } from "../locations/flyTo";
@@ -49,7 +50,7 @@ export async function createFeaturedStage({ api, areaId, slots, onReady }: Featu
     renderer.domElement.remove();
   };
   // The look never fails (it falls back to Night clay at midday), so only the map data can stop the stage.
-  const [data, heroLook] = await Promise.all([api.mapData(areaId), readLandingLook(api)]).catch((error: unknown) => {
+  const [data, heroLook] = await Promise.all([api.mapData(areaId, CLIPPED), readLandingLook(api)]).catch((error: unknown) => {
     release();
     throw error;
   });
