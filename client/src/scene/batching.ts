@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { boxesOf } from "./detail";
 import { setBaseLift } from "./extrude";
 import type { Local } from "./projection";
 
@@ -9,6 +10,18 @@ export const CHUNK_CELL = 150;
 /** The grid cell holding local point (x, z), as a key like `3,-2`. */
 export function cellKey(x: number, z: number, cell = CHUNK_CELL): string {
   return `${Math.floor(x / cell)},${Math.floor(z / cell)}`;
+}
+
+/** The cell of a chunk from its `centres` (x, z, height per building, flat): the cell of their mean; `undefined` for none. */
+export function cellOfCentres(centres: ArrayLike<number>, cell = CHUNK_CELL): string | undefined {
+  const n = Math.floor(centres.length / 3);
+  if (!n) return undefined;
+  let [x, z] = [0, 0];
+  for (let i = 0; i < n; i++) {
+    x += centres[i * 3];
+    z += centres[i * 3 + 1];
+  }
+  return cellKey(x / n, z / n, cell);
 }
 
 /** The middle of the bounding box of a footprint's rings. */
@@ -81,6 +94,8 @@ export interface ChunkIndex {
   triangleStarts: number[];
   /** x, z, height of each feature, flat: three numbers per feature, in local metres. */
   centres: number[];
+  /** The far-detail box of every outer ring, `BOX_STRIDE` numbers each (detail.ts): the minimum-area rectangle, its lift above the chunk's origin and its height. */
+  boxes: number[];
 }
 
 const triangleCount = (geometry: THREE.BufferGeometry): number => (geometry.index ?? geometry.getAttribute("position")).count / 3;
@@ -116,14 +131,14 @@ export interface ChunkOptions {
  * Merges the entries into one mesh per key. A chunk's `position.y` is the lowest base of its entries and each entry is
  * moved up by its own base above that, so `scale.y` from 0 to 1 still reads as a rise from the ground. The edges are one
  * `LineSegments` child named `edges` (it follows `scale.y` and is never picked). The chunk's `userData` records `layer`,
- * `featureIds`, `triangleStarts` and `centres` (`ChunkIndex`). The entries' geometries are consumed.
+ * `featureIds`, `triangleStarts`, `centres` and `boxes` (`ChunkIndex`). The entries' geometries are consumed.
  */
 export function mergeChunks(entries: BatchEntry[], options: ChunkOptions): THREE.Mesh[] {
   const meshes: THREE.Mesh[] = [];
   for (const [key, group] of groupByKey(entries, (entry) => entry.key)) {
     let y = Infinity;
     for (const entry of group) y = Math.min(y, entry.base);
-    const index: ChunkIndex = { featureIds: [], triangleStarts: [], centres: [] };
+    const index: ChunkIndex = { featureIds: [], triangleStarts: [], centres: [], boxes: [] };
     const edges: number[] = [];
     let triangles = 0;
     for (const entry of group) {
@@ -134,6 +149,7 @@ export function mergeChunks(entries: BatchEntry[], options: ChunkOptions): THREE
       index.featureIds.push(entry.id);
       index.triangleStarts.push(triangles);
       index.centres.push(centre.x, centre.z, entry.height);
+      for (const value of boxesOf(entry.rings, lift, entry.height)) index.boxes.push(value);
       triangles += triangleCount(entry.geometry);
       for (const value of footprintEdges(entry.rings, lift, lift + entry.height)) edges.push(value);
     }

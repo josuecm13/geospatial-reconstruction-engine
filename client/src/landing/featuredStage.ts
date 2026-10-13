@@ -4,6 +4,7 @@ import type { ApiClient } from "../api/client";
 import { prefersReducedMotion } from "../locations/flyTo";
 import { createAtmosphere } from "../scene/atmosphere";
 import { Animator } from "../scene/buildAnimation";
+import { applyDetail } from "../scene/detailLevels";
 import { buildWorld } from "../scene/buildWorld";
 import { overview } from "../scene/framing";
 import { initialPixelRatio } from "../scene/pixelRatio";
@@ -219,6 +220,7 @@ export async function createFeaturedStage({ api, areaId, slots, onReady }: Featu
         camera.position.copy(target).add(offset);
         camera.lookAt(target);
       }
+      if (applyDetail(world!, camera, slots[slot].clientHeight)) atmosphere.invalidateShadows();
       atmosphere.update(delta, camera, target, { buildAnimating: animating > 0 });
       renderer.render(scene, camera);
       frame = requestAnimationFrame(tick);

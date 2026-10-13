@@ -120,7 +120,7 @@ export function blockOutlineLines(world: THREE.Object3D, selected: string | null
     const kind = outlineKind(properties.get(part.id) ?? {}, part.id === selected);
     return { key: kind === "selected" ? "selected" : `${part.cell}:${kind}`, material: outlineMaterial(kind), positions: part.positions };
   });
-  return mergeStrips(entries, { layer: "block_outline", prefix: "block_outline", extra: (key) => ({ kind: key === "selected" ? "selected" : key.slice(key.lastIndexOf(":") + 1) }) });
+  return mergeStrips(entries, { layer: "block_outline", prefix: "block_outline", extra: (key) => (key === "selected" ? { kind: "selected" } : { kind: key.slice(key.lastIndexOf(":") + 1), cell: key.slice(0, key.lastIndexOf(":")) }) });
 }
 
 /** Replaces the outlines of a batched world's `blocks` group with freshly merged ones (see `blockOutlineLines`): the selected block's drawn as its own object. */
@@ -440,7 +440,7 @@ export function buildWorld(data: MapData, roadMode: RoadMode = DEFAULT_ROAD_MODE
   }
   if (batched) {
     // One mesh per (150 m cell, material), each with its edges: ~16k buildings are a few hundred draw calls, not 32k objects.
-    groups.buildings.add(...mergeChunks(entries, { layer: "building", prefix: "buildings", edgeMaterial: MATERIALS.edge, castShadow: true, extra: (_key, group) => ({ defaulted: group[0].material === MATERIALS.buildingDefaulted }) }));
+    groups.buildings.add(...mergeChunks(entries, { layer: "building", prefix: "buildings", edgeMaterial: MATERIALS.edge, castShadow: true, extra: (key, group) => ({ defaulted: group[0].material === MATERIALS.buildingDefaulted, cell: key.slice(0, key.lastIndexOf(":")) }) }));
     registerFeatures(world, data.buildings.features);
   }
 

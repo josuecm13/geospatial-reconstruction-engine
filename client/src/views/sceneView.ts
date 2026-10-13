@@ -4,6 +4,7 @@ import type { BoundingBox, MapData, Projection } from "../api/types";
 import { prefersReducedMotion } from "../locations/flyTo";
 import { Animator, staggerDelay } from "../scene/buildAnimation";
 import { buildWorld, DEFAULT_ROAD_MODE, generatedMeshes, LAYER_ORDER, registerFeatures, roadOutlineLines, setRoadMode, WORLD_GROUPS } from "../scene/buildWorld";
+import { applyDetail } from "../scene/detailLevels";
 import { RevealQueue } from "../scene/revealQueue";
 import { pointDelays } from "../scene/revealSchedule";
 import type { GeneratedFeature } from "../scene/generationStream";
@@ -399,6 +400,8 @@ export function createSceneView(container: HTMLElement, routing?: RoutingDeps, t
     }
     modes.update(delta);
     animator.update(delta);
+    // Cells far below the camera drop their edges and then their buildings for boxes (throttled inside); the staged build keeps full detail.
+    if (world && !building && applyDetail(world, camera, container.clientHeight)) atmosphere.invalidateShadows();
     atmosphere.update(delta, camera, controls.target, { buildAnimating: building || busy() });
     if (reveal.size) playReveal(reveal.update(delta));
     staged.update(delta);
