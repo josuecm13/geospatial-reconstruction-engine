@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import { boxesOf } from "./detail";
+import { BOX_STRIDE, boxesOf } from "./detail";
 import { setBaseLift } from "./extrude";
 import type { Local } from "./projection";
 
@@ -194,7 +194,7 @@ export interface Folded {
 
 /**
  * Merges chunks that `mergeChunks` made (at rest: unscaled, at x = z = 0) into one chunk per `keyOf`, keeping what a chunk
- * records: `featureIds`, `triangleStarts`, `centres`, `blocks` (when every chunk has it), `baseLift` and one edges child. The
+ * records: `featureIds`, `triangleStarts`, `centres`, `boxes` (their lift fields raised like `baseLift`), `blocks` (when every chunk has it), `baseLift` and one edges child. The
  * merged chunk sits at the lowest `position.y` of its chunks; the others are moved up by the difference, in their geometry, their
  * `baseLift` and their edges. The replaced chunks' geometries (edges included) are disposed, except a lone chunk's own, which the
  * renamed chunk keeps. A key held by one chunk already named for it is left alone.
@@ -206,7 +206,7 @@ export function foldChunks(chunks: THREE.Mesh[], options: FoldOptions): Folded[]
     if (group.length === 1 && group[0].name === name) continue;
     let y = Infinity;
     for (const chunk of group) y = Math.min(y, chunk.position.y);
-    const index: ChunkIndex = { featureIds: [], triangleStarts: [], centres: [] };
+    const index: ChunkIndex = { featureIds: [], triangleStarts: [], centres: [], boxes: [] };
     const blocks: string[] = [];
     let hasBlocks = true;
     let triangles = 0;
@@ -225,6 +225,7 @@ export function foldChunks(chunks: THREE.Mesh[], options: FoldOptions): Folded[]
       });
       triangles += starts[starts.length - 1];
       index.centres.push(...data.centres);
+      for (let k = 0; k < data.boxes.length; k++) index.boxes.push(k % BOX_STRIDE === 5 ? data.boxes[k] + lift : data.boxes[k]);
       if (data.blocks) blocks.push(...data.blocks);
       else hasBlocks = false;
       const at = (chunk.getObjectByName("edges") as THREE.LineSegments | undefined)?.geometry.getAttribute("position");

@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
+import { BOX_STRIDE } from "./detail";
 import { CHUNK_CELL, cellKey, featureAtFace, foldChunks, footprintEdges, groupByKey, mergeChunks, ringsCentre, type BatchEntry } from "./batching";
 import type { Local } from "./projection";
 
@@ -231,6 +232,18 @@ describe("foldChunks", () => {
     expect(Math.max(...ys)).toBe(13); // b: lift 3 + height 10
     expect(edges.geometry.getAttribute("position").count).toBe(3 * 12 * 2);
     expect(edges.geometry.getAttribute("lineDistance")).toBeDefined();
+  });
+
+  it("concatenates the far-level boxes of every chunk, raising each lift by how far its chunk moved up", () => {
+    const one = blockChunk("b1", [entry("a", "b1", 4, [box(0, 0)], 10)]);
+    const two = blockChunk("b2", [entry("c", "b2", 3, [box(40, 40)], 10)]);
+    const before = [...(one.userData.boxes as number[]), ...(two.userData.boxes as number[])];
+    const [{ chunk }] = fold([one, two]);
+    const boxes = chunk.userData.boxes as number[];
+    expect(boxes).toHaveLength(before.length);
+    expect(boxes.length).toBe(2 * BOX_STRIDE);
+    const diff = boxes.map((v, k) => v - before[k]);
+    expect(diff).toEqual(Array.from({ length: boxes.length }, (_, k) => (k === 5 ? 1 : 0))); // only the first chunk (y 4 over the folded 3) has its lift raised
   });
 
   it("disposes the merged-away geometries and their edges", () => {
