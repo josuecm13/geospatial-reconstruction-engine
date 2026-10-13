@@ -150,6 +150,7 @@ def building_feature(building: Building, base_elevation_meters: float | None = N
         "block_id": building.block_id,
         "height_meters": building.height_meters,
         "levels": building.levels,
+        "building_type": building.building_type,
         "import_area_id": building.import_area_id,
     }
     if base_elevation_meters is not NOT_REQUESTED:

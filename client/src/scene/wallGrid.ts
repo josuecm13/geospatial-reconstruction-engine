@@ -6,10 +6,12 @@
  * exactly: same tangent, same dot product, same roof/floor cut-off.
  */
 
+import { METERS_PER_LEVEL } from "./buildingHeight";
+
 /** Width of one facade cell, in metres. */
 export const CELL_WIDTH = 3.5;
-/** Height of one floor, in metres. */
-export const FLOOR_HEIGHT = 3.2;
+/** Height of one floor, in metres: one storey, so floor lines land on the storeys a building is sized by. */
+export const FLOOR_HEIGHT = METERS_PER_LEVEL;
 
 export interface WallUv {
   u: number;

@@ -16,3 +16,5 @@ class Building:
     # As the source stated them; None means unknown, never a default.
     height_meters: float | None = None
     levels: int | None = None
+    # The raw OSM building=* value ("yes", "house", "apartments"); None when the source had none.
+    building_type: str | None = None

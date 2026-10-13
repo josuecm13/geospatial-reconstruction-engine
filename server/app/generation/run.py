@@ -57,6 +57,7 @@ from app.domain.generation import (
     qualifies_as_exemplar,
     road_graph_hash,
     strongest_road_group,
+    two_storey_share,
     with_narrower_lots,
 )
 from app.domain.generation import stale_reasons as domain_stale_reasons
@@ -200,9 +201,10 @@ class GenerationService:
                 calibrations.append(factor)
             if matched.median_levels is None:
                 defaults = default_fingerprint(road_groups[block.id], suit.style)
-                matched = replace(matched, median_levels=defaults.median_levels)
+                matched = replace(matched, median_levels=defaults.median_levels, levels_observed=False)
             results.append((block, matched, reference_id, source, factor))
 
+        area_levels = [building.levels for building in composed_buildings]
         new_buildings: list[GeneratedBuilding] = []
         zones: list[GenerationZone] = []
         assignments: dict[str, dict] = {}
@@ -235,6 +237,7 @@ class GenerationService:
                     grid=grid,
                     real_footprints=footprints.around(blocks_local[block.id]),
                     projection=projection,
+                    two_storey_share=two_storey_share([item.levels for item in by_block.get(block.id, [])], area_levels),
                 )
                 for index, footprint in enumerate(outcome.footprints):
                     ring_buildings.append(

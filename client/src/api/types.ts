@@ -75,6 +75,8 @@ export interface BuildingProperties {
   block_id: string | null;
   height_meters: number | null;
   levels: number | null;
+  /** The raw OSM building=* value ("yes", "house", "apartments"); null when absent, and missing from older payloads. */
+  building_type?: string | null;
   /** The area that stores it: the requested one, or an inner area it composes. */
   import_area_id: string;
   /** The lowest ground under the footprint, metres above sea level; null when the area has no terrain. */

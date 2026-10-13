@@ -9,7 +9,13 @@ export default defineConfig(({ mode }) => {
   const { clientPort, apiTarget } = resolveDevServerConfig(env);
   const proxy = { [API_PREFIX]: { target: apiTarget, changeOrigin: true, rewrite: stripApiPrefix } };
   return {
-    server: { port: clientPort, strictPort: true, proxy },
+    server: {
+      port: clientPort,
+      strictPort: true,
+      proxy,
+      // Bind mounts (Colima/Docker) don't deliver file events; docker-compose.yml sets this.
+      ...(env.VITE_USE_POLLING ? { watch: { usePolling: true } } : {}),
+    },
     preview: { port: clientPort, strictPort: true, proxy },
     // MapLibre alone is about 1 MB minified; Three.js is split into the scene's own chunk.
     build: { chunkSizeWarningLimit: 1200 },

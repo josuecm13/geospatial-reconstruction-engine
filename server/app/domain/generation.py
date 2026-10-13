@@ -109,6 +109,9 @@ class Fingerprint:
     median_levels: float | None
     coverage: float | None
     style: SettlementStyle
+    # False when `median_levels` came from the road-class defaults, not from observed buildings; the
+    # generator then draws 1 or 2 storeys per building where the default is low-rise.
+    levels_observed: bool = True
 
 
 @dataclass(frozen=True)
@@ -271,6 +274,7 @@ def default_fingerprint(group: RoadClassGroup, style: SettlementStyle) -> Finger
         median_levels=float(levels),
         coverage=None,
         style=style,
+        levels_observed=False,
     )
 
 
@@ -371,6 +375,7 @@ def fingerprint_to_dict(value: Fingerprint) -> dict[str, Any]:
         "median_levels": value.median_levels,
         "coverage": value.coverage,
         "style": value.style.value,
+        "levels_observed": value.levels_observed,
     }
 
 
@@ -386,6 +391,7 @@ def fingerprint_from_dict(data: Mapping[str, Any]) -> Fingerprint:
         median_levels=data["median_levels"],
         coverage=data["coverage"],
         style=SettlementStyle(data["style"]),
+        levels_observed=bool(data.get("levels_observed", True)),
     )
 
 
@@ -557,6 +563,47 @@ def levels_of(fingerprint: Fingerprint) -> int:
     return max(1, round(fingerprint.median_levels)) if fingerprint.median_levels is not None else 1
 
 
+# Low-rise storeys when nothing says how many (the client applies the same rule).
+TWO_STOREY_SHARE_DEFAULT = 0.3
+TWO_STOREY_MIN_EVIDENCE = 3
+
+
+def storey_evidence(levels: Iterable[int | None]) -> tuple[int, int] | None:
+    """(two-storey count, one-or-two-storey count) over the stated levels; None when none is 1 or 2."""
+    low = [value for value in levels if value in (1, 2)]
+    return (sum(1 for value in low if value == 2), len(low)) if low else None
+
+
+def two_storey_share(block_levels: Iterable[int | None], area_levels: Iterable[int | None]) -> float:
+    """The share of 2-storey buildings among 1- and 2-storey ones: from the block's own stated levels
+    if at least 3 are 1 or 2, else the area's, else `TWO_STOREY_SHARE_DEFAULT`."""
+    for levels in (block_levels, area_levels):
+        counts = storey_evidence(levels)
+        if counts is not None and counts[1] >= TWO_STOREY_MIN_EVIDENCE:
+            return counts[0] / counts[1]
+    return TWO_STOREY_SHARE_DEFAULT
+
+
+def stable_unit(seed: str) -> float:
+    """A stable value in [0, 1) for `seed`: FNV-1a (32-bit) over its UTF-8 bytes, then murmur3's fmix32
+    finalizer (FNV-1a alone mixes its high bits poorly when seeds differ only in trailing characters),
+    divided by 2^32. The client has the same function, and a test on each side pins the same value."""
+    value = 0x811C9DC5
+    for byte in seed.encode("utf-8"):
+        value = ((value ^ byte) * 0x01000193) & 0xFFFFFFFF
+    value ^= value >> 16
+    value = (value * 0x85EBCA6B) & 0xFFFFFFFF
+    value ^= value >> 13
+    value = (value * 0xC2B2AE35) & 0xFFFFFFFF
+    value ^= value >> 16
+    return value / 4294967296
+
+
+def draw_storeys(seed: str, share: float) -> int:
+    """2 when the seed's unit value falls under `share`, else 1."""
+    return 2 if stable_unit(seed) < share else 1
+
+
 def calibration_factor(feedback_counts: Sequence[int], generated_counts: Sequence[int]) -> float | None:
     """The clamped ratio of what people reported to what the previous run generated, over blocks
     that had both; None when fewer than two blocks, or when nothing was generated there. Lot widths
@@ -580,4 +627,5 @@ def with_narrower_lots(fingerprint: Fingerprint, factor: float) -> Fingerprint:
         median_levels=fingerprint.median_levels,
         coverage=fingerprint.coverage,
         style=fingerprint.style,
+        levels_observed=fingerprint.levels_observed,
     )

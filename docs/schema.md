@@ -168,6 +168,7 @@ erDiagram
         geometry geom "Polygon,4326"
         double height_meters "nullable, source height (8.1)"
         integer levels "nullable, source building:levels (8.1)"
+        string building_type "nullable, raw lowercased building=* value"
     }
     POINTS_OF_INTEREST {
         uuid id PK
@@ -216,7 +217,8 @@ Key decisions:
 - **`buildings.height_meters` and `buildings.levels` record only what the source stated
   (Milestone 8.1).** `NULL` means unknown, never zero or a default: an unparseable tag is stored
   as `NULL` and never fails an import. CHECKs keep `height_meters > 0` and `levels >= 0`.
-  Estimating a height from levels is inference and belongs to generated content (Milestone 11).
+  `buildings.building_type` keeps the raw `building=*` value (`yes`, `house`, `apartments`), which `category`
+  folds away; it is `NULL` for rows imported before it existed until a re-import fills it in. Estimating a height from levels is inference and belongs to generated content (Milestone 11).
 - **`buildings.block_id` is nullable and denormalized.** Set via `ST_Contains(block.boundary,
   building.geom)` at derivation time. A building near the bbox edge may sit in a
   partially-captured block whose enclosing loop wasn't fully imported — that is a legitimate

@@ -592,6 +592,7 @@ class OSMIngestionService:
                     tuple(records.nodes[node_id] for node_id in feature.node_ids),
                     height_meters=feature.height_meters,
                     levels=feature.levels,
+                    building_type=feature.building_type,
                 )
                 for feature in records.buildings
             ],
