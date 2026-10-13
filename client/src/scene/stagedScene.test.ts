@@ -50,7 +50,9 @@ describe("an inner area in a staged build", () => {
     handle.addBuilt(inner);
     expect(world.getObjectByName("roads")!.children).toHaveLength(0);
     expect(world.getObjectByName("buildings")!.children.flatMap((c) => c.userData.featureIds)).toEqual(["bu1"]);
-    expect(world.getObjectByName("blocks")!.children.map((c) => c.name)).toEqual(["block_outline:b1", "block:b1"]);
+    // Merged per cell: one outline object and one buildable-area fill for the one block.
+    expect(world.getObjectByName("blocks")!.children.map((c) => c.userData.layer)).toEqual(["block_outline", "block"]);
+    expect(world.getObjectByName("blocks")!.children.flatMap((c) => c.userData.featureIds ?? [])).toEqual(["b1"]);
   });
 });
 

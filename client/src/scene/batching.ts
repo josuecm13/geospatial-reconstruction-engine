@@ -157,3 +157,96 @@ export function mergeChunks(entries: BatchEntry[], options: ChunkOptions): THREE
   }
   return meshes;
 }
+
+/** A material's key (`userData.key`, which `restyle` swaps by), else its uuid: what chunks of one material share in their grouping key. */
+export const materialKey = (material: THREE.Material): string => String(material.userData.key ?? material.uuid);
+
+/** One flat (ground-level) feature to be merged into a chunk: its geometry is already in local metres, with the layer's offset left to the chunk's `position.y`. */
+export interface FlatEntry {
+  id: string;
+  /** Which chunk it joins: entries with the same key merge into one mesh (the key says the material, and anything else the chunk must share). */
+  key: string;
+  material: THREE.Material;
+  /** Non-indexed with the same attributes as every other entry (`shadeGeometry` makes it so); consumed by the merge. */
+  geometry: THREE.BufferGeometry;
+}
+
+export interface FlatOptions {
+  /** `userData.layer` of every chunk mesh. */
+  layer: string;
+  /** Chunk names are `<prefix>:chunk:<key>`. */
+  prefix: string;
+  /** Sets what the chunk shares (`position.y`, `renderOrder`, `userData`), from its key and entries. */
+  configure?: (mesh: THREE.Mesh, key: string, entries: FlatEntry[]) => void;
+}
+
+/**
+ * Merges flat features into one mesh per key. A chunk's `userData` records `layer`, `featureIds` and `triangleStarts`
+ * (`featureAtFace` reads them; the vertices of feature `i` are `triangleStarts[i] * 3` up to `triangleStarts[i + 1] * 3`, as the
+ * geometries are non-indexed). Receives shadows; never casts them. The entries' geometries are consumed.
+ */
+export function mergeFlat(entries: FlatEntry[], options: FlatOptions): THREE.Mesh[] {
+  const meshes: THREE.Mesh[] = [];
+  for (const [key, group] of groupByKey(entries, (entry) => entry.key)) {
+    const index: Pick<ChunkIndex, "featureIds" | "triangleStarts"> = { featureIds: [], triangleStarts: [] };
+    let triangles = 0;
+    for (const entry of group) {
+      index.featureIds.push(entry.id);
+      index.triangleStarts.push(triangles);
+      triangles += triangleCount(entry.geometry);
+    }
+    index.triangleStarts.push(triangles);
+    const geometry = group.length === 1 ? group[0].geometry : mergeGeometries(group.map((entry) => entry.geometry))!;
+    if (group.length > 1) group.forEach((entry) => entry.geometry.dispose());
+    const mesh = new THREE.Mesh(geometry, group[0].material);
+    mesh.name = `${options.prefix}:chunk:${key}`;
+    mesh.userData = { layer: options.layer, chunk: true, ...index };
+    mesh.receiveShadow = true;
+    options.configure?.(mesh, key, group);
+    meshes.push(mesh);
+  }
+  return meshes;
+}
+
+/** One polyline to be merged into a line chunk: `positions` is flat x y z points, drawn as a strip. */
+export interface StripEntry {
+  key: string;
+  material: THREE.LineBasicMaterial;
+  positions: ArrayLike<number>;
+}
+
+/** The grid cell holding the middle of a flat polyline's bounding box. */
+export function stripCell(positions: ArrayLike<number>): string {
+  let [minX, maxX, minZ, maxZ] = [Infinity, -Infinity, Infinity, -Infinity];
+  for (let i = 0; i + 2 < positions.length; i += 3) {
+    minX = Math.min(minX, positions[i]);
+    maxX = Math.max(maxX, positions[i]);
+    minZ = Math.min(minZ, positions[i + 2]);
+    maxZ = Math.max(maxZ, positions[i + 2]);
+  }
+  return cellKey((minX + maxX) / 2, (minZ + maxZ) / 2);
+}
+
+/**
+ * Merges polylines into one `LineSegments` per key (each strip becomes its consecutive point pairs). Named `<prefix>:chunk:<key>`,
+ * `userData.layer` as given and never picked. Line distances are measured per segment, so the dashes of a dashed material start
+ * afresh at every segment.
+ */
+export function mergeStrips(entries: StripEntry[], options: Pick<FlatOptions, "layer" | "prefix"> & { extra?: (key: string, entries: StripEntry[]) => Record<string, unknown> }): THREE.LineSegments[] {
+  const lines: THREE.LineSegments[] = [];
+  for (const [key, group] of groupByKey(entries, (entry) => entry.key)) {
+    const positions: number[] = [];
+    for (const { positions: strip } of group) {
+      for (let i = 0; i + 5 < strip.length; i += 3) positions.push(strip[i], strip[i + 1], strip[i + 2], strip[i + 3], strip[i + 4], strip[i + 5]);
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    const line = new THREE.LineSegments(geometry, group[0].material);
+    line.computeLineDistances(); // the dashes are measured along the line
+    line.name = `${options.prefix}:chunk:${key}`;
+    line.userData = { layer: options.layer, chunk: true, ...options.extra?.(key, group) };
+    line.raycast = () => {};
+    lines.push(line);
+  }
+  return lines;
+}

@@ -83,7 +83,11 @@ describe("createBlockSelection", () => {
       canvas.dispatchEvent(new MouseEvent("pointerup", { clientX: x, clientY: y, button }));
     };
     const panel = () => container.querySelector(".block-panel") as HTMLElement;
-    const material = (id: string) => (world.getObjectByName(`block_outline:${id}`) as THREE.Line).material;
+    // The outlines are merged per cell and kind (buildWorld.ts), so what is asked is which materials are drawn, and how many objects hold the selected one.
+    const material = () => {
+      const lines = world.getObjectByName("blocks")!.children.filter((child) => child.userData.layer === "block_outline") as THREE.LineSegments[];
+      return { materials: new Set(lines.map((line) => line.material)), selected: lines.filter((line) => line.material === MATERIALS.blockOutlineSelected).length };
+    };
     const drag = () => {
       canvas.dispatchEvent(new MouseEvent("pointerdown", { clientX: 50, clientY: 50, button: 0 }));
       canvas.dispatchEvent(new MouseEvent("pointerup", { clientX: 60, clientY: 60, button: 0 }));
@@ -99,8 +103,9 @@ describe("createBlockSelection", () => {
 
     expect(panel().hidden).toBe(false);
     expect(panel().querySelector(".block-summary")!.textContent).toContain("real: 2");
-    expect(material("b1")).toBe(MATERIALS.blockOutlineSelected);
-    expect(material("b2")).toBe(MATERIALS.blockOutlineFaint); // not selected, a median: still faint
+    // b1 is drawn once, as the selected object, and no longer in the crisp one; b2, a median, stays faint.
+    expect(material().selected).toBe(1);
+    expect(material().materials).toEqual(new Set([MATERIALS.blockOutlineSelected, MATERIALS.blockOutlineFaint]));
   });
 
   it("does nothing while Show blocks is off", () => {
@@ -109,7 +114,7 @@ describe("createBlockSelection", () => {
     click();
 
     expect(panel().hidden).toBe(true);
-    expect(material("b1")).toBe(MATERIALS.blockOutline);
+    expect(material().materials).toEqual(new Set([MATERIALS.blockOutline, MATERIALS.blockOutlineFaint]));
   });
 
   it("deselects on a click that lands on no block, and puts the outline back", () => {
@@ -120,7 +125,8 @@ describe("createBlockSelection", () => {
     click(65, 65); // the ground 15 m off, outside every block
 
     expect(panel().hidden).toBe(true);
-    expect(material("b1")).toBe(MATERIALS.blockOutline);
+    expect(material().selected).toBe(0);
+    expect(material().materials).toEqual(new Set([MATERIALS.blockOutline, MATERIALS.blockOutlineFaint]));
   });
 
   it("ignores a drag, a right click, and a click while the host says no", () => {
@@ -169,7 +175,7 @@ describe("createBlockSelection", () => {
 
     click();
 
-    expect(world.getObjectByName("block:n")).toBeUndefined();
+    expect(world.getObjectByName("blocks")!.children.some((child) => child.userData.layer === "block")).toBe(false);
     expect(panel().hidden).toBe(false);
     expect(panel().querySelector(".block-reason")!.textContent).toContain("median");
   });

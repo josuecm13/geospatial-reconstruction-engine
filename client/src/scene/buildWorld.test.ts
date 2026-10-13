@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
 import type { Elevation, Feature, GeneratedBuildingProperties, MapData, Position } from "../api/types";
-import { buildWorld as buildBatched, generatedMeshes, groundPlane, LAYER_ORDER, LAYER_Y, OUTLINE_LIFT, roadOutlineLines, setRoadMode } from "./buildWorld";
+import { buildWorld as buildBatched, generatedMeshes, groundPlane, LAYER_ORDER, LAYER_Y, OUTLINE_LIFT, redrawBlockOutlines, roadOutlineLines, setRoadMode } from "./buildWorld";
 import type { RoadMode } from "./terrain";
 import { FALLBACK_HEIGHT } from "./buildingHeight";
 import { MATERIALS } from "./palette";
@@ -625,5 +625,164 @@ describe("buildWorld batched buildings", () => {
     const ids = (group: string) => (flat.getObjectByName(group)!.children as THREE.Mesh[]).map((mesh) => mesh.userData.id).sort();
     expect(chunks("buildings").flatMap((chunk) => chunk.userData.featureIds).sort()).toEqual(ids("buildings"));
     expect(chunks("generated").flatMap((chunk) => chunk.userData.featureIds).sort()).toEqual(ids("generated"));
+  });
+});
+
+describe("buildWorld batched roads, area features and blocks", () => {
+  /** Features in one 150 m cell (lon -84), and one in the next cell east (lon -83.998, about 218 m on). */
+  const west = -84;
+  const east = -83.998;
+  const parcel = (id: string, kind: string, lon: number, lat: number) => ({ type: "Feature" as const, id, geometry: { type: "Polygon" as const, coordinates: square(lon, lat) }, properties: { kind, import_area_id: "area-1" } });
+  const blockAt = (id: string, lon: number, lat: number, extra: Record<string, unknown> = {}) => {
+    const base = data.blocks.features[0];
+    return { ...base, id, geometry: { type: "Polygon" as const, coordinates: square(lon, lat) }, properties: { ...base.properties, buildable_area: { type: "Polygon" as const, coordinates: square(lon, lat) }, ...extra } } as MapData["blocks"]["features"][number];
+  };
+  const chunks = (world: THREE.Object3D, group: string) => world.getObjectByName(group)!.children as THREE.Mesh[];
+  const ids = (list: THREE.Object3D[]) => list.flatMap((chunk) => chunk.userData.featureIds ?? []).sort();
+  const outlinesOf = (world: THREE.Object3D) => chunks(world, "blocks").filter((child) => child.userData.layer === "block_outline") as unknown as THREE.LineSegments[];
+
+  const flat = buildBatched({
+    ...data,
+    road_segments: fc([
+      road("r1", [[west, 10.0001], [west + 0.0004, 10.0001]], "s1"),
+      road("r2", [[west, 10.0004], [west + 0.0004, 10.0004]], "s2"),
+      road("r3", [[west, 10.0007], [west + 0.0004, 10.0007]], "s3", "wide"),
+      road("r4", [[east, 10.0001], [east + 0.0004, 10.0001]], "s4"),
+    ]),
+    area_features: fc([parcel("a1", "park", west, 9.9998), parcel("a2", "park", west, 9.9996), parcel("a3", "water", west, 9.9994), parcel("a4", "park", east, 9.9998)]),
+    blocks: fc([blockAt("b1", west, 10), blockAt("b2", west, 10.0003, { eligibility: "median", buildable_area: null }), blockAt("b3", east, 10), blockAt("b4", west, 10.0006)]),
+    generation_zones: fc([
+      { type: "Feature", id: "z1", geometry: { type: "Polygon", coordinates: square(west, 10.0009) }, properties: { block_id: "b1", reason: "water" } },
+      { type: "Feature", id: "z2", geometry: { type: "Polygon", coordinates: square(west, 10.0011) }, properties: { block_id: "b1", reason: "water" } },
+    ] as never),
+  });
+
+  it("merges the roads per cell and lane type: the object count follows the cells, not the roads", () => {
+    const roads = chunks(flat, "roads");
+    expect(roads).toHaveLength(3); // west normal (r1, r2), west wide (r3), east normal (r4): four roads
+    expect(roads.every((chunk) => /^road:chunk:/.test(chunk.name) && chunk.userData.layer === "road" && chunk.receiveShadow && !chunk.castShadow)).toBe(true);
+    expect(ids(roads)).toEqual(["r1", "r2", "r3", "r4"]);
+    expect(flat.getObjectByName("road:r1")).toBeUndefined();
+  });
+
+  it("keeps the road layer's height, order and material on each chunk", () => {
+    for (const chunk of chunks(flat, "roads")) {
+      const wide = (chunk.userData.featureIds as string[]).includes("r3");
+      expect(chunk.position.y).toBe(LAYER_Y.roads);
+      expect(chunk.renderOrder).toBe(wide ? LAYER_ORDER.roadWide : LAYER_ORDER.roadNormal);
+      expect(chunk.material).toBe(wide ? MATERIALS.roadWide : MATERIALS.roadNormal);
+    }
+  });
+
+  it("merges the area features per cell, material and draw order", () => {
+    const features = chunks(flat, "area_features");
+    expect(features).toHaveLength(3); // west park (a1, a2), west water (a3), east park (a4)
+    expect(ids(features)).toEqual(["a1", "a2", "a3", "a4"]);
+    for (const chunk of features) {
+      const water = (chunk.userData.featureIds as string[]).includes("a3");
+      expect(chunk.userData.layer).toBe("area_feature");
+      expect(chunk.position.y).toBe(LAYER_Y.area_features);
+      expect(chunk.renderOrder).toBe(water ? LAYER_ORDER.water : LAYER_ORDER.green);
+      expect(chunk.material).toBe(water ? MATERIALS.water : MATERIALS.green);
+    }
+  });
+
+  it("merges the block outlines per cell and kind into line segments, and the fills and zones per cell and material", () => {
+    const blocks = chunks(flat, "blocks");
+    const lines = outlinesOf(flat);
+    expect(lines).toHaveLength(3); // west crisp (b1, b4), west faint (b2), east crisp (b3)
+    for (const line of lines) {
+      expect(line.isLineSegments).toBe(true);
+      expect(line.geometry.getAttribute("lineDistance")).toBeDefined(); // the dashes show
+      expect(line.geometry.getAttribute("position").count % 2).toBe(0);
+      const hits: THREE.Intersection[] = [];
+      line.raycast({} as THREE.Raycaster, hits);
+      expect(hits).toEqual([]);
+    }
+    expect(new Set(lines.map((line) => line.material))).toEqual(new Set([MATERIALS.blockOutline, MATERIALS.blockOutlineFaint]));
+    const fills = blocks.filter((child) => child.userData.layer === "block");
+    expect(ids(fills)).toEqual(["b1", "b3", "b4"]); // the median has no fill
+    expect(fills).toHaveLength(2);
+    expect(fills.every((chunk) => chunk.position.y === LAYER_Y.blocks && chunk.renderOrder === LAYER_ORDER.blocks && chunk.material === MATERIALS.buildable)).toBe(true);
+    const zones = blocks.filter((child) => child.userData.layer === "zone");
+    expect(ids(zones)).toEqual(["z1", "z2"]);
+    expect(zones).toHaveLength(1); // both in one cell, one material
+    expect(zones[0].position.y).toBe(LAYER_Y.zones);
+    expect(zones[0].renderOrder).toBe(LAYER_ORDER.zones);
+    expect(flat.getObjectByName("blocks")!.visible).toBe(false);
+  });
+
+  it("draws the selected block's outline as an object of its own, and puts it back when deselected", () => {
+    const verts = (lines: THREE.LineSegments[]) => lines.reduce((sum, line) => sum + line.geometry.getAttribute("position").count, 0);
+    const total = verts(outlinesOf(flat));
+
+    redrawBlockOutlines(flat, "b1");
+    const selected = outlinesOf(flat).filter((line) => line.material === MATERIALS.blockOutlineSelected);
+    expect(selected).toHaveLength(1);
+    expect(selected[0].userData.kind).toBe("selected");
+    expect(verts(outlinesOf(flat))).toBe(total); // the same outlines, b1's moved to its own object
+    expect(outlinesOf(flat)).toHaveLength(4); // the west crisp one now holds only b4
+
+    redrawBlockOutlines(flat, null);
+    expect(outlinesOf(flat).some((line) => line.material === MATERIALS.blockOutlineSelected)).toBe(false);
+    expect(outlinesOf(flat)).toHaveLength(3);
+  });
+
+  it("draws a block in the kind its feedback now gives it when the outlines are redrawn", () => {
+    const world = buildBatched({ ...data, blocks: fc([blockAt("b1", west, 10)]) });
+    expect(outlinesOf(world).map((line) => line.material)).toEqual([MATERIALS.blockOutline]);
+    world.userData.blockIndex[0].properties = { ...world.userData.blockIndex[0].properties, is_reference: true };
+    redrawBlockOutlines(world, null);
+    expect(outlinesOf(world).map((line) => line.material)).toEqual([MATERIALS.blockOutlineReference]);
+  });
+
+  describe("on terrain", () => {
+    // r1 and r4 share a cell and lane type, so one chunk holds both: r1 smoothed 10 / exact 0, r4 smoothed 30 / exact 20 above the baseline.
+    const world = buildBatched({ ...terrainData, road_segments: fc([...terrainData.road_segments.features, withHeights(road("r4", [[-84, 10.0003], [-83.999, 10.0003]], "street-3"), [70, 70], [80, 80])]) });
+    const chunkOf = (id: string) => chunks(world, "roads").find((chunk) => (chunk.userData.featureIds as string[]).includes(id))!;
+    /** The heights of a road's own vertices within its chunk. */
+    const heightsOf = (id: string) => {
+      const chunk = chunkOf(id);
+      const position = chunk.geometry.getAttribute("position");
+      const i = (chunk.userData.featureIds as string[]).indexOf(id);
+      const starts: number[] = chunk.userData.triangleStarts;
+      return Array.from({ length: (starts[i + 1] - starts[i]) * 3 }, (_, k) => position.getY(starts[i] * 3 + k));
+    };
+
+    it("holds both road modes on the same chunks: each road is draped on its own heights, and switches in place", () => {
+      expect(chunkOf("r1")).toBe(chunkOf("r4"));
+      expect(chunkOf("r1")).not.toBe(chunkOf("r3"));
+      const chunk = chunkOf("r1");
+      const geometry = chunk.geometry;
+      const count = geometry.getAttribute("position").count;
+      heightsOf("r1").forEach((y) => expect(y).toBeCloseTo(10));
+      heightsOf("r4").forEach((y) => expect(y).toBeCloseTo(30));
+
+      setRoadMode(world, "exact");
+      heightsOf("r1").forEach((y) => expect(y).toBeCloseTo(0));
+      heightsOf("r4").forEach((y) => expect(y).toBeCloseTo(20));
+      expect(world.userData.roadMode).toBe("exact");
+      expect(chunk.geometry).toBe(geometry);
+      expect(chunk.geometry.getAttribute("position").count).toBe(count);
+
+      setRoadMode(world, "smoothed");
+      heightsOf("r1").forEach((y) => expect(y).toBeCloseTo(10));
+      heightsOf("r4").forEach((y) => expect(y).toBeCloseTo(30));
+    });
+
+    it("samples the terrain under a road with no stored heights, in either mode", () => {
+      const before = heightsOf("r3");
+      expect(Math.max(...before)).toBeGreaterThan(15);
+      setRoadMode(world, "exact");
+      expect(heightsOf("r3")).toEqual(before);
+      setRoadMode(world, "smoothed");
+    });
+
+    it("builds in the exact mode when asked", () => {
+      const exact = buildBatched(terrainData, "exact");
+      const chunk = (exact.getObjectByName("roads")!.children as THREE.Mesh[]).find((c) => (c.userData.featureIds as string[]).includes("r1"))!;
+      const array = chunk.geometry.getAttribute("position").array;
+      for (let i = 1; i < array.length; i += 3) expect(array[i]).toBeCloseTo(0);
+    });
   });
 });

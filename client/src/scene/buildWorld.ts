@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import type { Feature, GeneratedBuildingProperties, Geometry, MapData, Position, Projection } from "../api/types";
 import { buildingHeights } from "./buildingHeight";
-import { cellKey, mergeChunks, ringsCentre, type BatchEntry } from "./batching";
+import { cellKey, materialKey, mergeChunks, mergeFlat, mergeStrips, ringsCentre, stripCell, type BatchEntry, type FlatEntry, type StripEntry } from "./batching";
 import { drapedGeometry, extrudeFootprints, flatGeometry, footprintShape, polygonShape } from "./extrude";
 import { densify, hasBlockFill, insetRing, outlineKind } from "./blockOutline";
 import { areaFeatureMaterial, MATERIALS, outlineMaterial, roadMaterial, zoneMaterial } from "./palette";
@@ -85,6 +85,54 @@ function entity(layer: string, feature: Feature<object>, geometry: THREE.BufferG
 }
 
 const group = (name: string) => Object.assign(new THREE.Group(), { name });
+
+/** What a flat layer's chunk shares: the layer's height (`position.y`) and the draw order that ends its key (`<cell>:<material>:<renderOrder>`). */
+const flatChunk = (y: number) => (mesh: THREE.Mesh, key: string, _entries?: FlatEntry[]) => {
+  mesh.position.y = y;
+  mesh.renderOrder = Number(key.slice(key.lastIndexOf(":") + 1));
+};
+
+/** One road of a batched chunk: its vertices (`start` up to `end`, as numbers of the position array) and the stored height arrays that drape them, for `setRoadMode`. */
+interface RoadDrape {
+  start: number;
+  end: number;
+  lines: Local[][];
+  heights: Record<RoadMode, number[][] | null>;
+}
+
+/** One polyline of a block's outline, kept (in `world.userData.blockOutlines`) so the outlines can be redrawn when the selection or a block's kind changes. */
+interface BlockOutlinePart {
+  id: string;
+  /** The strip as x y z points, lifted and draped. */
+  positions: Float32Array;
+  cell: string;
+}
+
+/**
+ * The outlines of a batched world's blocks: one `LineSegments` per (150 m cell, outline kind) named `block_outline:chunk:<cell>:<kind>`,
+ * plus one for the `selected` block, if any, named `block_outline:chunk:selected`. Each block's kind comes from its properties in
+ * `world.userData.blockIndex`, so a block whose feedback changed is drawn as it now is.
+ */
+export function blockOutlineLines(world: THREE.Object3D, selected: string | null = null): THREE.LineSegments[] {
+  const parts: BlockOutlinePart[] = world.userData.blockOutlines ?? [];
+  const properties = new Map((world.userData.blockIndex as { id: string; properties: Parameters<typeof outlineKind>[0] }[] | undefined ?? []).map((block) => [block.id, block.properties]));
+  const entries: StripEntry[] = parts.map((part) => {
+    const kind = outlineKind(properties.get(part.id) ?? {}, part.id === selected);
+    return { key: kind === "selected" ? "selected" : `${part.cell}:${kind}`, material: outlineMaterial(kind), positions: part.positions };
+  });
+  return mergeStrips(entries, { layer: "block_outline", prefix: "block_outline", extra: (key) => ({ kind: key === "selected" ? "selected" : key.slice(key.lastIndexOf(":") + 1) }) });
+}
+
+/** Replaces the outlines of a batched world's `blocks` group with freshly merged ones (see `blockOutlineLines`): the selected block's drawn as its own object. */
+export function redrawBlockOutlines(world: THREE.Object3D, selected: string | null): void {
+  const blocks = world.getObjectByName("blocks");
+  if (!blocks) return;
+  for (const old of blocks.children.filter((child) => child.userData.layer === "block_outline")) {
+    blocks.remove(old);
+    (old as THREE.LineSegments).geometry.dispose();
+  }
+  blocks.add(...blockOutlineLines(world, selected));
+}
 
 /** The height a building's base stands at: the lowest ground under its footprint (or its stored base height), so nothing floats. */
 function groundBase(terrain: Terrain, polygons: Rings[], base: number | null | undefined): number {
@@ -215,6 +263,7 @@ export function buildWorld(data: MapData, roadMode: RoadMode = DEFAULT_ROAD_MODE
   const extent = new THREE.Box2();
   const grow = (points: Local[]) => points.forEach((p) => extent.expandByPoint(new THREE.Vector2(p.x, p.z)));
 
+  const areaEntries: FlatEntry[] = [];
   for (const feature of data.area_features.features) {
     const polygons = polygonsOf(feature.geometry, projection);
     if (!polygons.length) continue;
@@ -222,12 +271,22 @@ export function buildWorld(data: MapData, roadMode: RoadMode = DEFAULT_ROAD_MODE
     const drawn = clipped(polygons);
     if (!drawn.length) continue;
     const material = areaFeatureMaterial(feature.properties.kind);
+    const renderOrder = feature.properties.kind === "water" ? LAYER_ORDER.water : LAYER_ORDER.green;
+    if (batched) {
+      const centre = ringsCentre(drawn.map((rings) => rings[0]));
+      areaEntries.push({ id: feature.id, key: `${cellKey(centre.x, centre.z)}:${materialKey(material)}:${renderOrder}`, material, geometry: surface(drawn) });
+      continue;
+    }
     const mesh = entity("area_feature", feature, surface(drawn), material);
     mesh.position.y = LAYER_Y.area_features;
-    mesh.renderOrder = feature.properties.kind === "water" ? LAYER_ORDER.water : LAYER_ORDER.green;
+    mesh.renderOrder = renderOrder;
     groups.area_features.add(mesh);
   }
+  // One mesh per (150 m cell, material, draw order): the layer's offset and order sit on the chunk, as they did on each feature.
+  groups.area_features.add(...mergeFlat(areaEntries, { layer: "area_feature", prefix: "area_feature", configure: flatChunk(LAYER_Y.area_features) }));
 
+  const roadEntries: FlatEntry[] = [];
+  const roadDrapes = new Map<string, Omit<RoadDrape, "start" | "end">>();
   const segments = data.road_segments.features
     .map((feature) => ({ feature, lines: linesOf(feature.geometry, projection) }))
     .filter((segment) => segment.lines.length);
@@ -245,23 +304,47 @@ export function buildWorld(data: MapData, roadMode: RoadMode = DEFAULT_ROAD_MODE
       smoothed: splitByLines(terrain.roadHeights(feature, "smoothed"), lines),
     };
     const shapes = gridLines ? [] : drawnOutlines.map(footprintShape);
-    const mesh = entity(
-      "road",
-      feature,
-      gridLines ? drapedGeometry(drawnOutlines.map((outline) => [outline]), roadSurface(lines, heights[roadMode], terrain.heightAtLocal).at, gridLines) : flatGeometry(shapes),
-      roadMaterial(feature.properties.lane_type),
-    );
+    const geometry = gridLines ? drapedGeometry(drawnOutlines.map((outline) => [outline]), roadSurface(lines, heights[roadMode], terrain.heightAtLocal).at, gridLines) : flatGeometry(shapes);
+    const laneType = feature.properties.lane_type;
+    const renderOrder = laneType === "wide" ? LAYER_ORDER.roadWide : laneType === "narrow" ? LAYER_ORDER.roadNarrow : LAYER_ORDER.roadNormal;
+    if (batched) {
+      const centre = ringsCentre(drawnOutlines);
+      roadEntries.push({ id: feature.id, key: `${cellKey(centre.x, centre.z)}:${materialKey(roadMaterial(laneType))}:${renderOrder}`, material: roadMaterial(laneType), geometry });
+      if (terrain.hasGround) roadDrapes.set(feature.id, { lines, heights });
+      continue;
+    }
+    const mesh = entity("road", feature, geometry, roadMaterial(laneType));
     if (terrain.hasGround) mesh.userData.drape = { lines, heights };
     mesh.position.y = LAYER_Y.roads;
-    const laneType = feature.properties.lane_type;
-    mesh.renderOrder = laneType === "wide" ? LAYER_ORDER.roadWide : laneType === "narrow" ? LAYER_ORDER.roadNarrow : LAYER_ORDER.roadNormal;
+    mesh.renderOrder = renderOrder;
     groups.roads.add(mesh);
   }
+  // One mesh per (150 m cell, lane type). Each chunk keeps its roads' stored heights and vertex ranges (`userData.drape`), so
+  // `setRoadMode` re-drapes them in place: both modes live on the same chunks, and no geometry is rebuilt.
+  groups.roads.add(
+    ...mergeFlat(roadEntries, {
+      layer: "road",
+      prefix: "road",
+      configure: (mesh, key, entries) => {
+        flatChunk(LAYER_Y.roads)(mesh, key, entries);
+        const starts = mesh.userData.triangleStarts as number[];
+        const drapes: RoadDrape[] = [];
+        entries.forEach((entry, i) => {
+          const stored = roadDrapes.get(entry.id);
+          if (stored) drapes.push({ start: starts[i] * 3, end: starts[i + 1] * 3, ...stored });
+        });
+        if (drapes.length) mesh.userData.drape = drapes;
+      },
+    }),
+  );
 
   // Where each block is, for picking: a click on the ground finds its block by point-in-polygon (blockSelection.ts), so a
   // block with no buildable area (a median, a sliver) can still be selected.
   const blockIndex: { id: string; polygons: Rings[]; properties: MapData["blocks"]["features"][number]["properties"] }[] = [];
   world.userData.blockIndex = blockIndex;
+  const outlineParts: BlockOutlinePart[] = [];
+  const fillEntries: FlatEntry[] = [];
+  const zoneEntries: FlatEntry[] = [];
   for (const feature of data.blocks.features) {
     // The block's outline: its boundary moved 1.5 m inward (blockOutline.ts), draped on the terrain, dashed by its eligibility.
     const outer = polygonsOf(feature.geometry, projection);
@@ -271,6 +354,10 @@ export function buildWorld(data: MapData, roadMode: RoadMode = DEFAULT_ROAD_MODE
       if (inset.length < 4) continue;
       const positions = new Float32Array(inset.length * 3);
       inset.forEach((p, i) => positions.set([p.x, terrain.heightAtLocal(p.x, p.z) + OUTLINE_LIFT, p.z], i * 3));
+      if (batched) {
+        outlineParts.push({ id: feature.id, positions, cell: stripCell(positions) });
+        continue;
+      }
       const geometry = new THREE.BufferGeometry();
       geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
       const kind = outlineKind(feature.properties);
@@ -287,6 +374,11 @@ export function buildWorld(data: MapData, roadMode: RoadMode = DEFAULT_ROAD_MODE
     if (!polygons.length) continue;
     const drawn = clipped(polygons);
     if (!drawn.length) continue;
+    if (batched) {
+      const centre = ringsCentre(drawn.map((rings) => rings[0]));
+      fillEntries.push({ id: feature.id, key: `${cellKey(centre.x, centre.z)}:${materialKey(MATERIALS.buildable)}:${LAYER_ORDER.blocks}`, material: MATERIALS.buildable, geometry: surface(drawn) });
+      continue;
+    }
     const mesh = entity("block", feature, surface(drawn), MATERIALS.buildable);
     mesh.position.y = LAYER_Y.blocks;
     mesh.renderOrder = LAYER_ORDER.blocks;
@@ -298,10 +390,23 @@ export function buildWorld(data: MapData, roadMode: RoadMode = DEFAULT_ROAD_MODE
     if (!polygons.length) continue;
     const drawn = clipped(polygons);
     if (!drawn.length) continue;
-    const mesh = entity("zone", feature, surface(drawn), zoneMaterial(feature.properties.reason));
+    const material = zoneMaterial(feature.properties.reason);
+    if (batched) {
+      const centre = ringsCentre(drawn.map((rings) => rings[0]));
+      zoneEntries.push({ id: feature.id, key: `${cellKey(centre.x, centre.z)}:${materialKey(material)}:${LAYER_ORDER.zones}`, material, geometry: surface(drawn) });
+      continue;
+    }
+    const mesh = entity("zone", feature, surface(drawn), material);
     mesh.position.y = LAYER_Y.zones;
     mesh.renderOrder = LAYER_ORDER.zones;
     groups.blocks.add(mesh);
+  }
+  if (batched) {
+    // One line object per (cell, outline kind) and one mesh per (cell, material) for the fills and the zones, instead of one per block.
+    world.userData.blockOutlines = outlineParts;
+    groups.blocks.add(...blockOutlineLines(world));
+    groups.blocks.add(...mergeFlat(fillEntries, { layer: "block", prefix: "block", configure: flatChunk(LAYER_Y.blocks) }));
+    groups.blocks.add(...mergeFlat(zoneEntries, { layer: "zone", prefix: "zone", configure: flatChunk(LAYER_Y.zones) }));
   }
   // Hidden by default; the scene view's "Show blocks" checkbox toggles it (the outlines, the faint buildable-area fill, and the zones).
   groups.blocks.visible = false;
@@ -365,10 +470,13 @@ export function setRoadMode(world: THREE.Object3D, mode: RoadMode): void {
   if (!terrain?.hasGround) return;
   world.getObjectByName("roads")?.children.forEach((child) => {
     const mesh = child as THREE.Mesh;
-    const stored = mesh.userData.drape as { lines: Local[][]; heights: Record<RoadMode, number[][] | null> } | undefined;
+    // A batched chunk holds an array (one entry per road, with its vertex range); an unbatched road mesh holds its own heights.
+    const stored = mesh.userData.drape as RoadDrape[] | Omit<RoadDrape, "start" | "end"> | undefined;
     if (!stored) return;
     const position = mesh.geometry.getAttribute("position") as THREE.BufferAttribute;
-    drape(position.array, roadSurface(stored.lines, stored.heights[mode], terrain.heightAtLocal).at);
+    for (const road of Array.isArray(stored) ? stored : [{ start: 0, end: position.array.length, ...stored }]) {
+      drape((position.array as Float32Array).subarray(road.start, road.end), roadSurface(road.lines, road.heights[mode], terrain.heightAtLocal).at);
+    }
     position.needsUpdate = true;
     shadeGeometry(mesh.geometry); // the slope changed, so the shade did
     mesh.geometry.computeBoundingSphere();

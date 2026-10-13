@@ -1,8 +1,8 @@
 import * as THREE from "three";
 import type { BlockFeedback, BlockProperties } from "../api/types";
-import { blockAt, outlineKind } from "./blockOutline";
+import { blockAt } from "./blockOutline";
 import { createBlockPanel, type BlockFeedbackApi } from "./blockPanel";
-import { outlineMaterial } from "./palette";
+import { redrawBlockOutlines } from "./buildWorld";
 import type { Local } from "./projection";
 
 const CLICK_SLOP_PIXELS = 5;
@@ -46,14 +46,9 @@ export function createBlockSelection(camera: THREE.Camera, canvas: HTMLElement, 
 
   const index = (): IndexedBlock[] => world?.userData.blockIndex ?? [];
 
-  /** Every outline of the world takes the material of its kind, the selected block's the highlighted one. */
+  /** Every outline of the world is drawn in the material of its kind (merged per cell, buildWorld.ts), the selected block's as an object of its own in the highlighted one. */
   const paint = () => {
-    world?.traverse((object) => {
-      const { layer, id } = object.userData;
-      if (layer !== "block_outline") return;
-      const block = index().find((entry) => entry.id === id);
-      if (block) (object as THREE.Line).material = outlineMaterial(outlineKind(block.properties, id === selected));
-    });
+    if (world?.userData.blockOutlines) redrawBlockOutlines(world, selected);
   };
 
   const panel = createBlockPanel(
