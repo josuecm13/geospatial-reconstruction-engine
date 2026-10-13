@@ -121,7 +121,14 @@ cd server && source .venv/bin/activate && set -a && source .env && set +a
 uvicorn app.main:app --port "$APP_PORT"
 ```
 
-Then, in another terminal:
+The client itself runs in Docker: `docker compose up -d` (which `scripts/dev-up.sh` already does)
+starts it next to PostGIS at http://localhost:55173 with hot reload (the source is bind-mounted,
+file watching uses polling). It reaches the API on the host through `host.docker.internal`, so
+`APP_PORT` must match `server/.env`; set `CLIENT_PORT` in your shell to change the host port. After
+changing `client/package.json`, run `docker compose build client`.
+
+To run the client on the host instead, stop the container (`docker compose stop client`) and, in
+another terminal:
 
 ```bash
 cd client

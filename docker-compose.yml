@@ -15,5 +15,27 @@ services:
       timeout: 3s
       retries: 30
 
+  # The showcase client's Vite dev server (hot reload). The API stays on the host (uvicorn on
+  # APP_PORT), reached through host.docker.internal.
+  client:
+    build: ./client
+    ports:
+      - "${CLIENT_PORT:-55173}:55173"
+    environment:
+      CLIENT_PORT: "55173"
+      API_TARGET: "http://host.docker.internal:${APP_PORT:-58000}"
+      VITE_USE_POLLING: "1"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./client:/app
+      - /app/node_modules
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:55173/ || exit 1"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+
 volumes:
   postgis_data:
