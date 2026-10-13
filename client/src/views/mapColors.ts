@@ -44,8 +44,6 @@ export const MAP_COLORS = {
   buildable: COLORS.buildable,
   buildableOutline: COLORS.buildable,
   blockMedian: "#c9a24a",
-  poi: "#f06292",
-  poiStroke: COLORS.edge,
   /** The boundary being traced: warm orange, distinct from the route's `--accent`. */
   boundaryDraft: "#f5a524",
   /** Saved boundaries. */

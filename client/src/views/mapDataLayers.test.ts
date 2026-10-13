@@ -65,6 +65,17 @@ describe("featureRows", () => {
     ]);
   });
 
+  it("describes a road from the full properties, where `street` is an object", () => {
+    const rows = Object.fromEntries(
+      featureRows("engine-roads", { street: { id: "s1", name: "Torstraße", classification: "primary" }, lane_count: 2, lane_count_provenance: "defaulted", lane_type: "wide", width_meters: 7, distance_meters: 1 }),
+    );
+    expect(rows).toMatchObject({ Street: "Torstraße", Class: "primary" });
+  });
+
+  it("describes only what is drawn: a point of interest falls to the default row", () => {
+    expect(featureRows("engine-pois", { kind: "x", name: "Cafe" })).toEqual([["Kind", "x"]]);
+  });
+
   it("says where a generated building came from: a block, defaults, or your count", () => {
     const rows = (properties: Record<string, unknown>) => Object.fromEntries(featureRows("engine-generated", { height_meters: 6.4, levels: 2, style: "regular", ...properties }));
 

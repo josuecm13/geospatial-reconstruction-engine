@@ -4,18 +4,28 @@ import { roadWidthExpression } from "../geo/roadWidth";
 import { createBlockPanel, type BlockFeedbackApi, type BlockPanel } from "../scene/blockPanel";
 import { generatedOrigin } from "../scene/generationMessages";
 import { BLOCK_FILL_FILTER, blockEntries, blockOutlines, blockUnder, type BlockEntry } from "./blockOutlines";
+import { Coalescer } from "./coalesce";
 import { MAP_COLORS } from "./mapColors";
+import { LAYERS, SOURCE_KEYS, slimCollection, type LayerName, type PropertyLookup, type SlimCollection } from "./mapSources";
 
-/** The engine's own representation of an imported area, drawn over the basemap: this is what was
- * served from the API, not the basemap's rendering of OSM. */
-const LAYERS = ["area_features", "generation_zones", "blocks", "road_segments", "buildings", "generated_buildings", "pois"] as const;
-type LayerName = (typeof LAYERS)[number];
-
-const CLICKABLE = ["engine-area-features", "engine-roads", "engine-buildings", "engine-generated", "engine-pois"];
+const CLICKABLE = ["engine-area-features", "engine-roads", "engine-buildings", "engine-generated"];
 /** What a click on a block yields to: when one of these is under the click, its popup shows and the block isn't selected. */
-const ABOVE_BLOCKS = ["engine-roads", "engine-buildings", "engine-generated", "engine-pois"];
+const ABOVE_BLOCKS = ["engine-roads", "engine-buildings", "engine-generated"];
+
+/** The source each clickable layer draws, to find a clicked feature's full properties. */
+const LAYER_SOURCE: Record<string, LayerName> = {
+  "engine-area-features": "area_features",
+  "engine-blocks": "blocks",
+  "engine-roads": "road_segments",
+  "engine-buildings": "buildings",
+  "engine-generated": "generated_buildings",
+};
 
 const OUTLINES = "engine-block_outlines";
+
+/** Past this zoom a source's tiles are overzoomed (vector, so still crisp) instead of cut finer; `tolerance` is the simplification, in tile units. */
+const SOURCE_OPTIONS = { maxzoom: 16, tolerance: 0.5 } as const;
+const emptyCollection = () => ({ type: "FeatureCollection" as const, features: [] });
 
 /** Selecting a block on the map needs the API (for its feedback) and somewhere to put the panel. */
 export interface BlockSelectionOptions {
@@ -27,7 +37,13 @@ export class MapDataLayers {
   private readonly popup = new maplibregl.Popup({ closeButton: true, maxWidth: "320px" });
   private popupsEnabled = true;
   private blocks: BlockEntry[] = [];
-  private storedGenerated: unknown = { type: "FeatureCollection", features: [] };
+  private storedGenerated: SlimCollection = slimCollection(null, []);
+  /** Every layer's features' full properties by source id: the sources only carry what their paint reads (`SOURCE_KEYS`). */
+  private properties: Record<LayerName, PropertyLookup> = Object.fromEntries(LAYERS.map((name) => [name, new Map()])) as Record<LayerName, PropertyLookup>;
+  /** The last response drawn: the same object again changes nothing. */
+  private drawn: MapData | null = null;
+  /** The streamed generated buildings reach the map at most once a second, and not at all while it is hidden. */
+  private readonly generated = new Coalescer<Feature<GeneratedBuildingProperties>[] | null>((features) => this.drawGenerated(features));
   private selected: string | null = null;
   private readonly panel: BlockPanel | undefined;
   private readonly onKeyDown = (event: KeyboardEvent) => {
@@ -35,8 +51,8 @@ export class MapDataLayers {
   };
 
   constructor(private readonly map: maplibregl.Map, selection?: BlockSelectionOptions) {
-    for (const name of LAYERS) map.addSource(sourceId(name), { type: "geojson", data: { type: "FeatureCollection", features: [] } });
-    map.addSource(OUTLINES, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+    for (const name of LAYERS) map.addSource(sourceId(name), { type: "geojson", data: emptyCollection(), ...SOURCE_OPTIONS });
+    map.addSource(OUTLINES, { type: "geojson", data: emptyCollection(), ...SOURCE_OPTIONS });
     map.addLayer({
       id: "engine-area-features",
       type: "fill",
@@ -121,15 +137,9 @@ export class MapDataLayers {
       // Cool blue: generated, not observed, so the two never read as one.
       paint: { "fill-color": MAP_COLORS.buildingGenerated, "fill-opacity": 0.85, "fill-outline-color": MAP_COLORS.buildingOutline },
     });
-    map.addLayer({
-      id: "engine-pois",
-      type: "circle",
-      source: sourceId("pois"),
-      paint: { "circle-radius": 4, "circle-color": MAP_COLORS.poi, "circle-stroke-color": MAP_COLORS.poiStroke, "circle-stroke-width": 1 },
-    });
     if (selection) {
       this.panel = createBlockPanel(selection.host, selection.api, (blockId, feedback) => this.feedbackChanged(blockId, feedback), () => this.select(null));
-      // Registered before the layers' own handlers, so a click on a block (and no road, building or point on it) is the block's:
+      // Registered before the layers' own handlers, so a click on a block (and no road or building on it) is the block's:
       // preventDefault keeps the popup of the area feature under it from opening too.
       map.on("click", (event) => this.clicked(event));
       window.addEventListener("keydown", this.onKeyDown);
@@ -146,6 +156,7 @@ export class MapDataLayers {
 
   /** Removes the `window` listener and the block panel; call when the page is left. */
   dispose(): void {
+    this.generated.cancel();
     window.removeEventListener("keydown", this.onKeyDown);
     this.panel?.dispose();
   }
@@ -181,23 +192,47 @@ export class MapDataLayers {
   /**
    * The generated layer while a generation job streams: these buildings (every one streamed so far) replace the
    * stored ones, which come back with `null` (the job failed). Left as they are when the job completes: they are
-   * the stored run's, and `show` redraws the layer from map-data the next time the area is shown.
+   * the stored run's, and `show` redraws the layer from map-data the next time the area is shown. A job streams one
+   * update per block, each with everything so far, so they are coalesced (`Coalescer`): held while the map is hidden,
+   * and applied at most once a second while it shows, the last one always landing.
    */
   setGeneratedBuildings(features: Feature<GeneratedBuildingProperties>[] | null): void {
-    const data = features ? { type: "FeatureCollection", features } : this.storedGenerated;
-    (this.map.getSource(sourceId("generated_buildings")) as maplibregl.GeoJSONSource).setData(data as never);
+    this.generated.push(features);
+  }
+
+  /** Whether the map is on screen: a hidden map takes no generated buildings until it shows again (then the latest). */
+  setVisible(visible: boolean): void {
+    this.generated.setVisible(visible);
+  }
+
+  private drawGenerated(features: Feature<GeneratedBuildingProperties>[] | null): void {
+    const slim = features ? slimCollection({ features }, SOURCE_KEYS.generated_buildings) : this.storedGenerated;
+    this.properties.generated_buildings = slim.properties;
+    (this.map.getSource(sourceId("generated_buildings")) as maplibregl.GeoJSONSource).setData(slim.data as never);
   }
 
   show(data: MapData): void {
-    this.storedGenerated = data.generated_buildings ?? { type: "FeatureCollection", features: [] };
+    if (data === this.drawn) return;
+    this.drawn = data;
+    this.generated.cancel(); // the area's own data replaces whatever a job had streamed
+    this.storedGenerated = slimCollection(data.generated_buildings, SOURCE_KEYS.generated_buildings);
     this.blocks = blockEntries(data);
     (this.map.getSource(OUTLINES) as maplibregl.GeoJSONSource).setData(blockOutlines(data) as never);
     if (this.selected) this.select(null); // a new area, or the same one reloaded: the old selection's properties are stale
     // Roads drawn at their generated carriageway width, in meters on the ground.
     this.map.setPaintProperty("engine-roads", "line-width", roadWidthExpression(data.projection.origin.latitude) as never);
     for (const name of LAYERS) {
-      (this.map.getSource(sourceId(name)) as maplibregl.GeoJSONSource).setData((data[name] ?? { type: "FeatureCollection", features: [] }) as never);
+      const slim = name === "generated_buildings" ? this.storedGenerated : slimCollection(data[name], SOURCE_KEYS[name]);
+      this.properties[name] = slim.properties;
+      (this.map.getSource(sourceId(name)) as maplibregl.GeoJSONSource).setData(slim.data as never);
     }
+  }
+
+  /** A clicked feature's full properties from `properties` (its source id is numeric), else the little its tile carries. */
+  private fullProperties(feature: maplibregl.MapGeoJSONFeature): Record<string, unknown> {
+    const source = LAYER_SOURCE[feature.layer.id];
+    const full = source && typeof feature.id === "number" ? this.properties[source].get(feature.id) : undefined;
+    return full ?? feature.properties ?? {};
   }
 
   private describe(event: maplibregl.MapLayerMouseEvent): void {
@@ -207,7 +242,7 @@ export class MapDataLayers {
     // Only the top-most clicked layer describes itself.
     if (event.originalEvent.defaultPrevented) return;
     event.originalEvent.preventDefault();
-    this.popup.setLngLat(event.lngLat).setDOMContent(describeFeature(feature.layer.id, feature.properties ?? {})).addTo(this.map);
+    this.popup.setLngLat(event.lngLat).setDOMContent(describeFeature(feature.layer.id, this.fullProperties(feature))).addTo(this.map);
   }
 }
 
@@ -221,10 +256,9 @@ const TITLES: Record<string, string> = {
   "engine-roads": "Road segment",
   "engine-buildings": "Building",
   "engine-generated": "Generated building",
-  "engine-pois": "Point of interest",
 };
 
-/** MapLibre flattens nested properties to JSON strings; `street` is one. */
+/** The popup's rows, from the full properties (`MapDataLayers.properties`), where `street` is an object. A tile's copy, which MapLibre flattens (`street` becomes a JSON string), is read too. */
 export function featureRows(layerId: string, properties: Record<string, unknown>): [string, string][] {
   const value = (v: unknown) => (v === null || v === undefined || v === "null" ? "unknown" : String(v));
   switch (layerId) {
@@ -260,8 +294,6 @@ export function featureRows(layerId: string, properties: Record<string, unknown>
         ["Median", value(properties.is_median)],
         ["Clipped by the rectangle", value(properties.is_clipped)],
       ];
-    case "engine-pois":
-      return [["Name", value(properties.name)], ["Category", value(properties.category)]];
     default:
       return [["Kind", value(properties.kind)]];
   }

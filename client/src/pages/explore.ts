@@ -146,6 +146,7 @@ export const mount: Mount<ExploreRoute> = (el, ctx) => {
     // Clicking a block opens its panel (how many buildings, and the feedback controls) in the map's own container.
     const layers = new MapDataLayers(mapView.map, { api, host: pick("map-view") });
     mapLayers = layers;
+    layers.setVisible(view === "map"); // the map may load while the Scene view is up
     // The boundary panel needs the import panel's rectangle, and the import panel saves a traced shape
     // through the boundary panel once an import succeeds, so each is handed to the other as a callback.
     const imports = new ImportPanel(
@@ -217,6 +218,8 @@ export const mount: Mount<ExploreRoute> = (el, ctx) => {
   function show(name: ExploreView): void {
     pick("map-view").hidden = name !== "map";
     pick("scene-view").hidden = name !== "scene";
+    // A hidden map takes no streamed generated buildings; the latest lands when it shows.
+    mapLayers?.setVisible(name === "map");
     // The side panel belongs to the map; style.css hides it while the map is hidden.
     if (name === "map") {
       void sceneView?.then((scene) => {
