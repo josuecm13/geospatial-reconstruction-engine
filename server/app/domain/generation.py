@@ -584,18 +584,24 @@ def two_storey_share(block_levels: Iterable[int | None], area_levels: Iterable[i
     return TWO_STOREY_SHARE_DEFAULT
 
 
-def fnv1a_unit(seed: str) -> float:
-    """FNV-1a (32-bit) over the UTF-8 bytes of `seed`, divided by 2^32: a stable value in [0, 1).
-    The client has the same function, and a test on each side pins the same value."""
+def stable_unit(seed: str) -> float:
+    """A stable value in [0, 1) for `seed`: FNV-1a (32-bit) over its UTF-8 bytes, then murmur3's fmix32
+    finalizer (FNV-1a alone mixes its high bits poorly when seeds differ only in trailing characters),
+    divided by 2^32. The client has the same function, and a test on each side pins the same value."""
     value = 0x811C9DC5
     for byte in seed.encode("utf-8"):
         value = ((value ^ byte) * 0x01000193) & 0xFFFFFFFF
+    value ^= value >> 16
+    value = (value * 0x85EBCA6B) & 0xFFFFFFFF
+    value ^= value >> 13
+    value = (value * 0xC2B2AE35) & 0xFFFFFFFF
+    value ^= value >> 16
     return value / 4294967296
 
 
 def draw_storeys(seed: str, share: float) -> int:
     """2 when the seed's unit value falls under `share`, else 1."""
-    return 2 if fnv1a_unit(seed) < share else 1
+    return 2 if stable_unit(seed) < share else 1
 
 
 def calibration_factor(feedback_counts: Sequence[int], generated_counts: Sequence[int]) -> float | None:

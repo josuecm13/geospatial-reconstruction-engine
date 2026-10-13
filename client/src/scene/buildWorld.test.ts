@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { describe, expect, it } from "vitest";
 import type { Elevation, Feature, GeneratedBuildingProperties, MapData, Position } from "../api/types";
 import { buildWorld, generatedMeshes, groundPlane, LAYER_ORDER, LAYER_Y, OUTLINE_LIFT, roadOutlineLines, setRoadMode } from "./buildWorld";
+import { FALLBACK_HEIGHT } from "./buildingHeight";
 import { MATERIALS } from "./palette";
 
 const D = 0.0001; // about 11 m
@@ -87,7 +88,8 @@ describe("buildWorld", () => {
     const measured = world.getObjectByName("building:bu2") as THREE.Mesh;
     expect(defaulted.userData.defaulted).toBe(true);
     expect(defaulted.material).toBe(MATERIALS.buildingDefaulted);
-    expect(defaulted.userData.height).toBe(7);
+    // Category "house" with no type is not low-rise housing, so it takes the fallback height.
+    expect(defaulted.userData.height).toBe(FALLBACK_HEIGHT);
     expect(measured.userData.defaulted).toBe(false);
     expect(measured.material).toBe(MATERIALS.buildingMeasured);
   });

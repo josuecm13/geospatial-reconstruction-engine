@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { TWO_STOREY_SHARE_DEFAULT, drawStoreys, fnv1aUnit, storeyShares } from "./storeyMix";
+import { TWO_STOREY_SHARE_DEFAULT, drawStoreys, stableUnit, storeyShares } from "./storeyMix";
 
 const at = (block_id: string | null, levels: number | null) => ({ block_id, levels });
 
@@ -25,12 +25,12 @@ describe("storeyShares", () => {
 });
 
 describe("drawStoreys", () => {
-  it("is pinned to the same FNV-1a values as the server", () => {
+  it("is pinned to the same hash values as the server", () => {
     // `server/tests/domain/test_generation.py` pins the same two values.
-    expect(fnv1aUnit("a") * 2 ** 32).toBe(3826002220);
-    expect(fnv1aUnit("way/123") * 2 ** 32).toBe(3327974463);
-    expect(drawStoreys("way/123", 0.78)).toBe(2);
-    expect(drawStoreys("way/123", 0.77)).toBe(1);
+    expect(stableUnit("a") * 2 ** 32).toBe(444641715);
+    expect(stableUnit("way/123") * 2 ** 32).toBe(1071952468);
+    expect(drawStoreys("way/123", 0.25)).toBe(2);
+    expect(drawStoreys("way/123", 0.24)).toBe(1);
   });
 
   it("is deterministic and matches the share over many ids", () => {
