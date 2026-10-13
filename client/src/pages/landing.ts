@@ -116,8 +116,8 @@ export const mount: Mount<{ page: "landing" }> = (el, ctx) => {
   const hero = element("section", "landing-hero");
   const heroSkeleton = element("div", "landing-inner landing-hero-grid");
   heroSkeleton.setAttribute("aria-busy", "true");
-  heroSkeleton.append(element("div", "landing-skeleton landing-skeleton-text"), element("div", "landing-skeleton landing-skeleton-stage"));
-  hero.append(heroSkeleton);
+  heroSkeleton.append(element("div", "landing-skeleton landing-skeleton-text"));
+  hero.append(element("div", "landing-skeleton landing-skeleton-stage"), heroSkeleton);
 
   // The place-dependent middle: the story, what you can do, and the places built so far.
   const journey = element("div", "landing-journey");
@@ -189,8 +189,10 @@ export const mount: Mount<{ page: "landing" }> = (el, ctx) => {
     if (area.place_context) text.append(element("p", "landing-context", area.place_context));
     text.append(element("p", "landing-lede", "A city block by block: streets with lanes, buildable blocks, buildings at their height."), actions);
     const heroInner = element("div", "landing-inner landing-hero-grid");
-    heroInner.append(text, heroStage);
-    hero.replaceChildren(heroInner);
+    heroInner.append(text);
+    const cue = element("span", "landing-scroll-cue", "Scroll");
+    cue.setAttribute("aria-hidden", "true");
+    hero.replaceChildren(heroStage, heroInner, cue);
 
     // --- the story: a sticky stage beside the steps that scroll ---
     const story = element("section", "landing-section landing-story");

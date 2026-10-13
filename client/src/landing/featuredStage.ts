@@ -6,10 +6,11 @@ import { Animator } from "../scene/buildAnimation";
 import { buildWorld } from "../scene/buildWorld";
 import { overview } from "../scene/framing";
 import { restyle, SCENE_BACKGROUND, setActiveTheme } from "../scene/palette";
+import { DRONE_FOV, droneShot, dronePosition, type Footprint } from "./droneShot";
 import { readLandingLook } from "./landingLook";
 import { changeBetween, FINAL_STEP, hasGeneratedContext, heroStep, layersFor, pickSlot, STORY_LAYERS, type StoryLayer } from "./storySteps";
 
-/** The turntable's speed, radians per second. */
+/** The story slot's turntable speed, radians per second. */
 const TURN_SPEED = 0.05;
 
 export type StageSlot = "hero" | "story";
@@ -31,8 +32,8 @@ export interface FeaturedStageOptions {
 }
 
 /**
- * The landing page's 3D stage: one WebGL renderer for the whole page, turning slowly over the featured
- * place. Its canvas lives in whichever slot is more visible; the hero shows the finished place (with the generated layer when it has one), the story slot
+ * The landing page's 3D stage: one WebGL renderer for the whole page, drifting slowly over the featured
+ * place. Its canvas lives in whichever slot is more visible; the hero shows the finished place from a low drone shot (with the generated layer when it has one), the story slot
  * the layers up to the active step. Throws when WebGL is unavailable, and rejects when the map data
  * can't be loaded; the caller keeps its 2D preview then.
  */
@@ -67,11 +68,44 @@ export async function createFeaturedStage({ api, areaId, slots, onReady }: Featu
     const atmosphere = createAtmosphere(scene, renderer);
     atmosphere.setTheme(look.theme);
     atmosphere.setTime(look.time, { animate: false });
-    const view = overview(new THREE.Box3().setFromObject(world));
+    const box = new THREE.Box3().setFromObject(world);
+    const view = overview(box);
+    // The hero's drone shot: low across the streets toward the dense centre of the buildings, on the terrain when there is some.
+    const footprints: Footprint[] = [];
+    for (const name of ["buildings", "generated"]) {
+      for (const child of world.getObjectByName(name)?.children ?? []) {
+        const mesh = child as THREE.Mesh;
+        if (!mesh.geometry) continue;
+        mesh.geometry.boundingBox ?? mesh.geometry.computeBoundingBox();
+        const bounds = mesh.geometry.boundingBox!;
+        footprints.push({ x: mesh.position.x + (bounds.min.x + bounds.max.x) / 2, z: mesh.position.z + (bounds.min.z + bounds.max.z) / 2, height: bounds.max.y - bounds.min.y });
+      }
+    }
+    const terrain = world.userData.terrain as { hasGround?: boolean; heightAtLocal(x: number, z: number): number } | undefined;
+    const drone = droneShot(box, footprints, terrain?.hasGround ? (x, z) => terrain.heightAtLocal(x, z) : undefined);
+    const framings: Record<StageSlot, { fov: number; far: number; target: THREE.Vector3 }> = {
+      hero: { fov: DRONE_FOV, far: drone.far, target: drone.target },
+      story: { fov: 45, far: view.far, target: view.target },
+    };
     const camera = new THREE.PerspectiveCamera(45, 1, 1, view.far);
-    camera.position.copy(view.position);
-    const target = view.target;
-    camera.lookAt(target);
+    let target = view.target;
+    /** Seconds the camera has drifted in the hero, so each visit to it starts from the shot's own frame. */
+    let drift = 0;
+    const frameFor = (next: StageSlot) => {
+      const framing = framings[next];
+      target = framing.target;
+      camera.fov = framing.fov;
+      camera.far = framing.far;
+      camera.updateProjectionMatrix();
+      if (next === "hero") {
+        drift = 0;
+        camera.position.copy(drone.position);
+      } else {
+        camera.position.copy(view.position);
+      }
+      camera.lookAt(target);
+    };
+    frameFor("story");
 
     const animator = new Animator();
     if (reduced) animator.skip(); // layers appear and disappear at once
@@ -125,6 +159,7 @@ export async function createFeaturedStage({ api, areaId, slots, onReady }: Featu
       slot = next;
       if (!next) return;
       slots[next].appendChild(renderer.domElement);
+      frameFor(next);
       fit();
       // Moving to a slot restarts its picture without animation: the hero is whole, the story is at its step.
       apply(next === "hero" ? hero : step, false);
@@ -156,7 +191,11 @@ export async function createFeaturedStage({ api, areaId, slots, onReady }: Featu
       const delta = Math.min((now - last) / 1000, 0.1);
       last = now;
       animator.update(delta);
-      if (!reduced) {
+      if (!reduced && slot === "hero") {
+        drift += delta;
+        camera.position.copy(dronePosition(drone, drift));
+        camera.lookAt(target);
+      } else if (!reduced) {
         const offset = camera.position.clone().sub(target).applyAxisAngle(THREE.Object3D.DEFAULT_UP, TURN_SPEED * delta);
         camera.position.copy(target).add(offset);
         camera.lookAt(target);
