@@ -180,7 +180,10 @@ the archived change's `design.md` (`openspec/changes/archive/2026-10-11-add-gene
   laid with width, gap and depth drawn from a normal distribution around the fingerprint (clamped to
   half and one and a half times the median). A footprint is kept only if it lies in the suitable
   ground, clears the real buildings and the ones already kept, and covers at least 15 m². Levels
-  come from the fingerprint, height is 3 m a level, and the base is the lowest ground under the
+  come from the fingerprint, except where the fingerprint is a default of two storeys or fewer: each
+  such building draws 1 or 2 storeys from a hash of the block id and its footprint centre (not from
+  the seeded generator), with the share of 2-storey buildings taken from the block's observed
+  buildings that state 1 or 2 levels when it has three, else the area's, else 0.3. Height is 3 m a level, and the base is the lowest ground under the
   footprint (the same function as real buildings). The same seed over the same data gives the same
   buildings.
 - **Feedback and calibration.** A person can say how many buildings a block really has, or that it has

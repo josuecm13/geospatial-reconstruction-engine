@@ -1,6 +1,6 @@
 /** The pure parts of the landing page's capability visuals: which route to ask for, how to label it, and the street's heights. No DOM. */
 import type { Coordinate, MapData, Position } from "../api/types";
-import { buildingHeight } from "../scene/buildingHeight";
+import { buildingHeights } from "../scene/buildingHeight";
 
 const METERS_PER_DEGREE = (6_371_000 * Math.PI) / 180;
 
@@ -78,7 +78,7 @@ export interface StreetBuilding {
  */
 export function streetBuildings(data: MapData | null, seed: number, count: number): StreetBuilding[] {
   const random = seeded(seed);
-  const real = (data?.buildings.features ?? []).map((f) => buildingHeight(f.properties));
+  const real = buildingHeights(data?.buildings.features ?? []);
   return Array.from({ length: count }, () => {
     if (real.length > 0) {
       const { height, defaulted } = real[Math.floor(random() * real.length)];

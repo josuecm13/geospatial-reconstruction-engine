@@ -23,11 +23,13 @@ from app.domain.generation import (
     INFORMAL_OFFSET_METERS,
     INFORMAL_ROTATION_DEGREES,
     LEVEL_HEIGHT_METERS,
+    TWO_STOREY_SHARE_DEFAULT,
     MIN_FOOTPRINT_SQUARE_METERS,
     BlockFeedback,
     CountSource,
     Fingerprint,
     SettlementStyle,
+    draw_storeys,
     evenly_spaced_indices,
     levels_of,
     sample_dimension,
@@ -83,6 +85,7 @@ def generate_block(
     grid: ElevationGrid | None,
     real_footprints: Sequence[ShapelyPolygon],
     projection: LocalProjection,
+    two_storey_share: float = TWO_STOREY_SHARE_DEFAULT,
 ) -> BlockGeneration:
     """Buildings for one block. `fingerprint` is whatever the block was matched to (calibrated, if it
     was), `real_footprints` the real buildings in and around it. With `feedback`, the lots found are
@@ -119,8 +122,12 @@ def generate_block(
         shortfall = max(0, target - len(accepted))
 
     levels = levels_of(fingerprint)
+    # Defaulted low-rise blocks get 1 or 2 storeys per building, drawn from a stable seed (not `rng`).
+    mixed = not fingerprint.levels_observed and levels <= 2
     footprints = []
     for polygon in chosen:
+        if mixed:
+            levels = draw_storeys(_storey_seed(block, polygon), two_storey_share)
         geom = polygon_from_local(projection, polygon)
         footprints.append(
             GeneratedFootprint(
@@ -135,6 +142,12 @@ def generate_block(
             )
         )
     return BlockGeneration(tuple(footprints), len(accepted), shortfall, suitability)
+
+
+def _storey_seed(block: Block, polygon: ShapelyPolygon) -> str:
+    """A stable seed for a footprint: the block id and its centroid to 0.1 m, in local coordinates."""
+    centre = polygon.centroid
+    return f"{block.id}:{centre.x:.1f}:{centre.y:.1f}"
 
 
 def _inward(edge: Edge) -> tuple[tuple[float, float], tuple[float, float]]:

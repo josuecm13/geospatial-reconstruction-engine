@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { Feature, GeneratedBuildingProperties, Geometry, MapData, Position, Projection } from "../api/types";
-import { buildingHeight } from "./buildingHeight";
+import { buildingHeights } from "./buildingHeight";
 import { drapedGeometry, extrudeFootprints, flatGeometry, footprintShape, polygonShape } from "./extrude";
 import { densify, hasBlockFill, insetRing, outlineKind } from "./blockOutline";
 import { areaFeatureMaterial, MATERIALS, outlineMaterial, roadMaterial, zoneMaterial } from "./palette";
@@ -270,14 +270,15 @@ export function buildWorld(data: MapData, roadMode: RoadMode = DEFAULT_ROAD_MODE
   // Hidden by default; the scene view's "Show blocks" checkbox toggles it (the outlines, the faint buildable-area fill, and the zones).
   groups.blocks.visible = false;
 
-  for (const feature of data.buildings.features) {
+  const buildingHeightList = buildingHeights(data.buildings.features);
+  for (const [index, feature] of data.buildings.features.entries()) {
     const polygons = polygonsOf(feature.geometry, projection);
     if (!polygons.length) continue;
     polygons.forEach((rings) => {
       grow(rings[0]);
       footprints.push({ id: feature.id, ring: rings[0] });
     });
-    const { height, defaulted } = buildingHeight(feature.properties);
+    const { height, defaulted } = buildingHeightList[index];
     // Footprints are single outer rings; any holes are ignored.
     const shapes = polygons.map((rings) => footprintShape(rings[0]));
     const material = defaulted ? MATERIALS.buildingDefaulted : MATERIALS.buildingMeasured;
