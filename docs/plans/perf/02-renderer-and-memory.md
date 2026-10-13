@@ -1,6 +1,6 @@
 # 02 — Renderer settings, shadows and freeing memory
 
-Issue: not filed yet (draft in the PR). Urgent: a Chrome tab reaches about 1.8 GB on large areas. Brief 01 batches the
+Issue: #151. Urgent: a Chrome tab reaches about 1.8 GB on large areas. Brief 01 batches the
 building geometry in parallel. **This brief does not touch `client/src/scene/buildWorld.ts`** or the building and
 generated code paths in `views/sceneView.ts` (`spawn`, `showGenerated`, `clearGenerated`).
 

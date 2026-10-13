@@ -1,6 +1,6 @@
 # 01 — Batch the building layers
 
-Issue: not filed yet (draft in the PR). Urgent: a large area (Centrum, 16,002 observed buildings) takes a Chrome tab to
+Issue: #151. Urgent: a large area (Centrum, 16,002 observed buildings) takes a Chrome tab to
 about 1.8 GB and drops the frame rate.
 
 ## The problem
