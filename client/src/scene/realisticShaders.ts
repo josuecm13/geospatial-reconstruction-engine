@@ -18,11 +18,15 @@ const f = (n: number) => n.toFixed(4);
 
 const BUILDING_VERTEX_PARS = /* glsl */ `
 varying float vRealRoof;
+#ifndef GRE_BASE_LIFT
+#define GRE_BASE_LIFT
+attribute float baseLift;
+#endif
 `;
 
 /**
  * Mirrors wallCoords and groundCoords in wallGrid.ts: the same tangent, dot product and roof cut-off. A building mesh is
- * only translated on y, so the local `position` is world x and z, and the height above the base. Walls use the facade
+ * only translated on y, so the local `position` is world x and z, and `position.y - baseLift` the height above the building's own base (a batched chunk lifts each building by `baseLift`). Walls use the facade
  * texture over FACADE_REPEAT_METRES, roofs the roof texture over GROUND_TILE_METRES.roof.
  */
 const BUILDING_VERTEX = /* glsl */ `
@@ -30,7 +34,7 @@ vec3 realN = normalize(normal);
 float realRoof = step(0.5, abs(realN.y));
 vec2 realNh = normalize(realN.xz + vec2(1e-6));
 vec2 realTangent = vec2(-realNh.y, realNh.x);
-vec2 realWall = vec2(dot(position.xz, realTangent), position.y) / vec2(${f(FACADE_REPEAT_METRES.u)}, ${f(FACADE_REPEAT_METRES.v)});
+vec2 realWall = vec2(dot(position.xz, realTangent), position.y - baseLift) / vec2(${f(FACADE_REPEAT_METRES.u)}, ${f(FACADE_REPEAT_METRES.v)});
 vec2 realFlat = position.xz / ${f(GROUND_TILE_METRES.roof)};
 vRealRoof = realRoof;
 vMapUv = mix(realWall, realFlat, realRoof);

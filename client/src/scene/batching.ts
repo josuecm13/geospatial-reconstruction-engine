@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { setBaseLift } from "./extrude";
 import type { Local } from "./projection";
 
 /** Side of a spatial grid cell, in local metres: a chunk of buildings spans at most this much, so the frustum and shadow culls still drop far ones. */
@@ -128,6 +129,7 @@ export function mergeChunks(entries: BatchEntry[], options: ChunkOptions): THREE
     for (const entry of group) {
       const lift = entry.base - y;
       entry.geometry.translate(0, lift, 0);
+      setBaseLift(entry.geometry, lift);
       const centre = ringsCentre(entry.rings);
       index.featureIds.push(entry.id);
       index.triangleStarts.push(triangles);

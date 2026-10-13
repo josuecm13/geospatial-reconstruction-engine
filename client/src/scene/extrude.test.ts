@@ -16,6 +16,13 @@ const bounds = (g: THREE.BufferGeometry) => {
 };
 
 describe("extrusion", () => {
+  it("gives an extruded building a baseLift of 0 on every vertex", () => {
+    const geometry = extrudeFootprints([footprintShape(square)], 7);
+    const lift = geometry.getAttribute("baseLift");
+    expect(lift.count).toBe(geometry.getAttribute("position").count);
+    expect(new Set(lift.array)).toEqual(new Set([0]));
+  });
+
   it("drops the closing point of a ring", () => {
     expect(footprintShape(square).getPoints()).toHaveLength(4);
   });

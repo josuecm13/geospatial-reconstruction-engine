@@ -62,6 +62,7 @@ function bakeUv(mesh: THREE.Mesh, material: THREE.Material): THREE.BufferAttribu
   const { geometry } = mesh;
   const position = geometry.getAttribute("position");
   const normal = geometry.getAttribute("normal");
+  const lift = geometry.getAttribute("baseLift");
   const textureKey = GROUND_TEXTURE_BY_KEY[material.userData.key];
   const tile = textureKey && GROUND_TILE_METRES[textureKey];
   const uv = new Float32Array(position.count * 2);
@@ -74,7 +75,7 @@ function bakeUv(mesh: THREE.Mesh, material: THREE.Material): THREE.BufferAttribu
       uv.set([u, v], i * 2);
       continue;
     }
-    const wall = normal && wallCoords(point.x, point.y, point.z, normal.getX(i), normal.getY(i), normal.getZ(i));
+    const wall = normal && wallCoords(point.x, point.y - (lift ? lift.getX(i) : 0), point.z, normal.getX(i), normal.getY(i), normal.getZ(i));
     const [u, v] = wall ? [wall.u / FACADE_REPEAT_METRES.u, wall.v / FACADE_REPEAT_METRES.v] : [point.x / FACADE_REPEAT_METRES.u, point.z / FACADE_REPEAT_METRES.v];
     uv.set([u, v], i * 2);
   }
@@ -142,6 +143,8 @@ export async function exportWorld(world: THREE.Group, options: ExportOptions): P
     // UVs only where a material has a map (Realistic); everywhere else they are dead weight.
     const mapped = materials.find((m) => m.map);
     swap("uv", mapped ? bakeUv(mesh, mapped) : undefined);
+    // `baseLift` is a shader input of the viewer; the exporter would write it as a custom `_BASELIFT` attribute.
+    swap("baseLift", undefined);
     // Unlit materials ignore normals (a viewer computes flat ones, as the spec says); lit ones need them.
     if (materials.every((m) => m.isMeshBasicMaterial)) swap("normal", undefined);
     // A material without vertex colours must not get `COLOR_0`: viewers multiply it in whether or not it was meant.

@@ -29,11 +29,23 @@ export function polygonShape(rings: Local[][]): THREE.Shape {
   return shape;
 }
 
-/** Footprints extruded from y = 0 up to `height` meters, shaded (shading.ts). */
+/**
+ * Gives every vertex the building's lift above its mesh's origin (`baseLift`): 0 for a mesh of its own, the offset inside
+ * a batched chunk. Shaders and the export bake subtract it from `position.y` to get the height above the building's base.
+ * Every building geometry carries it, so merging never meets mismatched attribute sets.
+ */
+export function setBaseLift(geometry: THREE.BufferGeometry, lift: number): void {
+  const count = geometry.getAttribute("position").count;
+  geometry.setAttribute("baseLift", new THREE.BufferAttribute(new Float32Array(count).fill(lift), 1));
+}
+
+/** Footprints extruded from y = 0 up to `height` meters, shaded (shading.ts), with a `baseLift` of 0. */
 export function extrudeFootprints(shapes: THREE.Shape[], height: number): THREE.BufferGeometry {
   const geometry = new THREE.ExtrudeGeometry(shapes, { depth: height, bevelEnabled: false });
   geometry.rotateX(-Math.PI / 2);
-  return shadeGeometry(geometry);
+  const shaded = shadeGeometry(geometry);
+  setBaseLift(shaded, 0);
+  return shaded;
 }
 
 /**

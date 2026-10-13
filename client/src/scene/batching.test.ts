@@ -109,6 +109,25 @@ describe("featureAtFace", () => {
 describe("mergeChunks", () => {
   const options = { layer: "building", prefix: "buildings", edgeMaterial, castShadow: true };
 
+  it("records each building's lift above the chunk in a per-vertex baseLift, so shaders measure from its own base", () => {
+    const [chunk] = mergeChunks([entry("a", "0,0:m", 2), entry("b", "0,0:m", 5), entry("c", "0,0:m", 2)], options);
+    const lift = chunk.geometry.getAttribute("baseLift");
+    const position = chunk.geometry.getAttribute("position");
+    expect(lift.count).toBe(position.count);
+    const perBuilding = position.count / 3;
+    const values = (i: number) => new Set(Array.from({ length: perBuilding }, (_, k) => lift.getX(i * perBuilding + k)));
+    expect([...values(0)]).toEqual([0]);
+    expect([...values(1)]).toEqual([3]);
+    expect([...values(2)]).toEqual([0]);
+    // Local y minus the lift is the height above the building's own base: the box spans 0..10 for every building.
+    for (let i = 0; i < position.count; i++) expect([0, 10]).toContain(Math.round(position.getY(i) - lift.getX(i) + 5));
+  });
+
+  it("keeps one baseLift of 0 on a lone building at the chunk's base", () => {
+    const [chunk] = mergeChunks([entry("a", "0,0:m", 7)], options);
+    expect(new Set(chunk.geometry.getAttribute("baseLift").array)).toEqual(new Set([0]));
+  });
+
   it("makes one mesh per key, named for it, with the layer kept", () => {
     const chunks = mergeChunks([entry("a", "0,0:m", 0), entry("b", "1,0:m", 0), entry("c", "0,0:m", 0)], options);
     expect(chunks.map((chunk) => chunk.name)).toEqual(["buildings:chunk:0,0:m", "buildings:chunk:1,0:m"]);

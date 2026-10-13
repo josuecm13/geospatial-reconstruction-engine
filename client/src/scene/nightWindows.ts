@@ -39,10 +39,14 @@ const f = (n: number) => n.toFixed(4);
 const VERTEX_PARS = /* glsl */ `
 varying vec3 vWinPos;
 varying vec3 vWinNormal;
+#ifndef GRE_BASE_LIFT
+#define GRE_BASE_LIFT
+attribute float baseLift;
+#endif
 `;
 
 const VERTEX_MAIN = /* glsl */ `
-vWinPos = position;
+vWinPos = vec3(position.x, position.y - baseLift, position.z); // height above the building's own base, not its chunk's
 vWinNormal = normal;
 `;
 
