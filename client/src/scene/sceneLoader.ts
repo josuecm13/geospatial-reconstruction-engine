@@ -1,6 +1,6 @@
 import type { MapDataQuery } from "../api/client";
 import type { MapData } from "../api/types";
-import { mapDataQuery, type Selection } from "../state/selection";
+import { renderMapDataQuery, type Selection } from "../state/selection";
 
 /** What the loader needs of the scene view and of the API, so it can be tested without WebGL. */
 export interface SceneTarget {
@@ -88,7 +88,7 @@ export class SceneLoader {
     const key = JSON.stringify([areaId, scope]);
     if (key === this.loadedKey) return; // already showing this selection
     try {
-      const data = await this.api.mapData(areaId, mapDataQuery(scope));
+      const data = await this.api.mapData(areaId, renderMapDataQuery(scope));
       if (request !== this.latest) return;
       this.loadedKey = key;
       this.target.setWorld(data);

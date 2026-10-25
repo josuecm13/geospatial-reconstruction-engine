@@ -84,7 +84,15 @@ export function sameScope(a: Scope, b: Scope): boolean {
   return a.type === b.type && (a.type === "import_area" || a.boundaryId === (b as { boundaryId: string }).boundaryId);
 }
 
-/** The `map-data` query for a scope. */
+/** The `map-data` query for a scope. The 2D map uses it as is (whole entities); the renderers use `renderMapDataQuery`. */
 export function mapDataQuery(scope: Scope): MapDataQuery {
   return scope.type === "boundary" ? { boundaryId: scope.boundaryId } : {};
 }
+
+/** The query every renderer uses (the 3D scene, the landing, the previews): geometry cut at the scope, so nothing draws outside the area or the boundary. */
+export function renderMapDataQuery(scope: Scope): MapDataQuery {
+  return { ...mapDataQuery(scope), mode: "clip" };
+}
+
+/** The whole-area query in clip mode, for views that have no scope. */
+export const CLIPPED: MapDataQuery = { mode: "clip" };

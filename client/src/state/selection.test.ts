@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CURRENT_AREA_KEY } from "../importing/recentImports";
-import { mapDataQuery, SCOPE_KEY, type Selection, SelectionStore } from "./selection";
+import { CLIPPED, mapDataQuery, renderMapDataQuery, SCOPE_KEY, type Selection, SelectionStore } from "./selection";
 
 class MemoryStore {
   readonly items = new Map<string, string>();
@@ -80,5 +80,18 @@ describe("mapDataQuery", () => {
   it("asks for a boundary only when one is the scope", () => {
     expect(mapDataQuery({ type: "import_area" })).toEqual({});
     expect(mapDataQuery({ type: "boundary", boundaryId: "b1" })).toEqual({ boundaryId: "b1" });
+  });
+});
+
+describe("renderMapDataQuery", () => {
+  it("asks for clip mode, with the boundary when one is the scope", () => {
+    expect(renderMapDataQuery({ type: "import_area" })).toEqual({ mode: "clip" });
+    expect(renderMapDataQuery({ type: "boundary", boundaryId: "b1" })).toEqual({ boundaryId: "b1", mode: "clip" });
+    expect(CLIPPED).toEqual({ mode: "clip" });
+  });
+
+  it("leaves the 2D map's query in filter mode", () => {
+    expect(mapDataQuery({ type: "import_area" })).not.toHaveProperty("mode");
+    expect(mapDataQuery({ type: "boundary", boundaryId: "b1" })).not.toHaveProperty("mode");
   });
 });

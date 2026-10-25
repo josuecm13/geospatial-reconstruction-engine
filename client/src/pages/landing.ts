@@ -1,3 +1,4 @@
+import { CLIPPED } from "../state/selection";
 import type { ImportArea } from "../api/types";
 import { useErrorReporter } from "../errors/errorReporter";
 import { IMPORT_MESSAGES } from "../importing/errorMessages";
@@ -216,7 +217,7 @@ export const mount: Mount<{ page: "landing" }> = (el, ctx) => {
 
     // Once the map-data is in (shared with the stage, so no second request), a place with no generation run says how to get one.
     api
-      .mapData(area.id)
+      .mapData(area.id, CLIPPED)
       .then((data) => {
         if (disposed || hasGeneratedContext(data)) return;
         STORY_STEPS.forEach((step, index) => {

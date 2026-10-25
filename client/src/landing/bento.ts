@@ -1,3 +1,4 @@
+import { CLIPPED } from "../state/selection";
 import type { ApiClient } from "../api/client";
 import type { BoundingBox, Geometry, MapData, Position, Route } from "../api/types";
 import { METERS_PER_LEVEL } from "../scene/buildingHeight";
@@ -252,7 +253,7 @@ export function renderBento(root: HTMLElement, options: { api: ApiClient; areaId
   };
 
   (async () => {
-    const data = await api.mapData(areaId).catch(() => null);
+    const data = await api.mapData(areaId, CLIPPED).catch(() => null);
     if (disposed) return;
     ready(walk.visual, walkVisual(data, hashString(areaId)));
     if (!data) {

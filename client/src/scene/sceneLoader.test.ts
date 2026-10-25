@@ -40,10 +40,16 @@ describe("SceneLoader", () => {
     const { pending, calls, loader, select } = setup();
     select({ areaId: "a1", scope: { type: "boundary", boundaryId: "b9" } });
     loader.shown();
-    expect(pending[0]).toMatchObject({ areaId: "a1", query: { boundaryId: "b9" } });
+    expect(pending[0]).toMatchObject({ areaId: "a1", query: { boundaryId: "b9", mode: "clip" } });
     pending[0].resolve(fakeData("a1"));
     await flush();
     expect(calls).toEqual(["world:a1"]);
+  });
+
+  it("asks for clipped geometry, so the scene draws nothing outside the area", () => {
+    const { pending, loader } = setup();
+    loader.shown();
+    expect(pending[0].query).toEqual({ mode: "clip" });
   });
 
   it("drops a response that is no longer the latest", async () => {
