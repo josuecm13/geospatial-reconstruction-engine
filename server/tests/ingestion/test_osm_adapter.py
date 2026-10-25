@@ -193,6 +193,13 @@ def test_building_height_parsing_keeps_unknown_as_none(value, expected):
     assert height == pytest.approx(expected) if expected is not None else height is None
 
 
+@pytest.mark.parametrize(("value", "expected"), [("yes", "yes"), ("Apartments", "apartments"), (" house ", "house"), ("", None)])
+def test_building_type_keeps_the_raw_tag_lowercased(value, expected):
+    payload = _building_payload({"building": value})
+
+    assert OSMFixtureAdapter().parse(payload).buildings[0].building_type == expected
+
+
 @pytest.mark.parametrize(
     ("value", "expected"),
     [(None, None), ("3", 3), ("3.0", 3), (4, 4), ("0", 0), ("2.5", None), ("-1", None), ("three", None), ("inf", None)],

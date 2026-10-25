@@ -311,3 +311,32 @@ def test_the_calibration_factor_needs_two_blocks_and_is_clamped():
 def test_a_fingerprint_survives_its_json_form():
     original = default_fingerprint(RoadClassGroup.COLLECTOR, SettlementStyle.SPARSE)
     assert fingerprint_from_dict(fingerprint_to_dict(original)) == original
+
+
+def test_the_two_storey_share_comes_from_the_block_then_the_area_then_the_default():
+    from app.domain.generation import TWO_STOREY_SHARE_DEFAULT, two_storey_share
+
+    assert two_storey_share([2, 1, 1, 1], [2, 2, 2]) == 0.25  # the block has 4 low-rise buildings
+    assert two_storey_share([2, 1], [2, 2, 1, 1]) == 0.5  # too few in the block: the area's
+    assert two_storey_share([None, 5, 3], [2, 2, None, 1, 1, 1]) == 0.4  # 5 state 1 or 2 levels, 2 of them 2
+    assert two_storey_share([2, 2], [1, 1]) == TWO_STOREY_SHARE_DEFAULT
+    assert two_storey_share([], []) == TWO_STOREY_SHARE_DEFAULT == 0.3
+
+
+def test_the_storey_draw_is_stable_and_pinned_to_the_clients_hash():
+    from app.domain.generation import draw_storeys, stable_unit
+
+    # The client's test (`client/src/scene/storeyMix.test.ts`) pins the same two values.
+    assert stable_unit("a") == 444641715 / 2**32
+    assert stable_unit("way/123") == 1071952468 / 2**32
+    assert draw_storeys("way/123", 0.25) == 2 and draw_storeys("way/123", 0.24) == 1
+    assert draw_storeys("way/123", 0.25) == draw_storeys("way/123", 0.25)
+    drawn = [draw_storeys(f"b{index}", 0.3) for index in range(1000)]
+    assert 0.25 <= drawn.count(2) / 1000 <= 0.35
+
+
+def test_an_old_stored_fingerprint_reads_as_observed_levels():
+    stored = fingerprint_to_dict(default_fingerprint(RoadClassGroup.LOCAL, SettlementStyle.REGULAR))
+    assert stored["levels_observed"] is False
+    del stored["levels_observed"]
+    assert fingerprint_from_dict(stored).levels_observed is True

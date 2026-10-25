@@ -402,6 +402,18 @@ def test_reimport_updates_a_changed_height_in_place(db_session):
     assert (after.height_meters, after.levels) == (15.0, None)
 
 
+def test_reimport_fills_in_the_building_type(db_session):
+    fixture = json.loads(FIXTURE.read_text())
+    service = OSMIngestionService(db_session)
+    service.import_fixture(_bbox(), _with_extra_buildings(fixture, [{"building": "yes"}]))
+    service.import_fixture(_bbox(), _with_extra_buildings(fixture, [{"building": "apartments"}]))
+    db_session.expire_all()
+
+    stored = db_session.scalar(select(BuildingModel).where(BuildingModel.source_id == "901"))
+
+    assert stored.building_type == "apartments"
+
+
 TIMEOUT_FIXTURE = Path(__file__).parents[1] / "fixtures" / "overpass" / "timeout_remark.json"
 
 

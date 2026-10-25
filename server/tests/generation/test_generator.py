@@ -56,7 +56,7 @@ def _suitability(style=SettlementStyle.REGULAR):
     return replace(result, style=style)
 
 
-def _generate(seed=1, *, feedback=None, real=(), fingerprint=FINGERPRINT, style=SettlementStyle.REGULAR, grid=None):
+def _generate(seed=1, *, feedback=None, real=(), fingerprint=FINGERPRINT, style=SettlementStyle.REGULAR, grid=None, **extra):
     return generate_block(
         _block(),
         suitability=_suitability(style),
@@ -68,6 +68,7 @@ def _generate(seed=1, *, feedback=None, real=(), fingerprint=FINGERPRINT, style=
         grid=grid,
         real_footprints=list(real),
         projection=PROJECTION,
+        **extra,
     )
 
 
@@ -117,12 +118,33 @@ def test_levels_height_and_the_ground_come_from_the_fingerprint_and_grid():
     flat = _generate()
     on_ground = _generate(grid=grid)
 
-    assert {footprint.levels for footprint in flat.footprints} == {2}
-    assert {footprint.height_meters for footprint in flat.footprints} == {6.0}
+    # The defaulted local block draws 1 or 2 storeys per building (see the storey-mix tests below).
+    assert {footprint.levels for footprint in flat.footprints} <= {1, 2}
+    assert all(footprint.height_meters == footprint.levels * 3.0 for footprint in flat.footprints)
     assert {footprint.base_elevation_meters for footprint in flat.footprints} == {None}
     elevations = {footprint.base_elevation_meters for footprint in on_ground.footprints}
     assert len(elevations) == 1
     assert next(iter(elevations)) == pytest.approx(12.5)
+
+
+def test_a_defaulted_block_mixes_one_and_two_storeys_by_the_share_and_is_repeatable():
+    mixed = _generate(two_storey_share=0.5)
+    levels = [footprint.levels for footprint in mixed.footprints]
+    assert set(levels) == {1, 2}
+    assert [footprint.levels for footprint in _generate(two_storey_share=0.5).footprints] == levels
+    assert {footprint.levels for footprint in _generate(two_storey_share=0.0).footprints} == {1}
+    assert {footprint.levels for footprint in _generate(two_storey_share=1.0).footprints} == {2}
+    # Drawing storeys leaves the lots themselves alone.
+    assert _wkts(mixed) == _wkts(_generate(two_storey_share=0.0))
+
+
+def test_observed_levels_and_taller_defaults_stay_fixed():
+    observed = replace(FINGERPRINT, median_levels=3.0, levels_observed=True)
+    assert {footprint.levels for footprint in _generate(fingerprint=observed, two_storey_share=0.5).footprints} == {3}
+    two = replace(FINGERPRINT, levels_observed=True)
+    assert {footprint.levels for footprint in _generate(fingerprint=two, two_storey_share=0.0).footprints} == {2}
+    collector = default_fingerprint(RoadClassGroup.COLLECTOR, SettlementStyle.REGULAR)
+    assert {footprint.levels for footprint in _generate(fingerprint=collector, two_storey_share=0.0).footprints} == {3}
 
 
 def test_a_feedback_count_gives_exactly_that_many_in_walk_order_from_the_same_lots():

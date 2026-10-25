@@ -10,6 +10,9 @@ export interface LandingLook {
 /** What the stage shows when the site setting is empty, unreadable or names something unknown. */
 export const DEFAULT_LOOK: LandingLook = { theme: DEFAULT_THEME, time: "midday" };
 
+/** The story slot's look whatever the site setting says: the phases read best as clay. */
+export const STORY_LOOK: LandingLook = DEFAULT_LOOK;
+
 /** The stage's look from the site setting's value, field by field: an unknown theme or time falls back to Night clay at midday. */
 export function lookFromSetting(value: { theme?: unknown; time_of_day?: unknown } | null | undefined): LandingLook {
   const theme = THEMES.find((candidate) => candidate.id === value?.theme) ?? DEFAULT_LOOK.theme;

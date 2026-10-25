@@ -42,6 +42,7 @@ class BuildingRepository:
                     block_id=building.block_id,
                     height_meters=building.height_meters,
                     levels=building.levels,
+                    building_type=building.building_type,
                 )
                 self.session.add(model)
                 models[building.source_id] = model
@@ -51,6 +52,7 @@ class BuildingRepository:
                 model.block_id = building.block_id
                 model.height_meters = building.height_meters
                 model.levels = building.levels
+                model.building_type = building.building_type
 
         self.session.flush()
         return {source_id: self._to_domain(model) for source_id, model in models.items()}
@@ -98,4 +100,5 @@ class BuildingRepository:
             block_id=model.block_id,
             height_meters=model.height_meters,
             levels=model.levels,
+            building_type=model.building_type,
         )

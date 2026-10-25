@@ -1,5 +1,6 @@
 import type { ApiClient } from "../api/client";
 import type { BoundingBox, Geometry, MapData, Position, Route } from "../api/types";
+import { METERS_PER_LEVEL } from "../scene/buildingHeight";
 import { previewTransform, projectToPreview } from "../locations/previewTransform";
 import { farthestPairs, formatDistance, glbName, hashString, nodePositions, streetBuildings } from "./bentoModel";
 import { num, svg } from "./svg";
@@ -154,7 +155,7 @@ function walkVisual(data: MapData | null, seed: number): SVGSVGElement {
       svg("path", { d: quad([eye(x, 0, z0), eye(x + side * 9, 0, z0), eye(x + side * 9, height, z0), eye(x, height, z0)]), class: "wt-end" }),
     );
     const floors: string[] = [];
-    for (let y = 3.2; y < height - 0.5; y += 3.2) floors.push(`M${eye(x, y, z0).map(num).join(" ")}L${eye(x, y, z1).map(num).join(" ")}`);
+    for (let y = METERS_PER_LEVEL; y < height - 0.5; y += METERS_PER_LEVEL) floors.push(`M${eye(x, y, z0).map(num).join(" ")}L${eye(x, y, z1).map(num).join(" ")}`);
     if (floors.length) group.append(svg("path", { d: floors.join(""), class: "wt-floor" }));
     root.append(group);
   }

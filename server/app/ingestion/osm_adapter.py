@@ -54,6 +54,8 @@ class ImportBuilding:
     category: BuildingCategory
     height_meters: float | None
     levels: int | None
+    # The raw building=* value, lowercased; None when the tag is absent.
+    building_type: str | None = None
 
 
 @dataclass(frozen=True)
@@ -325,6 +327,7 @@ class OSMFixtureAdapter:
                         _building_category(tags["building"]),
                         _height_meters(tags.get("height")),
                         _levels(tags.get("building:levels")),
+                        _building_type(tags.get("building")),
                     )
                 )
                 continue
@@ -420,6 +423,7 @@ class OSMFixtureAdapter:
                         _building_category(tags["building"]),
                         _height_meters(tags.get("height")),
                         _levels(tags.get("building:levels")),
+                        _building_type(tags.get("building")),
                     )
                 )
             else:
@@ -521,6 +525,12 @@ def _outer_rings(relation: dict[str, Any], ways_by_id, nodes: dict[str, Coordina
         if ring[0] == ring[-1] and len(set(ring[:-1])) >= 3:
             rings.append(ring)
     return rings
+
+
+def _building_type(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    return value.strip().lower() or None
 
 
 def _building_category(value: str) -> BuildingCategory:

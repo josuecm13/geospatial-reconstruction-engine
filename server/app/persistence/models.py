@@ -248,6 +248,7 @@ class BuildingModel(Base):
     geom = Column(Geometry(geometry_type="POLYGON", srid=4326), nullable=False)
     height_meters = Column(Float, nullable=True)
     levels = Column(Integer, nullable=True)
+    building_type = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at = Column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()

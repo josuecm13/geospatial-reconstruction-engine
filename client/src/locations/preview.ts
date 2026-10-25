@@ -3,7 +3,7 @@ import type { BoundingBox, Geometry, ImportStatus, MapData, Position } from "../
 import { LruCache, previewKey, TaskQueue } from "./previewScheduler";
 import { previewTransform, projectToPreview, type PreviewTransform } from "./previewTransform";
 import { prefersReducedMotion } from "./flyTo";
-import { buildingHeight } from "../scene/buildingHeight";
+import { buildingHeights } from "../scene/buildingHeight";
 import { PREVIEW_COLORS, shadowOffset } from "./previewColors";
 import { easeOut, groundScale, raiseBuilding, sortFarToNear, type FlatBuilding, type Point, type RaiseView } from "./raisedPreview";
 
@@ -89,8 +89,9 @@ function strokeRoads(ctx: CanvasRenderingContext2D, t: PreviewTransform, data: M
 function fillShadows(ctx: CanvasRenderingContext2D, t: PreviewTransform, data: MapData): void {
   const pxPerMetre = t.scale / METERS_PER_DEGREE_LATITUDE;
   ctx.fillStyle = PREVIEW_COLORS.shadow;
-  for (const feature of data.buildings.features) {
-    const [dx, dy] = shadowOffset(buildingHeight(feature.properties).height, pxPerMetre);
+  const heights = buildingHeights(data.buildings.features);
+  for (const [index, feature] of data.buildings.features.entries()) {
+    const [dx, dy] = shadowOffset(heights[index].height, pxPerMetre);
     ctx.beginPath();
     for (let step = 0; step <= SHADOW_STEPS; step++) {
       ctx.save();
@@ -119,8 +120,9 @@ export interface RaisePrep {
 export function prepareRaise(bbox: BoundingBox, data: MapData): RaisePrep {
   const t = previewTransform(bbox, PREVIEW_WIDTH, PREVIEW_HEIGHT, PADDING);
   const buildings: ClayBuilding[] = [];
-  for (const feature of data.buildings.features) {
-    const { height, defaulted } = buildingHeight(feature.properties);
+  const heights = buildingHeights(data.buildings.features);
+  for (const [index, feature] of data.buildings.features.entries()) {
+    const { height, defaulted } = heights[index];
     for (const polygon of polygonsOf(feature.geometry)) {
       if (!polygon[0]?.length) continue;
       buildings.push({ ring: polygon[0].map(([lon, lat]) => projectToPreview(t, lon, lat) as Point), height, defaulted });
@@ -162,8 +164,9 @@ function drawScene(ctx: CanvasRenderingContext2D, bbox: BoundingBox, data: MapDa
     strokeRoads(ctx, t, data);
     if (!view) {
       fillShadows(ctx, t, data);
+      const heights = buildingHeights(data.buildings.features);
       for (const defaulted of [false, true]) {
-        const shapes = data.buildings.features.filter((f) => buildingHeight(f.properties).defaulted === defaulted).map((f) => f.geometry);
+        const shapes = data.buildings.features.filter((_, index) => heights[index].defaulted === defaulted).map((f) => f.geometry);
         fillPolygons(ctx, t, shapes, defaulted ? PREVIEW_COLORS.buildingDefaulted : PREVIEW_COLORS.building, PREVIEW_COLORS.buildingEdge);
       }
     }
