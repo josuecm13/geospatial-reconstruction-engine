@@ -136,6 +136,9 @@ for `client/dist/` needs the same fallback rule, or a pasted or reloaded explore
 The header shows whether the API is reachable. `npm test` runs the client's unit tests, and
 `npm run build` type-checks and bundles it into `client/dist/`.
 
+Add `?fps` to the page URL (for example `/explore/<area id>?fps`) to show a small performance readout in the 3D
+scene: fps, p95 frame time, draw calls and triangles, textures, the theme, and whether shadows redrew.
+
 ## Stopping everything
 
 ```bash

@@ -96,4 +96,19 @@ describe("shadeGeometry", () => {
     g.setAttribute("normal", new THREE.BufferAttribute(new Float32Array(12).map((_, i) => (i % 3 === 1 ? -1 : 0)), 3)); // claims down
     expect(shadeGeometry(g).getAttribute("color").getX(0)).toBeCloseTo(shade(new THREE.Vector3(0, 1, 0)), 6);
   });
+
+  it("writes each face's flat unit normal as the normal attribute, from the positions", () => {
+    const g = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2); // faces up
+    g.setAttribute("normal", new THREE.BufferAttribute(new Float32Array(12).map((_, i) => (i % 3 === 1 ? -1 : 0)), 3)); // claims down
+    const normal = shadeGeometry(g).getAttribute("normal");
+    expect(normal.count).toBe(6);
+    for (let i = 0; i < normal.count; i++) {
+      expect(normal.getX(i)).toBeCloseTo(0, 6);
+      expect(normal.getY(i)).toBeCloseTo(1, 6);
+      expect(normal.getZ(i)).toBeCloseTo(0, 6);
+    }
+    const walls = shadeGeometry(box(0, 0));
+    const n = walls.getAttribute("normal");
+    for (let i = 0; i < n.count; i++) expect(Math.hypot(n.getX(i), n.getY(i), n.getZ(i))).toBeCloseTo(1, 5);
+  });
 });

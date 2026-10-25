@@ -22,6 +22,7 @@ beyond parity.
 | List import areas, most recently imported first, with an optional `status` filter and `limit` | `GET /import-areas` | shipped | done | `/locations` (`client/src/pages/locations.ts`, `client/src/locations/`): a card per area (any status) with a footprint preview, filter by text, sort by recent or size, up to 200 areas. The panel links to it and shows only the open area |
 | Delete an import area and its imported data: 204, 404 `import_area_not_found`, 409 `import_in_progress`, or 409 `import_area_in_use` (`details.covering_areas`: `{ id, name }`, name may be null; nothing deleted) | `DELETE /import-areas/{id}` | shipped | done | A quiet "Delete" button on each `/locations` card (`client/src/locations/card.ts`, `pages/locations.ts`; the landing page's cards stay read-only). It confirms first, then removes the card without a reload. A refusal names the larger places to delete first (`locations/deleteMessage.ts`); a 404 drops the card |
 | Read and choose the import area the landing page features: `{ "import_area_id": uuid \| null }`. PUT: 404 `import_area_not_found`, 409 `import_area_not_ready` (only a completed area can be featured), null clears. Deleting the featured area clears it | `GET /settings/featured-area`, `PUT /settings/featured-area` | shipped (#23) | done | A completed `/locations` card shows "Show on landing"; the featured one shows a "Featured" badge and "Remove from landing", and the gallery updates without a reload (`client/src/locations/card.ts`, `pages/locations.ts`). The landing page reads the setting first, then `VITE_FEATURED_AREA_ID`, then the most recent completed area (`landing/featured.ts`); a failed settings request falls through to the next source |
+| Read and choose the landing stage's look: `{ "landing_theme": { "theme": "night-clay" \| "light-clay" \| "blueprint" \| "realistic", "time_of_day": "dawn" \| "midday" \| "golden-hour" \| "night" } \| null }`. Required but nullable; null clears it. An unknown theme or time is 422 `invalid_request` and the stored value is unchanged | `GET /settings/landing-theme`, `PUT /settings/landing-theme` | shipped (#141) | partial | `getLandingTheme` and `setLandingTheme` in `client/src/api/client.ts`. The scene view's "Use on landing" button (see the theme picker under the 3D scene) calls `setLandingTheme`; the landing stage reads it separately |
 | Import status and entity counts (roads, nodes, buildings, POIs, area features, blocks, linked buildings) | `GET /import-areas/{id}` | shipped | partial | Counts after an import (roads, buildings, blocks, POIs, area features) and on location cards (buildings, roads, blocks); cards show `pending` / `importing` / `failed`. Node and linked-building counts aren't shown. `map-data` returns 409 `import_area_not_ready` until the import completes |
 | Created / updated / removed counts on import | `POST /import-areas` | planned (#6) | — | Show a diff summary after a re-import |
 | Skipped turn restrictions on import (`skipped_restriction_count`: malformed or unresolvable in OSM) | `POST /import-areas` | shipped | — | Mention it in the import summary when it isn't zero |
@@ -174,10 +175,11 @@ Ideas, not commitments. Once one is chosen, it becomes an issue in the milestone
 ### 3D and export
 - **3D mode**: extruded footprints (M8.1 heights, with a clear placeholder when height is
   unknown), roads at real width, and blocks as terrain.
-- **Shading** (#129): the scene has no lights. `scene/shading.ts` computes each face's shade from its
-  normal and a fixed light direction (`AMBIENT + (1 - AMBIENT) * max(0, n . LIGHT_DIRECTION)`), bakes
-  it into vertex colours, and the materials in `scene/palette.ts` (the only source of scene colours)
-  are unlit, so the glTF export (`KHR_materials_unlit`, `COLOR_0`) looks the same as the viewer.
+- **Shading** (#129): `scene/shading.ts` computes each face's shade from its normal and a fixed light
+  direction (`AMBIENT + (1 - AMBIENT) * max(0, n . LIGHT_DIRECTION)`) and bakes it into vertex colours.
+  In Night clay (and Blueprint's unlit fills) the materials in `scene/palette.ts` are unlit, so the glTF
+  export (`KHR_materials_unlit`, `COLOR_0`) matches the viewer; sun-following themes (Light clay, Realistic)
+  are lit by the sun and sky light instead (#141).
 - **Dark theme** (#133): the interface, the 3D scene (night clay, pale edge lines on buildings that the glTF export leaves out) and the 2D map (OpenFreeMap's dark basemap) are dark; `style.css` takes every colour from its `:root` tokens (a test enforces it and 4.5:1 text contrast), and `views/mapColors.ts` holds the 2D overlay colours.
 - **Look and motion** (#133): Inter for type, frosted-glass overlays and a header that frosts as the page scrolls.
   Landing and locations reveal their sections and cards as they scroll into view (CSS scroll-driven
@@ -215,6 +217,15 @@ Ideas, not commitments. Once one is chosen, it becomes an issue in the milestone
   world is loaded.
 - **Generation playground** (M11): change the seed or density and watch the block repopulate.
   Pin a seed you like.
+- **Theme picker, time of day and Use on landing** (M12, #141): top left of the 3D scene, whether or not an
+  area is open. A theme select, four time buttons (Dawn, Midday, Golden hour, Night; disabled with a "Fixed
+  light" note for a theme that does not follow the sun) and "Use on landing", which sends the current choice
+  to `PUT /settings/landing-theme` and reports "Saved" or the error code. The choice persists in
+  `localStorage` (`gre.sceneTheme`) and is applied without animation when the scene is created
+  (`scene/themeChoice.ts`, `scene/themeControls.ts`).
+- **Frame-time readout** (`?fps`, #141): add `?fps` to the page's URL to show the 3D scene's fps, p95, draw
+  calls, triangles, texture count, theme, and whether the shadow map redrew, for checking the 10 km² budget
+  in every theme (`scene/fpsReadout.ts`). Without the parameter nothing is drawn.
 - **Export panel**: pick the scope, mode (filter / clip), and layers, and download GeoJSON with
   the projection metadata.
 

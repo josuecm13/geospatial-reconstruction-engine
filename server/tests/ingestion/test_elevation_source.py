@@ -205,3 +205,12 @@ def test_decoded_tiles_are_cached_between_grids():
     assert len(calls) == 1
     assert first == second
     assert calls[0].headers["User-Agent"].startswith("geospatial-reconstruction-engine/")
+
+
+def test_a_void_pixel_in_a_tile_does_not_become_a_pit():
+    void_x, void_y = int(pixel_x(-73.98535)) - BASE_X, int(pixel_y(40.75825)) - BASE_Y
+    png = terrarium_png(lambda column, row: -300.0 if (column, row) == (void_x, void_y) else 5.0)
+    grid = source_for(lambda request: httpx.Response(200, content=png)).fetch_grid(BBOX)
+
+    assert min(grid.heights) == pytest.approx(5.0)
+    assert max(grid.heights) == pytest.approx(5.0)
