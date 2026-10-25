@@ -37,6 +37,10 @@ export class ImportPanel {
     recent: HTMLElement;
   };
   private busy = false;
+  /** An area is open, so its rectangle is fixed (drawing another one unlocks it). */
+  private areaLocked = false;
+  /** A boundary is being traced, so the rectangle must not take the pointer. */
+  private tracing = false;
   /** Aborted when the page is left, to close a running import's event stream. */
   private readonly leaving = new AbortController();
   /** The area and scope whose map data is on the map now. */
@@ -75,6 +79,9 @@ export class ImportPanel {
     };
     this.tool = new RectangleTool(map, (bbox) => this.selectionChanged(bbox));
     this.el.draw.addEventListener("click", () => {
+      if (this.tracing) return;
+      this.areaLocked = false;
+      this.applyLock();
       this.el.draw.textContent = "Drag on the map…";
       this.tool.startDrawing();
     });
@@ -99,6 +106,16 @@ export class ImportPanel {
   dispose(): void {
     this.leaving.abort();
     this.tool.dispose();
+  }
+
+  /** Called when a boundary trace starts or stops: while tracing, the rectangle can't be moved or resized. */
+  setTracing(tracing: boolean): void {
+    this.tracing = tracing;
+    this.applyLock();
+  }
+
+  private applyLock(): void {
+    this.tool.setLocked(this.areaLocked || this.tracing);
   }
 
   /** The rectangle on the map: the one being drawn, or the open area's. */
@@ -170,6 +187,8 @@ export class ImportPanel {
       this.layers.show(data);
       this.shown = { areaId, scope };
       this.tool.show(area.bbox, true);
+      this.areaLocked = true;
+      this.applyLock();
       const { camera } = options;
       const moveCamera = () => {
         if (camera) this.map.jumpTo({ center: [camera.lon, camera.lat], zoom: camera.zoom });

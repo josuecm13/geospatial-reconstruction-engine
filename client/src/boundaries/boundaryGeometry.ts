@@ -1,5 +1,4 @@
 import type { BoundingBox, Position } from "../api/types";
-import { metersPerDegree } from "../geo/localMeters";
 
 /** The rule names the server reports in `details.rule` that the client can check before saving. */
 export type RingProblem = "too_few_vertices" | "self_intersecting" | "outside_import_area";
@@ -13,16 +12,15 @@ export function closeRing(points: Position[]): Position[] {
 }
 
 /**
- * Douglas-Peucker on an open path, measured in local meters around `latitude`. The first and last
- * points always stay. Freehand input has hundreds of points; this keeps the ring to a sane size.
+ * Douglas-Peucker on an open path of points in meters: which points to keep so no dropped point is
+ * more than `toleranceMeters` from the simplified line. The first and last points always stay.
  */
-export function simplifyFreehand(points: Position[], toleranceMeters: number, latitude: number): Position[] {
-  if (points.length < 3) return [...points];
-  const scale = metersPerDegree(latitude);
-  const xy = points.map(([lon, lat]) => [lon * scale.lon, lat * scale.lat] as const);
-  const keep = new Array<boolean>(points.length).fill(false);
-  keep[0] = keep[points.length - 1] = true;
-  const stack: [number, number][] = [[0, points.length - 1]];
+export function douglasPeucker(xy: readonly (readonly [number, number])[], toleranceMeters: number): boolean[] {
+  const keep = new Array<boolean>(xy.length).fill(false);
+  if (xy.length === 0) return keep;
+  if (xy.length < 3) return keep.fill(true);
+  keep[0] = keep[xy.length - 1] = true;
+  const stack: [number, number][] = [[0, xy.length - 1]];
   while (stack.length) {
     const [first, last] = stack.pop()!;
     let farthest = -1;
@@ -39,7 +37,7 @@ export function simplifyFreehand(points: Position[], toleranceMeters: number, la
       stack.push([first, farthest], [farthest, last]);
     }
   }
-  return points.filter((_, i) => keep[i]);
+  return keep;
 }
 
 function distanceToSegment(p: readonly [number, number], a: readonly [number, number], b: readonly [number, number]): number {

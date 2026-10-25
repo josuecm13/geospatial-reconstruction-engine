@@ -374,3 +374,18 @@ Each block feature in map data SHALL carry `eligibility`, one of `eligible`, `cl
 #### Scenario: Listing feedback after a re-import
 - **WHEN** a client lists an area's feedback and one block has been removed
 - **THEN** that entry is marked `orphaned` true
+
+### Requirement: The API SHALL search places by name
+The API SHALL expose `GET /places/search?q=&limit=` returning `{"places": [...]}`, best match first, from a Nominatim geocoder. `q` SHALL be 2 to 200 characters once trimmed and `limit` 1 to 10 (default 5), else the response is a 422 error with code `invalid_request`. Each place SHALL carry `display_name`, `name`, `latitude`, `longitude`, `bbox` (`south`, `west`, `north`, `east`), `category` and `type` (both nullable). The server SHALL send at most one request a second to the geocoder and SHALL answer a repeated query (case and spacing ignored) from a cache for a day. When the geocoder is disabled, fails, answers unexpectedly, or is too busy, the response SHALL be a 503 error with code `geocoder_unavailable`; no match is a 200 with an empty list.
+
+#### Scenario: Searching for a place
+- **WHEN** a client requests `/places/search?q=Berlin`
+- **THEN** the API answers 200 with the matching places, each with a bounding box to frame
+
+#### Scenario: Query too short
+- **WHEN** a client requests `/places/search?q=a`
+- **THEN** the API answers `422 invalid_request`
+
+#### Scenario: Geocoder unavailable
+- **WHEN** the geocoder fails or is disabled
+- **THEN** the API answers `503 geocoder_unavailable`

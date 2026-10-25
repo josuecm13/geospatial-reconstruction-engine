@@ -296,4 +296,18 @@ describe("block feedback", () => {
     await expect(client.areaFeedback("a1")).resolves.toEqual([entry]);
     expect(calls[0].url).toBe("/api/import-areas/a1/feedback");
   });
+
+  it("searches places with an encoded query and unwraps the list", async () => {
+    const place = { display_name: "Zürich, Switzerland", name: "Zürich", latitude: 47.4, longitude: 8.5, bbox: { south: 47.3, west: 8.4, north: 47.5, east: 8.6 }, category: "boundary", type: "administrative" };
+    const { client, calls } = recording(json(200, { places: [place] }));
+
+    await expect(client.searchPlaces("Zürich & co", 3)).resolves.toEqual([place]);
+    expect(calls[0].url).toBe("/api/places/search?q=Z%C3%BCrich+%26+co&limit=3");
+  });
+
+  it("surfaces a geocoder failure by its code", async () => {
+    const { client } = recording(json(503, { error: { code: "geocoder_unavailable", message: "down", details: null } }));
+
+    await expect(client.searchPlaces("Berlin")).rejects.toMatchObject({ status: 503, code: "geocoder_unavailable" });
+  });
 });

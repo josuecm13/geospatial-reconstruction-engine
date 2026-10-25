@@ -1,17 +1,19 @@
 import type * as maplibregl from "maplibre-gl";
 import type { ApiClient } from "../api/client";
-import type { BoundaryProperties, BoundingBox, Feature, FeatureCollection, Position } from "../api/types";
+import type { BoundaryProperties, BoundingBox, Feature, FeatureCollection } from "../api/types";
 import { renderReportedError } from "../errors/errorReporter";
 import { sameScope, type Scope, type SelectionStore } from "../state/selection";
 import { ringProblem } from "./boundaryGeometry";
+import { BRUSH_DEFAULT_METERS, BRUSH_MAX_METERS, BRUSH_MIN_METERS, clipRingToBbox } from "./brush";
 import { BOUNDARY_RULE_MESSAGES, reportBoundaryError } from "./boundaryMessages";
 import { BoundaryTool, SavedBoundaryLayers, type TraceMode } from "./boundaryTool";
 
 const WHOLE_AREA: Scope = { type: "import_area" };
 const WHOLE_AREA_VALUE = "";
+const CLIP_SPLIT_NOTICE = "Cutting the shape to the rectangle left separate pieces, so only the largest was kept.";
 
 /**
- * The side-panel section for boundaries: trace a shape (by vertices or freehand), name and save it,
+ * The side-panel section for boundaries: trace a shape (by vertices or with a brush), name and save it,
  * list the open area's saved boundaries, delete them, and choose the client-wide scope (the whole
  * area or one boundary) through the shared `SelectionStore`.
  */
@@ -24,6 +26,13 @@ export class BoundaryPanel {
   private refreshes = 0;
   private readonly el: {
     mode: HTMLSelectElement;
+    brush: HTMLElement;
+    width: HTMLInputElement;
+    widthOut: HTMLElement;
+    erase: HTMLInputElement;
+    undo: HTMLButtonElement;
+    clearPaint: HTMLButtonElement;
+    done: HTMLButtonElement;
     trace: HTMLButtonElement;
     name: HTMLInputElement;
     save: HTMLButtonElement;
@@ -49,10 +58,22 @@ export class BoundaryPanel {
       <label class="field">Tracing mode
         <select data-role="mode">
           <option value="vertices">Click vertices</option>
-          <option value="freehand">Freehand</option>
+          <option value="brush">Brush</option>
         </select>
       </label>
       <button type="button" data-role="trace">Trace boundary</button>
+      <div class="brush-controls" data-role="brush" hidden>
+        <label class="field">Brush width
+          <input type="range" data-role="width" min="${BRUSH_MIN_METERS}" max="${BRUSH_MAX_METERS}" step="5" value="${BRUSH_DEFAULT_METERS}" />
+          <output data-role="width-out">${BRUSH_DEFAULT_METERS} m</output>
+        </label>
+        <label class="field"><input type="checkbox" data-role="erase" /> Erase (or hold Alt)</label>
+        <div class="brush-actions">
+          <button type="button" data-role="undo" disabled>Undo stroke</button>
+          <button type="button" data-role="clear-paint" disabled>Clear</button>
+          <button type="button" class="primary" data-role="done" disabled>Done</button>
+        </div>
+      </div>
       <label class="field">Name <input type="text" data-role="name" maxlength="100" /></label>
       <button type="button" class="primary" data-role="save" disabled>Save boundary</button>
       <button type="button" data-role="discard" hidden>Discard shape</button>
@@ -62,6 +83,13 @@ export class BoundaryPanel {
     const pick = <T extends HTMLElement>(role: string) => container.querySelector<T>(`[data-role="${role}"]`)!;
     this.el = {
       mode: pick("mode"),
+      brush: pick("brush"),
+      width: pick("width"),
+      widthOut: pick("width-out"),
+      erase: pick("erase"),
+      undo: pick("undo"),
+      clearPaint: pick("clear-paint"),
+      done: pick("done"),
       trace: pick("trace"),
       name: pick("name"),
       save: pick("save"),
@@ -72,11 +100,21 @@ export class BoundaryPanel {
     };
     this.saved = new SavedBoundaryLayers(map);
     this.tool = new BoundaryTool(map, () => this.traceChanged());
+    this.tool.brushWidth = BRUSH_DEFAULT_METERS;
     this.el.trace.addEventListener("click", () => {
       if (this.tool.isTracing) return this.tool.cancel();
       this.setStatus("", "ok");
       this.tool.start(this.el.mode.value as TraceMode);
     });
+    this.el.mode.addEventListener("change", () => this.traceChanged());
+    this.el.width.addEventListener("input", () => {
+      this.tool.brushWidth = Number(this.el.width.value);
+      this.el.widthOut.textContent = `${this.el.width.value} m`;
+    });
+    this.el.erase.addEventListener("change", () => (this.tool.erase = this.el.erase.checked));
+    this.el.undo.addEventListener("click", () => this.tool.undoStroke());
+    this.el.clearPaint.addEventListener("click", () => this.tool.clearPaint());
+    this.el.done.addEventListener("click", () => this.tool.finishBrush());
     this.el.save.addEventListener("click", () => void this.saveOpenArea());
     this.el.discard.addEventListener("click", () => {
       this.tool.clear();
@@ -115,19 +153,33 @@ export class BoundaryPanel {
   }
 
   private async save(areaId: string): Promise<void> {
-    const ring = this.tool.shape;
-    if (!ring || this.busy) return;
-    const problem = this.precheck(ring);
+    const traced = this.tool.shape;
+    if (!traced || this.busy) return;
+    const bbox = this.bounds();
+    // The shape is cut to the rectangle (the open area) before saving, so a stroke that spills over saves the part inside.
+    const own = bbox ? ringProblem(traced, bbox) : null;
+    if (own && own !== "outside_import_area") {
+      this.setStatus(BOUNDARY_RULE_MESSAGES[own], "error");
+      return;
+    }
+    const clipped = bbox ? clipRingToBbox(traced, bbox) : { ring: traced, droppedParts: 0, filledHoles: false };
+    const ring = clipped.ring;
+    if (!ring) {
+      this.setStatus(BOUNDARY_RULE_MESSAGES.outside_import_area, "error");
+      return;
+    }
+    const problem = bbox ? ringProblem(ring, bbox) : null;
     if (problem) {
       this.setStatus(BOUNDARY_RULE_MESSAGES[problem], "error");
       return;
     }
+    const notes = [this.tool.notice, clipped.droppedParts > 0 ? CLIP_SPLIT_NOTICE : null].filter(Boolean);
     this.busy = true;
     this.traceChanged();
     try {
       const created = await this.api.createBoundary(areaId, this.el.name.value.trim(), { type: "Polygon", coordinates: [ring] });
       this.tool.clear();
-      this.setStatus(`Saved "${created.properties.name}".`, "ok");
+      this.setStatus([`Saved "${created.properties.name}".`, ...notes].join(" "), "ok");
       await this.refresh(areaId);
       this.selection.setScope({ type: "boundary", boundaryId: created.id });
     } catch (error) {
@@ -136,11 +188,6 @@ export class BoundaryPanel {
       this.busy = false;
       this.traceChanged();
     }
-  }
-
-  private precheck(ring: Position[]) {
-    const bbox = this.bounds();
-    return bbox ? ringProblem(ring, bbox) : null;
   }
 
   private async refresh(areaId = this.selection.get().areaId): Promise<void> {
@@ -187,17 +234,24 @@ export class BoundaryPanel {
     this.onTracingChange(tracing);
     this.el.trace.textContent = tracing ? "Cancel tracing (Esc)" : shape ? "Trace again" : "Trace boundary";
     this.el.mode.disabled = tracing;
+    const brush = this.el.mode.value === "brush";
+    const state = this.tool.brushState;
+    this.el.brush.hidden = !brush;
+    this.el.undo.disabled = !tracing || !state.canUndo;
+    this.el.clearPaint.disabled = !tracing || !state.hasPaint;
+    this.el.done.disabled = !tracing || !state.hasPaint;
     this.el.save.disabled = !shape || this.busy || !this.selection.get().areaId;
     this.el.discard.hidden = !shape;
     if (tracing) {
       this.setStatus(
         this.el.mode.value === "vertices"
           ? "Click to add corners. Click the first corner or double-click to close the shape."
-          : "Press on the map, drag around the shape, and release to close it.",
+          : "Press and drag on the map to paint the shape. Strokes merge; Erase (or Alt) cuts away. Undo with Ctrl/Cmd+Z, then press Done.",
         "busy",
       );
     } else if (shape && !this.busy && this.el.status.dataset.state === "busy") {
-      this.setStatus(this.selection.get().areaId ? "Shape ready. Name it and save." : "Shape ready. It is saved when you import.", "ok");
+      const ready = this.selection.get().areaId ? "Shape ready. Name it and save." : "Shape ready. It is saved when you import.";
+      this.setStatus(this.tool.notice ? `${ready} ${this.tool.notice}` : ready, "ok");
     }
   }
 

@@ -25,11 +25,15 @@ interface ActiveDrag {
  * says what each part does, a label shows the live size and area while dragging, and the
  * rectangle turns to the over-limit style past 10 km². Escape during a drag restores the rectangle
  * as it was. Reports every change, including while dragging, so the area readout is live.
+ *
+ * While locked (an area is open, or a boundary is being traced) the rectangle ignores the pointer
+ * entirely: no handles, no move cursor, and a press goes on to the trace.
  */
 export class RectangleTool {
   private box: BoundingBox | null = null;
   private drawing = false;
   private editable = false;
+  private locked = false;
   private active: ActiveDrag | null = null;
   private label: maplibregl.Marker | null = null;
   private readonly labelElement = document.createElement("div");
@@ -87,9 +91,24 @@ export class RectangleTool {
     document.removeEventListener("keydown", this.onKeyDown);
   }
 
+  get isLocked(): boolean {
+    return this.locked;
+  }
+
+  /** Locks or unlocks the rectangle. Locking ends any drag in progress (restoring the rectangle) and hides the handles. */
+  setLocked(locked: boolean): void {
+    if (locked === this.locked) return;
+    this.locked = locked;
+    if (locked) {
+      if (this.active) this.cancelDrag();
+      this.map.getCanvasContainer().style.cursor = "";
+    }
+    this.render();
+  }
+
   /** Arms drawing: the next drag on the map draws a new rectangle. */
   startDrawing(): void {
-    if (this.drawing) return;
+    if (this.drawing || this.locked) return;
     this.drawing = true;
     this.map.getCanvasContainer().style.cursor = "crosshair";
   }
@@ -108,13 +127,13 @@ export class RectangleTool {
   }
 
   private partAt(point: [number, number]): DragPart | null {
-    if (!this.box || !this.editable) return null;
+    if (!this.box || !this.editable || this.locked) return null;
     const centerLat = (this.box.min_latitude + this.box.max_latitude) / 2;
     return hitTest(this.box, point, HANDLE_RADIUS_PIXELS * metersPerPixel(centerLat, this.map.getZoom()));
   }
 
   private readonly onPointerDown = (event: PointerEvent): void => {
-    if (this.active || (event.pointerType === "mouse" && event.button !== 0)) return;
+    if (this.locked || this.active || (event.pointerType === "mouse" && event.button !== 0)) return;
     const point = this.lngLatOf(event);
     const part: DragPart | "draw" | null = this.drawing ? "draw" : this.partAt(point);
     if (!part) return;
@@ -131,7 +150,7 @@ export class RectangleTool {
     const active = this.active;
     const point = this.lngLatOf(event);
     if (!active) {
-      if (!this.drawing) this.map.getCanvasContainer().style.cursor = cursorFor(this.partAt(point));
+      if (!this.drawing && !this.locked) this.map.getCanvasContainer().style.cursor = cursorFor(this.partAt(point));
       return;
     }
     if (event.pointerId !== active.pointerId) return;
@@ -222,7 +241,7 @@ export class RectangleTool {
         },
       ],
     });
-    handles.setData({ type: "FeatureCollection", features: this.editable ? handlePoints(bbox) : [] });
+    handles.setData({ type: "FeatureCollection", features: this.editable && !this.locked ? handlePoints(bbox) : [] });
   }
 }
 

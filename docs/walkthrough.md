@@ -42,8 +42,11 @@ to get back up.
 ## 5. Trace a boundary and scope to it
 
 On the Map tab, the **Boundaries** panel traces a shape inside the imported rectangle. Choose a tracing
-mode (**Click vertices** or **Freehand**), press **Trace boundary**, draw the shape, give it a name, and
-press **Save boundary**. `Esc` cancels a trace. Then pick the boundary in **Scope**: the map and the 3D
+mode (**Click vertices** or **Brush**), press **Trace boundary**, draw the shape, give it a name, and
+press **Save boundary**. With the brush, drag to paint strokes of the chosen width (10 to 200 m); strokes
+merge into one shape, **Erase** (or holding `Alt`) cuts away, `Ctrl`/`Cmd`+`Z` undoes a stroke, and **Done**
+takes the outline. While a boundary is traced, or an area is open, the rectangle can't be moved or resized.
+The saved shape is cut to the rectangle. `Esc` cancels a trace. Then pick the boundary in **Scope**: the map and the 3D
 scene show only what it covers, and the choice is kept in the URL. Pick the whole area in **Scope** to go
 back.
 

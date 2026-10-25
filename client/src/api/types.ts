@@ -270,6 +270,7 @@ export type ErrorCode =
   | "import_conflict"
   | "import_in_progress"
   | "elevation_unavailable"
+  | "geocoder_unavailable"
   | "generation_not_found"
   | "block_not_found"
   | "feedback_not_found"
@@ -337,4 +338,15 @@ export type TimeOfDayPreset = "dawn" | "midday" | "golden-hour" | "night";
 export interface LandingTheme {
   theme: SceneThemeId;
   time_of_day: TimeOfDayPreset;
+}
+
+/** One match of `GET /places/search`. `bbox` is the box to frame; `name` is the short name, `display_name` the full one. */
+export interface PlaceResult {
+  display_name: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  bbox: { south: number; west: number; north: number; east: number };
+  category: string | null;
+  type: string | null;
 }
